@@ -27,13 +27,13 @@ export function ModelInput({ run, section, upto, onSelect }: Props) {
     if (later) return <Empty>
       The request is recorded when the call starts.{" "}
       <button type="button" className="font-medium text-primary hover:underline" onClick={() => onSelect(later.step.index)}>
-        Go to step {later.step.index + 1}</button>
+        Go to the call event</button>
     </Empty>;
     if (running && !calls.length) return <Empty>The runtime is preparing the request. It is recorded when the call starts.</Empty>;
     return <div className="space-y-2">
       <Empty><FileQuestion className="mr-1.5 inline size-3.5 align-[-2px]" />
-        <strong className="font-semibold text-foreground">Not recorded.</strong> This run was stored before Agent Workbench saved the input of
-        each model call, so the exact system instructions and messages are unknown.</Empty>
+        <strong className="font-semibold text-foreground">Not recorded.</strong> This run was stored before model inputs were saved, so the
+        exact system instructions and messages are unknown.</Empty>
       <p className="text-xs text-muted-foreground">Known from the run record (not the recorded request): the task was</p>
       <p className="rounded-md bg-muted/60 px-2.5 py-2 text-[13px] break-words whitespace-pre-wrap">{run.prompt}</p>
       {section.number != null && section.number > 1 && <p className="text-xs text-muted-foreground">

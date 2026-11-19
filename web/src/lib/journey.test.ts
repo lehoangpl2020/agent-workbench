@@ -4,8 +4,8 @@ import type { LogEntry, RunDetail } from "./api";
 import finalReview from "./__fixtures__/final_review_rejected.json";
 import fixThenDone from "./__fixtures__/fix_then_done.json";
 import {
-  buildJourney, describeMessage, meaningfulOrder, neighbor, nextTransition, outcomeOf, recordedRequests,
-  sectionIndex, sectionSummary,
+  buildJourney, checkDecision, describeMessage, meaningfulOrder, neighbor, neighborSection, nextTransition, outcomeOf,
+  recordedRequests, sectionIndex, sectionSummary, sectionTarget, sectionTransferStep, turnChecklist,
 } from "./journey";
 import { buildSteps } from "./studio";
 
@@ -176,6 +176,79 @@ describe("outcomeOf", () => {
   it("says so when no code ran", () => {
     const run = { ...clone(fix.run), status: "stopped" as const, iterations: [] };
     expect(outcomeOf(run).execution.value).toBe("No code finished running");
+  });
+});
+
+describe("navigating by journey step", () => {
+  const { steps, sections } = journey(fix);
+  const last = steps.length - 1;
+
+  it("moves Prev/Next between steps, not between recorded events", () => {
+    expect(sections.length).toBeLessThan(steps.length);
+    expect(neighborSection(sections, sections[1], 1, last)).toBe(sections[2]);
+    expect(neighborSection(sections, sections[0], -1, last)).toBeNull();
+    expect(neighborSection(sections, sections.at(-1), 1, last)).toBeNull();
+    // Steps not reached yet (replay, live) are not visited
+    expect(neighborSection(sections, sections[1], 1, sections[1].last)).toBeNull();
+  });
+
+  it("selects a step's result-carrying event, or its latest event so far", () => {
+    expect(sectionTarget(sections[2], last)).toBe(sections[2].focus);
+    expect(sectionTarget(sections[2], sections[2].first)).toBe(sections[2].first);
+  });
+
+  it("shows the step's hand-off in the diagram", () => {
+    expect(sectionTransferStep(sections[2], last)?.beat).toBe("handoff");
+    expect(sectionTransferStep(sections[3], last)?.beat).toBe("checking");
+    expect(sectionTransferStep(sections[7], last)?.beat).toBe("done_reply");
+  });
+
+  it("names the branch of the runtime's rule that applied", () => {
+    expect(checkDecision(fix.run, 1)).toMatch(/^Exit code 1 → the error goes back to the model/);
+    expect(checkDecision(fix.run, 2)).toMatch(/^Exit code 0 → the output goes back to the model/);
+    expect(checkDecision(fix.run, 3)).toBeNull(); // no code ran in the DONE call
+    const run = clone(fix.run);
+    run.max_iterations = 2;
+    expect(checkDecision(run, 2)).toContain("final review call");
+  });
+});
+
+describe("the loop checklist of one turn", () => {
+  const { steps, sections } = journey(fix);
+  const last = steps.length - 1;
+  const states = (n: number, upto = last) => Object.fromEntries(turnChecklist(fix.run, steps, n, upto).map(i => [i.key, `${i.state}${i.note ? `:${i.note}` : ""}`]));
+
+  it("marks sandbox and check as not applicable after DONE, never as pending", () => {
+    expect(states(3)).toEqual({ send: "done", model: "done:DONE", run: "na:not needed: DONE", check: "na:not needed: DONE" });
+  });
+
+  it("shows a failed code run as failed and the check as done", () => {
+    expect(states(1)).toMatchObject({ model: "done:iter_01.py", run: "failed:exit 1", check: "done:failure" });
+    expect(states(2)).toMatchObject({ run: "done:exit 0", check: "done:success" });
+  });
+
+  it("shows later parts as upcoming at an earlier event, not as missing", () => {
+    const call1 = sections[1];
+    expect(states(1, call1.main[0].index)).toMatchObject({ send: "done", model: "active", run: "upcoming", check: "upcoming" });
+  });
+
+  it("does not ask for code to run in a final review", () => {
+    const { steps: rs } = journey(review);
+    const items = turnChecklist(review.run, rs, 2, rs.length - 1);
+    expect(items.find(i => i.key === "run")).toMatchObject({ state: "na", note: "not run: no code runs left" });
+  });
+
+  it("says a call cut off by Stop was interrupted, not that it is still to come", () => {
+    const cut = fix.logs.findIndex(l => l.iteration === 1 && l.data.flow === "calling");
+    const logs = [...fix.logs.slice(0, cut + 1),
+      { ...fix.logs[cut], id: 9001, message: "Stop requested by the user", data: { flow: "stop" } },
+      { ...fix.logs[cut], id: 9002, message: "Run finished: stopped", data: { flow: "finished" } }];
+    const run = { ...clone(fix.run), status: "stopped" as const, iterations: fix.run.iterations.slice(0, 1).map(i => ({ ...i, exit_code: null, code: "" })) };
+    const { steps: ss } = buildSteps(run, logs);
+    const items = turnChecklist(run, ss, 1, ss.length - 1);
+    expect(items.map(i => `${i.key}:${i.state}:${i.note ?? ""}`)).toEqual([
+      "send:done:", "model:unknown:interrupted by Stop", "run:unknown:not reached", "check:unknown:not reached",
+    ]);
   });
 });
 

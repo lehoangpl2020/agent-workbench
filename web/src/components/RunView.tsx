@@ -15,8 +15,8 @@ import { ActivityLog } from "./ActivityLog";
 import type { ComposerDraft } from "./Composer";
 import { ExamplesSheet } from "./ExamplesSheet";
 import { LiveActivity } from "./LiveActivity";
-import { Outcome } from "./journey/Outcome";
 import { RunJourney, type JourneyHandle } from "./journey/RunJourney";
+import { RunResult } from "./journey/RunResult";
 import { FilesPanel } from "./ResultPanels";
 import { UsageSummary } from "./RunUsage";
 import { StatusBadge } from "./StatusBadge";
@@ -92,7 +92,9 @@ export function RunView({ runId, onChanged, onEdit }: Props) {
         </p>
       )}
 
-      {!running && <div className="@container"><Outcome run={run} onOpenEnd={() => { setTab("journey"); journey.current?.selectEnd(); }} /></div>}
+      {!running && <RunResult run={run}
+        onWhyStopped={() => { setTab("journey"); journey.current?.selectEnd(); }}
+        onInspect={(n) => { setTab("journey"); journey.current?.selectCodeRun(n); }} />}
 
       <Tabs value={tab} onValueChange={setTab} className="gap-3">
         <TabsList className="h-auto max-w-full flex-wrap justify-start sm:h-9">

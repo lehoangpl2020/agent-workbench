@@ -3,7 +3,7 @@ import { Highlight, themes } from "prism-react-renderer";
 import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
+export function CopyButton({ text, label = "Copy", light = false }: { text: string; label?: string; light?: boolean }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -23,10 +23,11 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
         setCopied(true);
         window.setTimeout(() => setCopied(false), 1500);
       }}
-      className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-code-foreground/90 transition hover:bg-white/10"
+      className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition",
+        light ? "bg-card text-foreground hover:bg-muted" : "border-white/10 bg-white/5 text-code-foreground/90 hover:bg-white/10")}
     >
-      {copied ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
-      {copied ? "Copied" : label}
+      {copied ? <Check className={cn("size-3.5", light ? "text-success" : "text-emerald-400")} /> : <Copy className="size-3.5" />}
+      <span aria-live="polite">{copied ? "Copied" : label}</span>
     </button>
   );
 }

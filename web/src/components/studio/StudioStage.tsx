@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { BrainCircuit, Check, FileText, Minus, SquareTerminal, Workflow } from "lucide-react";
-import type { Intent, RunDetail } from "@/lib/api";
+import { BrainCircuit, Check, FileText, Minus, SquareTerminal, Workflow, X } from "lucide-react";
+import type { RunDetail } from "@/lib/api";
 import { isImage, RUN_STATUS, TONE_CLASSES } from "@/lib/format";
+import { ACTOR_NAME, turnChecklist, type TurnState } from "@/lib/journey";
 import { iterFile, type Actor, type Seen, type StudioStep, type Transfer } from "@/lib/studio";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,8 @@ interface Props {
   /** Live and caught up with the backend: the run's current activity snapshot applies. */
   liveEdge: boolean;
   now: number;
+  /** Show the three actor panels under the rail; otherwise only the rail and a one-line caption. */
+  detailed?: boolean;
 }
 
 const LIVE_ACTOR: Record<string, Actor> = {
@@ -30,7 +33,7 @@ function seconds(ms: number) {
   return `${Math.max(0, Math.floor(ms / 1000))}s`;
 }
 
-export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, now }: Props) {
+export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, now, detailed = true }: Props) {
   const running = run.status === "running" || run.status === "pending";
   const live = liveEdge && running;
   const upto = steps.slice(0, seen.index + 1);
@@ -94,7 +97,15 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
   const runningNow = !!executing && !exited && !killed && !(seen.finished);
   const tail = (text: string, k: number) => text.trimEnd().split("\n").filter(Boolean).slice(-k);
 
-  return <div className="studio-stage" data-active={active ?? "none"}>
+  // One line naming what the diagram shows: the hand-off, or who is working.
+  const caption = step?.transfer ? <><b className="font-semibold">{ACTOR_NAME[step.transfer.from]} → {ACTOR_NAME[step.transfer.to]}</b>
+      <span className="text-muted-foreground"> · carries </span><span className="font-mono">{step.transfer.label}</span></>
+    : seen.finished ? <span className="text-muted-foreground">Run ended · {RUN_STATUS[run.status].label} · nothing is in transit</span>
+    : active ? <><b className="font-semibold">{ACTOR_NAME[active]}</b><span className="text-muted-foreground"> · {
+        streaming ? "writing code" : active === "sandbox" && runningNow ? "running the code" : step?.title ?? "working"}</span></>
+    : <span className="text-muted-foreground">Waiting to start</span>;
+
+  return <div className={cn("studio-stage", !detailed && "is-compact")} data-active={active ?? "none"}>
     {/* rail: the three stations and the moving data card */}
     <div className="studio-rail" ref={rail}>
       {geo && <span className="studio-line" style={{ left: geo.model.c, width: geo.sandbox.c - geo.model.c, top: geo.y }} />}
@@ -107,8 +118,9 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
       <Station actor="sandbox" active={active === "sandbox"} waiting={runningNow} iconRef={el => { icons.current.sandbox = el; }}
         title="Sandbox" sub={run.executor || "executor"} />
     </div>
+    <p className="studio-caption-line" aria-live="off">{caption}</p>
 
-    <div className="studio-panes">
+    {detailed && <div className="studio-panes">
       {/* Model */}
       <section className={cn("studio-pane", active === "model" && "is-active")} aria-label="Model">
         <p className="studio-pane-status">
@@ -119,7 +131,7 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
         {streaming && it?.code ? <pre className="studio-codetail" aria-label="Code being written">
             {tail(it.code, 6).map((line, i) => <span key={i} className="block truncate">{line}</span>)}
           </pre>
-          : modelDone ? <p className="studio-quote">DONE — the model judged the output sufficient. Nothing checked that it is correct.</p>
+          : modelDone ? <p className="studio-quote">Replied DONE (the model’s own judgement of the output).</p>
           : accepted ? <figure className="space-y-1">
               <figcaption className="text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">Short explanation · model call {accepted.iteration}</figcaption>
               <blockquote className="studio-quote">{accepted.log?.message}</blockquote>
@@ -139,7 +151,7 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
           : n != null ? <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             {seen.intent && <span className="studio-intent">{seen.intent}</span>}loop</span>
           : <span className="text-[11px] text-muted-foreground">Waiting to start</span>}
-        {n != null && <LoopChecklist iterSteps={iterSteps} intent={seen.intent} done={modelDone} />}
+        {n != null && <LoopChecklist run={run} steps={steps} n={n} upto={seen.index} />}
       </section>
 
       {/* Sandbox */}
@@ -169,7 +181,7 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
             </a>)}
         </div>
       </section>
-    </div>
+    </div>}
   </div>;
 }
 
@@ -207,26 +219,23 @@ function Motion({ transfer, geo, animate, duration }: { transfer: Transfer; geo:
   </>;
 }
 
-function LoopChecklist({ iterSteps, intent, done }: { iterSteps: StudioStep[]; intent: Intent | null; done: boolean }) {
-  const has = (...beats: string[]) => iterSteps.some(s => beats.includes(s.beat));
-  const last = iterSteps.at(-1)?.beat;
-  const isLast = (...beats: string[]) => !!last && beats.includes(last);
-  const snapshot = has("snapshot");
-  const items: { label: string; state: "done" | "active" | "todo" | "skip" }[] = [
-    { label: intent === "fix" ? "Send error" : intent === "review" ? "Send output" : "Send task",
-      state: has("send", "iteration", "snapshot") ? "done" : "todo" },
-    { label: intent === "fix" ? "Model fixes code" : intent === "review" ? "Model decides" : "Model writes code",
-      state: has("accepted", "done_reply") || snapshot ? "done" : isLast("calling", "first_token", "response", "parsed", "send") ? "active" : "todo" },
-    { label: "Run in sandbox", state: done ? "skip" : has("exited", "killed") || snapshot ? "done"
-      : isLast("accepted", "handoff", "executing", "install") ? "active" : "todo" },
-    { label: "Check result", state: done ? "skip" : has("result") || snapshot ? "done"
-      : isLast("exited", "artifact", "no_files", "checking") ? "active" : "todo" },
-  ];
-  return <ol className="space-y-1">
-    {items.map(item => <li key={item.label} className={cn("studio-check", `is-${item.state}`)}>
-      <span className="studio-check-mark">{item.state === "done" ? <Check className="size-2.5" strokeWidth={3} />
-        : item.state === "skip" ? <Minus className="size-2.5" /> : null}</span>
-      <span className="min-w-0 truncate">{item.label}</span>
+const STATE_TEXT: Record<TurnState, string> = {
+  done: "done", failed: "failed", active: "in progress", upcoming: "not yet", na: "not applicable", unknown: "unknown",
+};
+
+/** The four parts of this turn of the loop. Parts that do not apply (DONE, final review) say so instead of looking unfinished. */
+function LoopChecklist({ run, steps, n, upto }: { run: RunDetail; steps: StudioStep[]; n: number; upto: number }) {
+  const items = turnChecklist(run, steps, n, upto);
+  return <ol className="space-y-1" aria-label="This turn of the loop">
+    {items.map(item => <li key={item.key} className={cn("studio-check", `is-${item.state}`)}>
+      <span className="studio-check-mark" aria-hidden>{item.state === "done" ? <Check className="size-2.5" strokeWidth={3} />
+        : item.state === "failed" ? <X className="size-2.5" strokeWidth={3} />
+        : item.state === "na" ? <Minus className="size-2.5" />
+        : item.state === "unknown" ? <span className="text-[9px] leading-none font-bold">?</span> : null}</span>
+      <span className="min-w-0 leading-snug">
+        {item.label}<span className="sr-only">: {STATE_TEXT[item.state]}</span>
+        {item.note && <span className="studio-check-note"> · {item.note}</span>}
+      </span>
     </li>)}
   </ol>;
 }

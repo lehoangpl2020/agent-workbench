@@ -205,16 +205,28 @@
 }
 .studio-file:hover { border-color: var(--sandbox); }
 .studio-file.is-new { animation: studio-pop 460ms var(--ease-studio) both; }
-.studio-check { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted-foreground); }
+.studio-check { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; color: var(--muted-foreground); }
 .studio-check-mark {
-  display: grid; flex-shrink: 0; place-items: center; width: 14px; height: 14px;
+  display: grid; flex-shrink: 0; place-items: center; width: 14px; height: 14px; margin-top: 1px;
   border: 1.5px solid #cbd5e1; border-radius: 999px; transition: background-color .25s, border-color .25s;
 }
 .studio-check.is-done { color: var(--foreground); }
 .studio-check.is-done .studio-check-mark { border-color: var(--primary); background: var(--primary); color: #fff; }
 .studio-check.is-active { color: var(--primary); font-weight: 600; }
 .studio-check.is-active .studio-check-mark { border-color: var(--primary); background: radial-gradient(var(--primary) 0 3px, transparent 3.5px); }
-.studio-check.is-skip { opacity: .55; }
+.studio-check.is-failed { color: var(--destructive); }
+.studio-check.is-failed .studio-check-mark { border-color: var(--destructive); background: var(--destructive); color: #fff; }
+/* Not applicable to this turn: a dash, not an empty "to do" circle. */
+.studio-check.is-na .studio-check-mark { border-style: dashed; color: var(--muted-foreground); }
+.studio-check.is-unknown .studio-check-mark { border-style: dotted; color: var(--muted-foreground); }
+.studio-check.is-upcoming .studio-check-mark { border-color: #e2e8f0; }
+.studio-check-note { font-weight: 400; color: var(--muted-foreground); }
+.studio-check.is-failed .studio-check-note { color: inherit; }
+
+.studio-stage.is-compact { padding-top: 14px; padding-bottom: 10px; }
+.studio-stage.is-compact .studio-rail { padding-bottom: 6px; }
+.studio-caption-line { min-height: 18px; margin-bottom: 12px; overflow: hidden; font-size: 12.5px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.studio-stage.is-compact .studio-caption-line { margin-bottom: 0; }
 
 /* Timeline */
 .studio-group { display: flex; flex-direction: column; gap: 6px; min-width: max-content; padding: 6px 8px 8px; border: 1px solid transparent; border-radius: 8px; background: #f3f6fa; }
@@ -255,12 +267,16 @@
 }
 .journey-section.is-model { --actor: var(--model); --actor-soft: var(--model-soft); }
 .journey-section.is-sandbox { --actor: var(--sandbox); --actor-soft: var(--sandbox-soft); }
-.journey-section.is-selected { box-shadow: 0 0 0 3px color-mix(in srgb, var(--actor) 14%, transparent); border-color: color-mix(in srgb, var(--actor) 45%, var(--border)); border-left-color: var(--actor); }
+.journey-section.is-selected {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--actor) 18%, transparent); border-color: color-mix(in srgb, var(--actor) 60%, var(--border));
+  border-left-width: 5px; border-left-color: var(--actor); background: color-mix(in srgb, var(--actor-soft) 30%, var(--card));
+}
 .journey-head {
   display: flex; width: 100%; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 8px 8px 0 0; text-align: left;
 }
 .journey-head:hover { background: color-mix(in srgb, var(--actor-soft) 60%, transparent); }
 .journey-head.is-current { background: var(--actor-soft); }
+.journey-head[aria-current="step"] { box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--actor) 25%, transparent); }
 .journey-icon {
   display: grid; flex-shrink: 0; place-items: center; width: 24px; height: 24px; border-radius: 7px;
   background: var(--actor-soft); color: var(--actor);

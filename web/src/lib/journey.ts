@@ -153,6 +153,128 @@ export function neighbor(order: number[], index: number, dir: 1 | -1): number | 
   return null;
 }
 
+/** Sections that exist at step `revealed` (replay and live hide the ones not reached yet). */
+export function revealedSections(sections: JourneySection[], revealed: number): JourneySection[] {
+  return sections.filter(s => s.first <= revealed);
+}
+
+/** The journey step before/after `current`: what Prev/Next visit when exploring. */
+export function neighborSection(sections: JourneySection[], current: JourneySection | undefined, dir: 1 | -1, revealed: number): JourneySection | null {
+  const visible = revealedSections(sections, revealed);
+  if (!current) return dir === 1 ? visible[0] ?? null : null;
+  return visible[visible.indexOf(current) + dir] ?? null;
+}
+
+/** The event selected when a whole step is chosen: its result-carrying event, or the latest one recorded so far. */
+export function sectionTarget(section: JourneySection, revealed: number): number {
+  if (section.focus <= revealed) return section.focus;
+  return section.steps.filter(s => s.index <= revealed).at(-1)?.index ?? section.first;
+}
+
+/** The hand-off the flow diagram shows for a whole step: its latest transfer up to `upto`. */
+export function sectionTransferStep(section: JourneySection, upto: number): StudioStep | undefined {
+  return section.steps.filter(s => s.index <= upto && s.transfer).at(-1);
+}
+
+/** What this kind of step is for, in one sentence (the mechanism, never the model's reasoning). */
+export function sectionLead(section: JourneySection, run: RunDetail): string {
+  switch (section.kind) {
+    case "setup": return "The runtime prepares the loop with your task and the run settings.";
+    case "model": {
+      if (section.finalReview) return "No code runs are left: the model reviews the last output and may reply DONE. Code it returns here is not run.";
+      const intent = section.steps.find(s => s.intent)?.intent ?? run.iterations.find(i => i.number === section.iteration)?.intent ?? "write";
+      return intent === "fix" ? "The model receives the error and returns corrected code."
+        : intent === "review" ? "The model receives the output and decides: reply DONE, or return code for another step."
+        : "The model receives your task and returns Python code.";
+    }
+    case "code": return `The sandbox runs ${iterFile(section.iteration)} and returns stdout, stderr, the exit code and any files.`;
+    case "check": return "The runtime reads the exit code and applies the stop rules. The model is not involved.";
+    case "stop": return "You pressed Stop. The runtime cancels the loop.";
+    case "end": return "The runtime ended the run and stored its history for inspection and replay.";
+  }
+}
+
+/** The branch of the runtime's rule that applied after a code run (core/rules.py), from the recorded result. */
+export function checkDecision(run: RunDetail, iteration: number | null): string | null {
+  const it = run.iterations.find(i => i.number === iteration);
+  if (!it || it.exit_code == null) return null;
+  const used = run.iterations.filter(i => i.exit_code !== null && i.number <= it.number).length;
+  const left = used < run.max_iterations;
+  if (it.exit_code === 0) return left
+    ? "Exit code 0 → the output goes back to the model, which decides: DONE or another step."
+    : "Exit code 0 on the last allowed code run → one final review call; code returned in it is not run.";
+  const what = it.timed_out ? "Timed out" : it.false_success ? "Output looked like an error" : `Exit code ${it.exit_code}`;
+  return left ? `${what} → the error goes back to the model to fix the code.`
+    : `${what} on the last allowed code run → the run stops without another model call.`;
+}
+
+// ─── The loop of one model call, as of a step ─────────────────────────
+
+export type TurnState = "done" | "failed" | "active" | "upcoming" | "na" | "unknown";
+export interface TurnItem { key: "send" | "model" | "run" | "check"; label: string; state: TurnState; note?: string }
+
+/**
+ * The four parts of one turn of the loop (send → model → sandbox → check) as of step `upto`. A part that does not
+ * apply to this turn (DONE, or a final review) is "na", never pending; a part that was never recorded is "unknown".
+ */
+export function turnChecklist(run: RunDetail, steps: StudioStep[], n: number | null, upto: number): TurnItem[] {
+  if (n == null) return [];
+  // Stop and the run's end are logged with the current iteration but are not part of the turn itself.
+  const turn = steps.filter(s => s.iteration === n && s.beat !== "finished" && s.beat !== "stop");
+  const seen = turn.filter(s => s.index <= upto);
+  const has = (...beats: Beat[]) => seen.some(s => beats.includes(s.beat));
+  const lastBeat = seen.at(-1)?.beat;
+  const at = (...beats: Beat[]) => !!lastBeat && beats.includes(lastBeat);
+  const it = run.iterations.find(i => i.number === n);
+  const running = run.status === "running" || run.status === "pending";
+  const snapshot = has("snapshot");
+  const intent = seen.find(s => s.intent)?.intent ?? it?.intent ?? "write";
+  const finalReview = isFinalReview(run, n, steps);
+  const done = has("done_reply") || (snapshot && it?.status === "done");
+  // Not reached at this step: it comes later if this turn continues in the record (or live), else it never happened.
+  const continues = turn.some(s => s.index > upto) || (running && upto >= steps.length - 1);
+  // Without a recorded end (older or cut-off history) a missing part is unknown rather than "not reached".
+  const ended = running || steps.some(s => s.beat === "finished" || s.beat === "stop");
+  const pending = (): Pick<TurnItem, "state" | "note"> => continues ? { state: "upcoming" }
+    : { state: "unknown", note: ended ? "not reached" : "not recorded" };
+  // In progress at this step; if the turn ends here without a result, it was cut off (Stop) or its outcome is unknown.
+  const stopped = steps.some(s => s.beat === "stop");
+  const inProgress = (): Pick<TurnItem, "state" | "note"> => continues || running ? { state: "active" }
+    : { state: "unknown", note: stopped ? "interrupted by Stop" : "no result recorded" };
+
+  const modelReply = seen.some(s => s.beat === "note" && s.log?.source === "model");
+  const modelFailed = seen.some(s => s.level === "ERROR" && (s.actor === "model" || s.log?.source === "llm"));
+  const exited = seen.find(s => s.beat === "exited");
+  const exitCode = typeof exited?.log?.data.exit_code === "number" ? exited.log.data.exit_code as number
+    : it?.false_success ? 0 : it?.exit_code ?? null;
+  const ran = (!!exited || (snapshot && it?.exit_code != null));
+  const skip = done ? "not needed: DONE" : finalReview ? "not run: no code runs left" : null;
+
+  const items: TurnItem[] = [
+    { key: "send", label: intent === "fix" ? "Send the error" : intent === "review" ? "Send the output" : "Send the task",
+      ...(has("send", "iteration", "snapshot") ? { state: "done" as const } : pending()) },
+    { key: "model", label: finalReview ? "Model reviews (final)" : intent === "fix" ? "Model fixes the code" : intent === "review" ? "Model reviews" : "Model writes code",
+      ...(done ? { state: "done" as const, note: "DONE" }
+        : has("accepted") || (snapshot && it?.code) ? { state: "done" as const, note: iterFile(n) }
+        : modelReply ? { state: "done" as const, note: finalReview ? "asked for another step" : undefined }
+        : at("send", "iteration", "calling", "first_token", "response", "parsed") && !modelFailed ? inProgress()
+        : modelFailed ? { state: "failed" as const, note: "call failed" }
+        : pending()) },
+    { key: "run", label: "Run in sandbox",
+      ...(skip ? { state: "na" as const, note: skip }
+        : ran ? { state: exitCode === 0 ? "done" as const : "failed" as const, note: it?.timed_out ? "timed out" : exitCode != null ? `exit ${exitCode}` : undefined }
+        : has("killed") ? { state: "failed" as const, note: "killed" }
+        : at("accepted", "handoff", "executing", "install") ? inProgress()
+        : pending()) },
+    { key: "check", label: "Check the result",
+      ...(skip ? { state: "na" as const, note: skip }
+        : has("result") || (snapshot && it?.exit_code != null) ? { state: "done" as const, note: it?.exit_code === 0 ? "success" : "failure" }
+        : at("exited", "artifact", "no_files", "checking") ? inProgress()
+        : pending()) },
+  ];
+  return items;
+}
+
 /** One-line summary of a section's result, as of the step `upto` (later steps never leak in). */
 export function sectionSummary(section: JourneySection, run: RunDetail, upto: number, sections: JourneySection[] = []): { text: string; tone: "ok" | "bad" | "warn" | "muted" } | null {
   const reached = section.steps.filter(s => s.index <= upto);

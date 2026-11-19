@@ -1,9 +1,10 @@
-import { ArrowRight, ChevronRight, Download, ExternalLink, FileImage, Info, LogIn, LogOut, Scale } from "lucide-react";
-import type { Iteration, RunDetail } from "@/lib/api";
+import { ArrowRight, ChevronLeft, ChevronRight, Download, ExternalLink, FileImage, Info, LogIn, LogOut, Scale } from "lucide-react";
+import type { RunDetail } from "@/lib/api";
 import { formatMs, isImage, RUN_STATUS, TONE_CLASSES } from "@/lib/format";
 import {
-  ACTOR_NAME, ACTOR_ROLE, CHECK_RULE, FALSE_SUCCESS_NOTE, nextTransition, outcomeOf, type JourneySection,
+  CHECK_RULE, checkDecision, FALSE_SUCCESS_NOTE, nextTransition, sectionLead, sectionSummary, type JourneySection,
 } from "@/lib/journey";
+import { codeRunNumber } from "@/lib/result";
 import { explain, iterFile, stepTime, type Seen, type StudioStep, type VisibleFile } from "@/lib/studio";
 import { cn } from "@/lib/utils";
 import { CodeView, TerminalBlock } from "../CodeView";
@@ -16,46 +17,68 @@ interface Props {
   steps: StudioStep[];
   sections: JourneySection[];
   section?: JourneySection;
+  /** The selected event (for a whole step: its result-carrying event). */
   step?: StudioStep;
-  /** What is known at the selected step. Nothing recorded later is shown. */
+  /** Evidence is shown as of this step index: the whole step so far, or the selected event. Nothing later leaks in. */
+  upto: number;
+  /** One event is selected rather than the whole step. */
+  eventLevel: boolean;
+  /** Events after this index are not shown yet (replay / live). */
+  revealed: number;
   seen: Seen;
   /** Live and caught up with the backend: streaming code / the current activity may be shown. */
   liveEdge: boolean;
   now: number;
-  onSelect: (index: number) => void;
+  onSelectEvent: (index: number) => void;
 }
 
+const TONE = { ok: "text-success", bad: "text-destructive", warn: "text-warning", muted: "text-muted-foreground" } as const;
+
 export function Inspector(props: Props) {
-  const { run, step, section } = props;
+  const { run, step, section, upto, eventLevel, revealed, onSelectEvent } = props;
   if (!step || !section) return <Empty text={run.status === "running" || run.status === "pending"
     ? "Waiting for the first event from the backend." : "No recorded activity for this run."} />;
-  const n = section.iteration;
+  const summary = sectionSummary(section, run, upto, props.sections);
+  const events = section.steps.filter(s => s.index <= revealed);
+  const k = events.indexOf(step);
   return <div className="space-y-4 [overflow-wrap:anywhere]">
     <header className="space-y-1.5">
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-muted-foreground">
-        <ActorChip actor={step.actor} />
-        <span className="font-semibold text-foreground">{section.title}</span>
-        <span>— {section.purpose}</span>
-        <span className="ml-auto font-mono">step {step.index + 1}/{props.steps.length} · <time dateTime={step.ts}>{stepTime(step.ts)}</time></span>
-      </p>
-      <h3 className={cn("text-base font-semibold leading-snug", step.level === "ERROR" && "text-destructive",
-        step.level === "WARN" && step.beat !== "send" && "text-warning")}>{step.title}</h3>
-      <p className="text-[13px] leading-relaxed text-muted-foreground">{explain(step, run)}</p>
-      <p className="text-[11.5px] text-muted-foreground"><span className="font-medium text-foreground/80">Who:</span> {ACTOR_NAME[step.actor]} — {ACTOR_ROLE[step.actor].charAt(0).toLowerCase() + ACTOR_ROLE[step.actor].slice(1)}.</p>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <ActorChip actor={section.actor} />
+        <h3 className="text-base leading-snug font-semibold">{section.title}
+          <span className="font-normal text-muted-foreground"> — {section.purpose}</span></h3>
+        {summary && <span className={cn("ml-auto font-mono text-xs", TONE[summary.tone])}>{summary.text}</span>}
+      </div>
+      <p className="text-[13px] leading-relaxed text-muted-foreground">{sectionLead(section, run)}</p>
+      {eventLevel && <div className="flex items-start gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+        <div className="min-w-0 flex-1">
+          <p className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-muted-foreground">
+            <span className="font-semibold tracking-wide uppercase">Event {k + 1} of {events.length} in this step</span>
+            <time dateTime={step.ts} className="font-mono">{stepTime(step.ts)}</time>
+          </p>
+          <p className={cn("text-[13px] font-medium", step.level === "ERROR" && "text-destructive", step.level === "WARN" && step.beat !== "send" && "text-warning")}>{step.title}</p>
+          <p className="text-xs text-muted-foreground">{explain(step, run)}</p>
+        </div>
+        <div className="flex shrink-0 gap-0.5">
+          <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+            disabled={k <= 0} onClick={() => onSelectEvent(events[k - 1].index)} aria-label="Previous event in this step"><ChevronLeft className="size-4" /></button>
+          <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+            disabled={k >= events.length - 1} onClick={() => onSelectEvent(events[k + 1].index)} aria-label="Next event in this step"><ChevronRight className="size-4" /></button>
+        </div>
+      </div>}
       {step.synthetic && <p className="flex gap-1.5 text-[11.5px] text-muted-foreground"><Info className="mt-px size-3 shrink-0" />
-        Rebuilt from the run record; no detailed log entry exists for this step (partial history).</p>}
+        Rebuilt from the run record; no detailed log entry exists for this event (partial history).</p>}
     </header>
-    <Body {...props} step={step} section={section} n={n} />
-    <Block icon={ArrowRight} label="What happens next">
-      <p className="text-[13px] leading-relaxed">{nextTransition(section, props.sections, run, step.index)}</p>
-    </Block>
-    {step.log && <RecordedEntry step={step} />}
+    <Body {...props} step={step} section={section} n={section.iteration} />
+    {section.kind !== "end" && <Block icon={ArrowRight} label="What happens next">
+      <p className="text-[13px] leading-relaxed">{nextTransition(section, props.sections, run, upto)}</p>
+    </Block>}
+    {eventLevel && step.log && <RecordedEntry step={step} />}
   </div>;
 }
 
-function Body({ run, steps, section, step, seen, liveEdge, now, onSelect, n }: Props & { section: JourneySection; step: StudioStep; n: number | null }) {
+function Body({ run, steps, section, upto, seen, liveEdge, now, onSelectEvent, n }: Props & { section: JourneySection; step: StudioStep; n: number | null }) {
   const it = run.iterations.find(i => i.number === n);
-  const upto = step.index;
   const reached = section.steps.filter(s => s.index <= upto);
   const has = (...beats: string[]) => reached.some(s => beats.includes(s.beat));
   const atLiveEdge = liveEdge && upto === steps.length - 1;
@@ -83,23 +106,22 @@ function Body({ run, steps, section, step, seen, liveEdge, now, onSelect, n }: P
       return <>
         <Block icon={LogIn} label="Input · what the model received">
           {section.formatRetries > 0 && <p className="mb-2 text-xs text-warning">The first reply was not valid JSON, so the runtime asked again in the same model call.</p>}
-          <ModelInput key={section.key} run={run} section={section} upto={upto} onSelect={onSelect} />
+          <ModelInput key={section.key} run={run} section={section} upto={upto} onSelect={onSelectEvent} />
         </Block>
         <Block icon={LogOut} label="Output · what the model returned">
-          {done ? <>
-            <p className="rounded-md bg-success-soft px-3 py-2 text-[13px] text-success">The model replied DONE: it judged the previous output to satisfy the task. No code is returned.</p>
-          </> : returned && it ? <>
+          {done ? <p className="rounded-md bg-success-soft px-3 py-2 text-[13px] text-success">Replied <strong>DONE</strong>: no code was returned, so nothing more runs.</p>
+          : returned && it ? <>
             {it.explanation && <Quote text={it.explanation} />}
             {it.code ? <CodeView code={it.code} language={it.language} title={`${iterFile(n)}${section.finalReview ? " · not executed" : ""}`} />
               : <Empty text="No code was returned." />}
           </> : streaming && it?.code ? <>
             {it.explanation && <Quote text={it.explanation} streaming />}
             <CodeView code={it.code} language={it.language} title={`${iterFile(n)} · streaming…`} follow />
-            <p className="text-[11.5px] text-muted-foreground">Streamed text is shown live but not stored per step; the runtime only uses it after the full reply is parsed.</p>
+            <p className="text-[11.5px] text-muted-foreground">Streamed text is shown live but not stored per event; the runtime only uses it after the full reply is parsed.</p>
           </> : errors.length ? null : <Waiting text={atLiveEdge && run.status === "running"
             ? `Waiting for the model${waited != null ? ` · ${waited}s` : ""}. Code appears as soon as the model starts writing it.`
             : section.steps.some(s => s.index > upto && (s.beat === "accepted" || s.beat === "done_reply"))
-              ? "Not returned yet at this step." : "No reply was recorded for this call."} />}
+              ? "Not returned yet at this event." : "No reply was recorded for this call."} />}
           {errors.map(e => <p key={e.key} className="rounded-md bg-danger-soft px-2.5 py-1.5 font-mono text-xs text-destructive">{e.title}</p>)}
           {response && <Meta rows={[
             ["Response time", formatMs(num(response.log?.data.duration_ms))],
@@ -131,7 +153,7 @@ function Body({ run, steps, section, step, seen, liveEdge, now, onSelect, n }: P
             <ProcessOutputPanel run={run} iteration={it} />
           </> : killed ? <Empty text="The process was killed before it produced a result." />
             : <Waiting text={running ? `${run.activity || "Running"}${run.activity_at ? ` · ${Math.max(0, Math.floor((now - Date.parse(run.activity_at)) / 1000))}s` : ""}. stdout and stderr arrive when the process exits (timeout ${run.timeout_seconds}s).`
-              : "No result yet at this step."} />}
+              : "No result yet at this event."} />}
           {files.length > 0 ? <FileGallery files={files} /> : has("no_files") ? <p className="text-xs text-muted-foreground">No new or changed files in /workspace/output.</p> : null}
         </Block>
       </>;
@@ -139,10 +161,11 @@ function Body({ run, steps, section, step, seen, liveEdge, now, onSelect, n }: P
 
     case "check": {
       const done = has("result", "snapshot") && it?.exit_code != null;
+      const decision = done ? checkDecision(run, n) : null;
       const used = run.iterations.filter(i => i.exit_code !== null && i.number <= (n ?? 0)).length;
       return <>
         <Block icon={LogIn} label="Input · from the sandbox">
-          {it && it.exit_code != null && (has("checking", "result")) ? <Meta rows={[
+          {it && it.exit_code != null && (has("checking", "result", "snapshot")) ? <Meta rows={[
             ["Exit code", it.false_success ? "0 (from the process)" : String(it.exit_code)],
             ["Timed out", it.timed_out ? "yes" : "no"],
             ["stdout", `${it.stdout.length.toLocaleString()} chars`],
@@ -150,52 +173,51 @@ function Body({ run, steps, section, step, seen, liveEdge, now, onSelect, n }: P
             ["Files", String(it.artifacts.length)],
           ]} /> : <Waiting text="Waiting for the process result." />}
         </Block>
-        <Block icon={Scale} label="Rule · decided by the runtime, not the model">
-          <p className="text-[13px] leading-relaxed">{CHECK_RULE}</p>
-          <p className="mt-1.5 text-xs text-muted-foreground">Code runs used so far: {used} of {run.max_iterations}.</p>
-        </Block>
-        <Block icon={LogOut} label="Output · recorded result">
+        <Block icon={Scale} label="Rule applied · by the runtime, not the model">
           {done && it ? <>
             <p className={cn("rounded-md px-3 py-2 text-[13px]", it.exit_code === 0 ? "bg-success-soft text-success" : "bg-danger-soft text-destructive")}>
-              {it.exit_code === 0 ? "Success: the output will be sent to the model for review." : `Failure${it.timed_out ? " (timed out)" : ""}: the error will be sent to the model.`}
-            </p>
+              {decision}</p>
             {it.false_success && <p className="text-xs leading-relaxed text-warning">{FALSE_SUCCESS_NOTE}</p>}
-            {it.exit_code !== 0 && it.stderr && <TerminalBlock label="stderr · the next model call’s input shows exactly what was sent" text={it.stderr.trimEnd()} tone="error" />}
-          </> : <Waiting text="Not recorded yet at this step." />}
+          </> : <Waiting text="Not recorded yet at this event." />}
+          <p className="text-xs text-muted-foreground">Code runs used: {used} of {run.max_iterations}.</p>
+          <details className="group text-xs">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1 font-medium text-primary hover:underline">
+              <ChevronRight className="size-3 transition-transform group-open:rotate-90" />The full rule</summary>
+            <p className="mt-1 leading-relaxed text-muted-foreground">{CHECK_RULE}</p>
+          </details>
+          {done && it && it.exit_code !== 0 && it.stderr && <TerminalBlock label="stderr · the next model call’s input shows exactly what was sent" text={it.stderr.trimEnd()} tone="error" />}
         </Block>
       </>;
     }
 
     case "stop":
-      return <Block icon={LogOut} label="Output"><Empty text="You pressed Stop. The runtime cancelled the agent task; if code was running, its process was killed." /></Block>;
+      return <Block icon={LogOut} label="Output"><Empty text="The runtime cancelled the agent task; if code was running, its process was killed." /></Block>;
 
     case "end":
-      return <EndBody run={run} seen={seen} />;
+      return <EndBody run={run} steps={steps} />;
   }
 }
 
-function EndBody({ run, seen }: { run: RunDetail; seen: Seen }) {
+function EndBody({ run, steps }: { run: RunDetail; steps: StudioStep[] }) {
   const meta = RUN_STATUS[run.status];
-  const o = outcomeOf(run);
-  const lastOk = [...run.iterations].reverse().find((i: Iteration) => i.exit_code === 0);
+  const finished = [...steps].reverse().find(s => s.beat === "finished");
+  const kept = [...run.iterations].reverse().find(i => i.exit_code === 0);
   return <>
-    <Block icon={LogOut} label="Outcome">
+    <Block icon={LogOut} label="Why the run stopped">
       <div className={cn("max-h-48 overflow-auto rounded-lg border px-3 py-2.5 text-[13px]", TONE_CLASSES[meta.tone])}>
         <strong className="font-semibold">{meta.label}.</strong> {run.message || "No reason was recorded."}
       </div>
-      <ul className="mt-2 space-y-1.5 text-[13px]">
-        {[o.execution, o.signal, o.validation].map(f => <li key={f.label}>
-          <span className="font-medium">{f.label}:</span> {f.value}. <span className="text-muted-foreground">{f.detail}</span></li>)}
-      </ul>
+      {finished && <p className="text-[13px] leading-relaxed">{explain(finished, run)}</p>}
     </Block>
-    {run.answer && run.answer.trim() !== run.message.trim() && <Block icon={LogOut}
-      label={run.status === "success" ? `Final output${lastOk ? ` · stdout of code run ${lastOk.number}` : ""}` : "Partial result · latest successful output"}>
-      <TerminalBlock label="stdout" text={run.answer.trimEnd()} empty="(no text output)" />
-    </Block>}
-    {seen.files.length > 0 && <Block icon={FileImage} label="Files from this run">
-      <FileGallery files={seen.files} />
-      <p className="text-[11.5px] text-muted-foreground">Images are shown here for you. A model only sees what is in its recorded input: file names and sizes, never the pixels.</p>
-    </Block>}
+    <Block icon={ArrowRight} label="Result">
+      <p className="text-[13px] leading-relaxed">
+        {kept ? <>The kept output is the stdout of code run {codeRunNumber(run, kept.number)}{run.status === "success" ? "" : " (a partial result)"}.</>
+          : <>No code run succeeded, so no output was kept.</>}{" "}
+        <button type="button" className="font-medium text-primary hover:underline"
+          onClick={() => document.getElementById("run-result")?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}>
+          Show it in Run result</button>
+      </p>
+    </Block>
   </>;
 }
 
@@ -216,7 +238,7 @@ function RecordedEntry({ step }: { step: StudioStep }) {
 }
 
 export function FileGallery({ files }: { files: VisibleFile[] }) {
-  if (!files.length) return <Empty text="No files recorded at this step." />;
+  if (!files.length) return <Empty text="No files recorded at this event." />;
   const images = files.filter(f => isImage(f.mime) && f.snapshot_available !== false);
   const others = files.filter(f => !images.includes(f));
   return <div className="space-y-3">
@@ -224,12 +246,13 @@ export function FileGallery({ files }: { files: VisibleFile[] }) {
       <div className="checker flex justify-center p-2"><img src={f.url} alt={f.path} className="max-h-80 max-w-full rounded object-contain" /></div>
       <figcaption className="flex items-center gap-2 border-t px-3 py-2">
         <FileImage className="size-4 shrink-0 text-primary" />
-        <span className="min-w-0 flex-1 truncate font-mono text-xs">{f.path}<span className="text-muted-foreground"> · code run {f.iteration}</span></span>
+        <span className="min-w-0 flex-1 truncate font-mono text-xs">{f.path}<span className="text-muted-foreground"> · snapshot from this code run</span></span>
         <a href={f.url} target="_blank" rel="noreferrer" aria-label={`Open ${f.path}`} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><ExternalLink className="size-3.5" /></a>
         <a href={f.download} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted"><Download className="size-3.5" /> Download</a>
       </figcaption>
     </figure>)}
-    {others.length > 0 && <ArtifactList files={others.map(f => ({ ...f, download_url: f.download }))} caption="Files saved at this step" />}
+    {others.length > 0 && <ArtifactList files={others.map(f => ({ ...f, download_url: f.download }))} caption="Files saved by this code run" />}
+    <p className="text-[11.5px] text-muted-foreground">A model only sees what its recorded input contains: file names and sizes, never the pixels.</p>
   </div>;
 }
 
@@ -251,7 +274,7 @@ function Collapsible({ label, children }: { label: string; children: React.React
 
 function Quote({ text, streaming }: { text: string; streaming?: boolean }) {
   return <figure className="space-y-1">
-    <figcaption className="text-[11px] text-muted-foreground">Short explanation returned with the reply (its <code className="font-mono">thinking</code> field){streaming ? " · streaming" : ""}. It is not the model’s internal reasoning.</figcaption>
+    <figcaption className="text-[11px] text-muted-foreground">The model’s short explanation (its <code className="font-mono">thinking</code> field){streaming ? " · streaming" : ""}, not its hidden reasoning</figcaption>
     <blockquote className="border-l-2 border-[var(--model)]/40 pl-2.5 text-[13px] leading-relaxed">{text}</blockquote>
   </figure>;
 }

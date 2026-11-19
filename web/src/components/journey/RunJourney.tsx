@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Compass, Loader2, LocateFixed, Pause, Play, Radio, RotateCcw, Square } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleHelp, Compass, Loader2, LocateFixed, PanelTopClose, PanelTopOpen, Pause, Play, Radio, RotateCcw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LogEntry, RunDetail } from "@/lib/api";
 import { useLivePresenter, useNow } from "@/hooks/useLivePresenter";
 import { useReplayClock } from "@/hooks/useReplayClock";
-import { buildJourney, meaningfulOrder, neighbor, sectionIndex } from "@/lib/journey";
+import {
+  buildJourney, meaningfulOrder, neighbor, neighborSection, revealedSections, sectionIndex, sectionTarget, sectionTransferStep,
+  type JourneySection,
+} from "@/lib/journey";
 import { buildSteps, REPLAY_MAX_MS, REPLAY_MIN_MS, REPLAY_TRANSFER_MIN_MS, seenAt, type StudioStep } from "@/lib/studio";
 import { cn } from "@/lib/utils";
 import { HowItWorks } from "../studio/HowItWorks";
@@ -15,8 +18,10 @@ import { Inspector } from "./Inspector";
 import { JourneyList } from "./JourneyList";
 
 export interface JourneyHandle {
-  /** Select the run's last step (its outcome and evidence). */
+  /** Select the run's end (why it stopped) and bring the journey into view. */
   selectEnd: () => void;
+  /** Select the code run of iteration `n` and bring the journey into view. */
+  selectCodeRun: (n: number) => void;
 }
 
 interface Props {
@@ -43,6 +48,9 @@ function readPref(key: string, fallback: boolean) {
 function writePref(key: string, value: boolean) {
   try { localStorage.setItem(key, value ? "1" : "0"); } catch { /* storage blocked: keep the in-memory value */ }
 }
+function reducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
 
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -58,6 +66,11 @@ function useWidth<T extends HTMLElement>() {
   return [ref, width] as const;
 }
 
+/**
+ * Two levels of selection. A *step* (Model call 2, Code run 1, Runtime check...) is what Prev/Next and the journey
+ * list visit; its evidence covers everything recorded in it. An *event* (one log entry inside a step) is chosen by
+ * clicking a row, and is what Replay plays through. Both keep one selected index, so list, diagram and inspector agree.
+ */
 export function RunJourney({ run, logs, connected, logError, historyLoaded, retryLogs, stopping, onStop, onIterationChange, ref }: Props) {
   const { steps, partial } = useMemo(() => historyLoaded ? buildSteps(run, logs) : EMPTY, [historyLoaded, run, logs]);
   const sections = useMemo(() => buildJourney(run, steps), [run, steps]);
@@ -69,6 +82,7 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
   const [mode, setMode] = useState<"explore" | "replay">("explore");
   const [follow, setFollow] = useState(true);
   const [picked, setPicked] = useState<number | null>(null);
+  const [level, setLevel] = useState<"step" | "event">("step");
   const live = useLivePresenter(steps, historyLoaded);
   const replay = mode === "replay";
   const following = running && follow && !replay;
@@ -83,86 +97,129 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
   const step = steps[selected];
   const section = step ? bySection.get(step.index) : undefined;
   const revealed = replay ? selected : running ? Math.max(selected, live.shown) : last;
-  const liveEdge = !replay && selected === last;
-  const animate = replay ? clock.playing && clock.animatedKey === step?.key : following && live.animated === step?.key;
-  const seen = useMemo(() => seenAt(run, steps, selected), [run, steps, selected]);
+  const eventLevel = replay || level === "event";
+  // A whole step shows everything recorded in it so far; an event shows the state at that event.
+  const upto = !eventLevel && section ? Math.min(section.last, revealed) : selected;
+  const stageStep = !eventLevel && section ? sectionTransferStep(section, upto) ?? step : step;
+  const liveEdge = !replay && upto === last;
+  const animate = !!stageStep && (replay ? clock.playing && clock.animatedKey === stageStep.key : following && live.animated === stageStep.key);
+  const seen = useMemo(() => seenAt(run, steps, upto), [run, steps, upto]);
+  const visible = useMemo(() => revealedSections(sections, revealed), [sections, revealed]);
 
   const iteration = section?.iteration ?? null;
   useEffect(() => { onIterationChange?.(iteration); }, [iteration, onIterationChange]);
 
-  const select = useCallback((i: number) => {
+  const box = useRef<HTMLElement>(null);
+  const reveal = useCallback(() => {
+    requestAnimationFrame(() => box.current?.scrollIntoView({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" }));
+  }, []);
+
+  const selectEvent = useCallback((i: number) => {
     if (replay) clock.pause();
     if (running) setFollow(false);
+    setLevel("event");
     setPicked(i);
   }, [replay, running, clock]);
 
-  useImperativeHandle(ref, () => ({ selectEnd: () => { setMode("explore"); clock.pause(); setPicked(last); } }), [last, clock]);
+  const selectSection = useCallback((s: JourneySection) => {
+    if (replay) clock.pause();
+    if (running) setFollow(false);
+    setLevel("step");
+    setPicked(sectionTarget(s, revealed));
+  }, [replay, running, clock, revealed]);
 
-  const prev = neighbor(order, selected, -1);
-  const next = neighbor(order, selected, 1);
+  const jumpTo = useCallback((s: JourneySection | undefined) => {
+    if (!s) return;
+    setMode("explore");
+    clock.pause();
+    if (running) setFollow(false);
+    setLevel("step");
+    setPicked(sectionTarget(s, last));
+    reveal();
+  }, [clock, running, last, reveal]);
+
+  useImperativeHandle(ref, () => ({
+    selectEnd: () => jumpTo([...sections].reverse().find(s => s.kind === "end") ?? sections.at(-1)),
+    selectCodeRun: (n: number) => jumpTo(sections.find(s => s.kind === "code" && s.iteration === n)),
+  }), [jumpTo, sections]);
+
+  // Explore moves between journey steps; replay moves between recorded events.
+  const prevStep = neighborSection(sections, section, -1, revealed);
+  const nextStep = neighborSection(sections, section, 1, revealed);
+  const prevEvent = neighbor(order, selected, -1);
+  const nextEvent = neighbor(order, selected, 1);
+  const goPrev = replay ? (prevEvent != null ? () => selectEvent(prevEvent) : null) : prevStep ? () => selectSection(prevStep) : null;
+  const goNext = replay ? (nextEvent != null ? () => selectEvent(nextEvent) : null) : nextStep ? () => selectSection(nextStep) : null;
 
   // ── Layout ──
-  const [box, width] = useWidth<HTMLDivElement>();
+  const [area, width] = useWidth<HTMLDivElement>();
   const wide = width >= WIDE_PX;
-  const [diagram, setDiagram] = useState(() => readPref("journey-diagram", true));
+  const [panels, setPanels] = useState(() => readPref("journey-panels", false));
   const scroller = useRef<HTMLDivElement>(null);
 
-  // Keep the selected row visible inside the journey column without moving the page.
+  // Keep the selected step visible inside the journey column without moving the page.
   useEffect(() => {
     // One frame later, so the first render's layout is settled before measuring
     const frame = requestAnimationFrame(() => {
       const el = scroller.current;
-      if (!wide || !el) return;
-      const row = el.querySelector<HTMLElement>(`[data-step="${selected}"][aria-current="step"]`) ?? el.querySelector<HTMLElement>(`[data-step="${selected}"]`);
+      if (!wide || !el || !section) return;
+      const row = (eventLevel && el.querySelector<HTMLElement>(`[data-step="${selected}"]`)) || el.querySelector<HTMLElement>(`[data-section="${section.key}"]`);
       if (!row) return;
       const top = row.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
-      if (top < el.scrollTop || top + row.offsetHeight > el.scrollTop + el.clientHeight) el.scrollTop = Math.max(0, top - el.clientHeight / 3);
+      if (top < el.scrollTop || top + Math.min(row.offsetHeight, 120) > el.scrollTop + el.clientHeight) el.scrollTop = Math.max(0, top - el.clientHeight / 4);
     });
     return () => cancelAnimationFrame(frame);
-  }, [selected, wide, steps.length]);
+  }, [selected, section, eventLevel, wide, steps.length]);
 
   const liveText = running ? run.activity || undefined : undefined;
-  const position = step ? `Step ${selected + 1} of ${steps.length}${section ? ` · ${section.title}` : ""}` : historyLoaded ? "No steps yet" : "Loading recorded activity…";
+  const stepPos = section ? visible.indexOf(section) + 1 : 0;
+  const eventPos = order.indexOf(selected) + 1;
+  const position = !step ? (historyLoaded ? "No steps yet" : "Loading recorded activity…")
+    : replay ? `Recorded event ${eventPos || "–"} of ${order.length}${section ? ` · ${section.title}` : ""}`
+    : `Step ${stepPos} of ${visible.length}${section ? ` · ${section.title}` : ""}${eventLevel ? " · one event selected" : ""}`;
+  const unit = replay ? "event" : "step";
 
-  const stage = <details open={diagram} onToggle={e => { const open = (e.currentTarget as HTMLDetailsElement).open; setDiagram(open); writePref("journey-diagram", open); }}
-    className={cn("studio-card group overflow-hidden", replay && !clock.playing && "is-paused")}>
-    <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
-      <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />Flow diagram
-      <span className="font-normal">· where the data is at the selected step</span>
-    </summary>
-    <div className="border-t">
-      <StudioStage run={run} steps={steps} step={step} seen={seen} animate={animate} speed={replay ? clock.speed : 1} liveEdge={liveEdge} now={now} />
+  const stage = <div className={cn("studio-card overflow-hidden", replay && !clock.playing && "is-paused")}>
+    <div className="flex items-center gap-2 border-b px-4 py-1.5">
+      <h3 className="text-xs font-semibold">Flow</h3>
+      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">who holds the data at the selected point</span>
+      <button type="button" aria-pressed={panels} onClick={() => { setPanels(!panels); writePref("journey-panels", !panels); }}
+        className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+        {panels ? <PanelTopClose className="size-3.5" /> : <PanelTopOpen className="size-3.5" />}{panels ? "Hide actor panels" : "Actor panels"}</button>
     </div>
-  </details>;
+    <StudioStage run={run} steps={steps} step={stageStep} seen={seen} animate={animate} speed={replay ? clock.speed : 1}
+      liveEdge={liveEdge} now={now} detailed={panels} />
+  </div>;
 
-  const inspector = <Inspector run={run} steps={steps} sections={sections} section={section} step={step} seen={seen}
-    liveEdge={liveEdge} now={now} onSelect={select} />;
+  const inspector = <Inspector run={run} steps={steps} sections={sections} section={section} step={step} upto={upto}
+    eventLevel={eventLevel} revealed={revealed} seen={seen} liveEdge={liveEdge} now={now} onSelectEvent={selectEvent} />;
 
-  const list = <JourneyList run={run} steps={steps} sections={sections} selected={selected} revealed={revealed}
-    liveIndex={running ? last : null} liveText={liveText} onSelect={select} inline={wide ? undefined : <div className="p-3 sm:p-4">{inspector}</div>} />;
+  const list = <JourneyList run={run} sections={sections} selected={selected} eventLevel={eventLevel} revealed={revealed}
+    liveIndex={running ? last : null} liveText={liveText} onSelectSection={selectSection} onSelectEvent={selectEvent}
+    inline={wide ? undefined : <div className="p-3 sm:p-4">{inspector}</div>} />;
 
-  return <section aria-label="Agent journey" className="space-y-3">
+  return <section ref={box} aria-label="Agent journey" className="scroll-mt-2 space-y-3">
     {/* ── Toolbar ── */}
     <div className="studio-card z-10 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 lg:sticky lg:top-2">
       {running ? <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold">
         <Radio className={cn("size-4", connected ? "text-destructive" : "text-muted-foreground")} />Live
         {!connected && <span className="text-xs font-normal text-warning">· reconnecting…</span>}
       </span> : <div className="studio-segment" role="group" aria-label="View mode">
-        <button type="button" aria-pressed={!replay} onClick={() => { setMode("explore"); clock.pause(); }}><Compass className="size-3.5" />Explore</button>
+        <button type="button" aria-pressed={!replay} onClick={() => { setMode("explore"); clock.pause(); setLevel("step"); }}><Compass className="size-3.5" />Explore</button>
         <button type="button" aria-pressed={replay} disabled={!historyLoaded || order.length < 2}
           onClick={() => { if (!replay) { setMode("replay"); clock.restart(); } }}><RotateCcw className="size-3.5" />Replay</button>
       </div>}
 
       <p className="min-w-0 flex-1 basis-48 truncate text-[13px] text-muted-foreground" aria-live={replay || following ? "polite" : "off"}>
         {replay && <span className="mr-1.5 rounded bg-accent px-1.5 py-0.5 text-[11px] font-medium text-accent-foreground">Replay · read-only</span>}
+        {following && <span className="mr-1.5 rounded bg-accent px-1.5 py-0.5 text-[11px] font-medium text-accent-foreground">Following live</span>}
         {position}
       </p>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        {running && !follow && <Button size="sm" onClick={() => { setFollow(true); setPicked(null); }}><LocateFixed />Follow live</Button>}
-        {running && follow && <span className="text-xs text-muted-foreground">Following live</span>}
-        <Button variant="outline" size="sm" onClick={() => prev != null && select(prev)} disabled={prev == null} aria-label="Previous step"><ChevronLeft />Prev</Button>
-        <Button variant="outline" size="sm" onClick={() => next != null && select(next)} disabled={next == null} aria-label="Next step">Next<ChevronRight /></Button>
+        {running && !follow && <Button size="sm" onClick={() => { setFollow(true); setPicked(null); setLevel("step"); }}><LocateFixed />Follow live</Button>}
+        <Button variant="outline" size="sm" onClick={() => goPrev?.()} disabled={!goPrev} aria-label={`Previous ${unit}`}><ChevronLeft />Prev</Button>
+        <Button variant="outline" size="sm" onClick={() => goNext?.()} disabled={!goNext} aria-label={`Next ${unit}`}>Next<ChevronRight /></Button>
         {replay && <>
           <Button size="sm" onClick={clock.toggle} className="w-[104px]">{clock.playing ? <Pause /> : <Play />}{clock.playing ? "Pause" : clock.atEnd ? "Play again" : "Play"}</Button>
           <div className="studio-segment" role="group" aria-label="Playback speed">
@@ -175,9 +232,9 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
                   <CircleHelp className="size-4" /></button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-72 text-left">
-                Replay reads the recorded log and file snapshots only. It makes no model calls and runs no code.
-                It visits the meaningful steps; timestamps are original, and waits are shortened to {REPLAY_MIN_MS / 1000}–{REPLAY_MAX_MS / 1000}s at 1×
-                (at least {REPLAY_TRANSFER_MIN_MS / 1000}s after a hand-off).
+                Replay plays the recorded events one by one (Prev/Next move by event). It reads the stored log and file snapshots
+                only: no model calls, no code runs. Timestamps are original; waits are shortened to {REPLAY_MIN_MS / 1000}–{REPLAY_MAX_MS / 1000}s at 1×
+                (at least {REPLAY_TRANSFER_MIN_MS / 1000}s after a hand-off). Technical events are skipped.
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -189,10 +246,10 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
 
     {logError && <p className="text-xs text-warning">Activity history could not be loaded. <button className="underline" onClick={retryLogs}>Retry</button></p>}
     {partial && <p className="text-xs text-muted-foreground"><strong className="font-semibold text-foreground">Partial history:</strong> this run was stored with fewer
-      recorded steps (older version, or the end was not logged). Steps marked “rebuilt” come from the run record.</p>}
+      recorded events (older version, or the end was not logged). Events marked “rebuilt” come from the run record.</p>}
 
-    <div ref={box} className="@container">
-      {wide ? <div className="grid grid-cols-[minmax(320px,400px)_minmax(0,1fr)] items-start gap-3">
+    <div ref={area} className="@container">
+      {wide ? <div className="grid grid-cols-[minmax(300px,380px)_minmax(0,1fr)] items-start gap-3">
         <div ref={scroller} className="studio-card sticky top-16 max-h-[calc(100vh-5rem)] overflow-y-auto p-3">
           <JourneyHeader />
           {list}
@@ -213,7 +270,7 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
 
 function JourneyHeader() {
   return <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 px-1">
-    <h2 className="text-sm font-semibold">Journey</h2>
+    <h2 className="text-sm font-semibold">Journey <span className="font-normal text-muted-foreground">· select a step</span></h2>
     <ActorLegend />
   </div>;
 }
