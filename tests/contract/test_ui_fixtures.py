@@ -5,7 +5,7 @@ A scripted run (real planner, fake model client, real local executor) is produce
 paths) and compared with web/src/lib/__fixtures__/. So the fixtures are always what the backend emits today:
 when a log message, a `flow` tag or a response field changes, this test fails until the fixtures are regenerated
 
-    UPDATE_SNAPSHOTS=1 pytest tests/test_ui_fixtures.py
+    UPDATE_SNAPSHOTS=1 pytest tests/contract/test_ui_fixtures.py
 
 and then `cd web && npm test` shows what the UI does with the new shape.
 """
@@ -17,11 +17,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.test_api import make_app, wait_finished
-from tests.test_providers import DONE_TEXT, RecordingRegistry, step
-from tests.test_characterization import UPDATE, norm
+from tests.conftest import make_app, wait_finished
+from tests.integration.test_providers import DONE_TEXT, RecordingRegistry, step
+from tests.contract.test_characterization import UPDATE, norm
 
-FIXTURES = Path(__file__).resolve().parents[1] / "web" / "src" / "lib" / "__fixtures__"
+FIXTURES = Path(__file__).resolve().parents[2] / "web" / "src" / "lib" / "__fixtures__"
 RUN_ID = "00000000-0000-4000-8000-000000000001"
 BASE = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 TIME_KEYS = {"time_ms", "execution_time_ms", "elapsed_ms",

@@ -11,21 +11,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent_workbench.execution import LocalExecutor
-from agent_workbench.api.app import create_app
 from agent_workbench.storage.run_store import RunStore
-from tests.conftest import DONE, ScriptedPlanner, code, fake_registry, wait_until
-
-
-def make_app(data_dir, scripts, **kw):
-    kw.setdefault("providers", fake_registry())
-    return create_app(
-        planner=ScriptedPlanner(scripts) if scripts is not None else None,
-        executor=LocalExecutor(timeout=10, runs_dir=data_dir / "runs"),
-        db_path=data_dir / "agent.db",
-        runs_dir=data_dir / "runs",
-        static_dir=data_dir / "no-static",
-        **kw,
-    )
+from tests.conftest import DONE, code, make_app, wait_finished, wait_until
 
 
 def parse_sse(text: str) -> list[tuple[str, dict]]:
@@ -37,13 +24,6 @@ def parse_sse(text: str) -> list[tuple[str, dict]]:
         if etype:
             events.append((etype, json.loads(data)))
     return events
-
-
-def wait_finished(client, run_id, timeout=15):
-    return wait_until(
-        lambda: (r := client.get(f"/api/runs/{run_id}").json())["status"] != "running" and r,
-        timeout=timeout,
-    )
 
 
 SCRIPT = [code("import time\ntime.sleep(0.2)\nprint(2 + 2)"), DONE]

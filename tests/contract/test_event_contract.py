@@ -14,9 +14,9 @@ from agent_workbench.domain.events import EVENTS, FLOWS, PAYLOADS, Event, Flow, 
 from agent_workbench.execution import LocalExecutor
 from agent_workbench.domain.schemas import AgentRequest
 from tests.conftest import ScriptedPlanner
-from tests.test_characterization import SCENARIOS
+from tests.contract.test_characterization import SCENARIOS
 
-API_TS = Path(__file__).resolve().parents[1] / "web" / "src" / "lib" / "api.ts"
+API_TS = Path(__file__).resolve().parents[2] / "web" / "src" / "lib" / "api.ts"
 
 
 def _ts_list(name: str) -> list[str]:

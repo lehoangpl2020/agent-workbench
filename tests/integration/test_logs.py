@@ -15,7 +15,7 @@ from agent_workbench.llm.catalog import ModelSpec
 from agent_workbench.core.planner import LLMPlanner
 from agent_workbench.domain.schemas import AgentState
 from tests.conftest import DONE, ScriptedPlanner, code, wait_until
-from tests.test_api import make_app, wait_finished
+from tests.conftest import make_app, wait_finished
 
 FIX_SCRIPT = [
     code("print(undefined_name)", "Print a value"),

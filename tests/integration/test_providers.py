@@ -27,7 +27,8 @@ from agent_workbench.core.planner import LLMPlanner, PlannerOutputError
 from agent_workbench.domain.schemas import AgentState
 from agent_workbench.storage.run_store import RunStore
 from tests.conftest import fake_registry, ollama_transport, wait_until
-from tests.test_api import make_app, parse_sse, wait_finished
+from tests.conftest import make_app, wait_finished
+from tests.integration.test_api import parse_sse
 
 HANG = object()
 

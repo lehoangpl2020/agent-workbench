@@ -3,8 +3,8 @@ Characterization tests: pin what the agent sends to the model, the events and lo
 is stored in SQLite and the shape of the API responses. They exist so that structural refactors can prove
 they did not change behavior; they are not quality checks for any model.
 
-Snapshots live in tests/snapshots/. After an INTENTIONAL behavior change, regenerate them with
-    UPDATE_SNAPSHOTS=1 pytest tests/test_characterization.py
+Snapshots live in tests/contract/snapshots/. After an INTENTIONAL behavior change, regenerate them with
+    UPDATE_SNAPSHOTS=1 pytest tests/contract/test_characterization.py
 and review the diff: every changed line is a behavior change that belongs in its own commit.
 """
 
@@ -26,7 +26,7 @@ from agent_workbench.core.planner import LLMPlanner
 from agent_workbench.core.prompts import SYSTEM_PROMPT, build_messages
 from agent_workbench.domain.schemas import AgentRequest, AgentState, CodeBlock, ExecutionResult
 from tests.conftest import DONE, ScriptedPlanner, code
-from tests.test_api import make_app, wait_finished
+from tests.conftest import make_app, wait_finished
 
 SNAPSHOTS = Path(__file__).parent / "snapshots"
 UPDATE = os.getenv("UPDATE_SNAPSHOTS") == "1"

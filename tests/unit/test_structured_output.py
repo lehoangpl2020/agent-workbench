@@ -11,7 +11,7 @@ from agent_workbench.llm import RESPONSE_SCHEMA, AnthropicChat
 from agent_workbench.llm.catalog import ModelSpec, models_for
 from agent_workbench.core.planner import LLMPlanner
 from agent_workbench.domain.schemas import AgentState
-from tests.test_logs import FakeStream
+from tests.integration.test_logs import FakeStream
 
 GOOD = json.dumps({"thinking": "Print it", "code": "print(1)", "language": "python"})
 

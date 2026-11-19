@@ -2,7 +2,7 @@
 The stop rules of the agent loop: pure functions of the run state.
 
 They decide whether the model gets another turn, what that turn is for, and the final status. No model call,
-no subprocess, no I/O — so tests/unit/test_stop_conditions.py checks them directly. agent.py applies them.
+no subprocess, no I/O — so tests/integration/test_agent_loop.py can check them directly. agent.py applies them.
 """
 
 from dataclasses import dataclass

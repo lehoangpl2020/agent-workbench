@@ -20,7 +20,7 @@ from agent_workbench.llm import ChatResult, ProviderError, ProviderRegistry
 from agent_workbench.runs.metrics import load_pricing, summarize_run
 from agent_workbench.storage.run_store import now_iso
 from tests.conftest import fake_registry
-from tests.test_api import make_app, wait_finished
+from tests.conftest import make_app, wait_finished
 
 PROVIDER, MODEL = "anthropic", "claude-sonnet-4-6"
 KEY = f"{PROVIDER}/{MODEL}"
