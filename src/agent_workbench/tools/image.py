@@ -124,6 +124,10 @@ class ImageTool:
     def max_per_run(self) -> int:
         return self.settings.max_per_run
 
+    def sandbox_env(self, run_id: str) -> dict[str, str]:
+        """What the run's code needs to call this tool: only the URL for that run (the key stays on the server)."""
+        return {"IMAGE_TOOL_URL": tool_url(self.settings.url, run_id)}
+
     async def aclose(self) -> None:
         await self._http.aclose()
 

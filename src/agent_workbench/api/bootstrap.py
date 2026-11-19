@@ -22,26 +22,41 @@ from agent_workbench.tools.image import ImageTool
 logger = logging.getLogger(__name__)
 
 
-def build_executor(settings: Settings, runs_dir: Path) -> BaseExecutor:
-    if settings.use_docker and settings.sandbox_mode == "persistent":
-        logger.info(f"🐳 Using PersistentSandboxExecutor → container '{settings.sandbox_container_name}'")
-        return PersistentSandboxExecutor(
-            container_name=settings.sandbox_container_name,
-            timeout=settings.execution_timeout,
-            runs_dir=runs_dir,
-            sandbox_runs_dir=settings.sandbox_runs_dir,
-        )
-    if settings.use_docker:
-        logger.info("🐳 Using SandboxExecutor (ephemeral containers)")
-        return SandboxExecutor(
-            image="agent-workbench-sandbox:latest",
-            timeout=settings.execution_timeout,
-            memory_limit="256m",
-            network_disabled=True,
-            runs_dir=runs_dir,
-        )
+def _local(settings: Settings, runs_dir: Path) -> BaseExecutor:
     logger.warning("⚠️  Using LocalExecutor (subprocess). Set USE_DOCKER=true for isolation.")
     return LocalExecutor(timeout=settings.execution_timeout, runs_dir=runs_dir, python=settings.local_python)
+
+
+def _ephemeral(settings: Settings, runs_dir: Path) -> BaseExecutor:
+    logger.info("🐳 Using SandboxExecutor (ephemeral containers)")
+    return SandboxExecutor(
+        image="agent-workbench-sandbox:latest",
+        timeout=settings.execution_timeout,
+        memory_limit="256m",
+        network_disabled=True,
+        runs_dir=runs_dir,
+    )
+
+
+def _persistent(settings: Settings, runs_dir: Path) -> BaseExecutor:
+    logger.info(f"🐳 Using PersistentSandboxExecutor → container '{settings.sandbox_container_name}'")
+    return PersistentSandboxExecutor(
+        container_name=settings.sandbox_container_name,
+        timeout=settings.execution_timeout,
+        runs_dir=runs_dir,
+        sandbox_runs_dir=settings.sandbox_runs_dir,
+    )
+
+
+# SANDBOX_MODE -> executor factory (used when USE_DOCKER=true). A new sandbox kind is one function and one entry
+# here (open/closed principle). An unknown mode keeps the old behavior: an ephemeral container.
+SANDBOX_EXECUTORS = {"ephemeral": _ephemeral, "persistent": _persistent}
+
+
+def build_executor(settings: Settings, runs_dir: Path) -> BaseExecutor:
+    if not settings.use_docker:
+        return _local(settings, runs_dir)
+    return SANDBOX_EXECUTORS.get(settings.sandbox_mode, _ephemeral)(settings, runs_dir)
 
 
 def image_tool_problem(settings: Settings, executor: BaseExecutor) -> str | None:
@@ -110,7 +125,7 @@ def build_runtime(
     run_executor = executor or build_executor(settings, runs_dir)
     tool = image_tool or build_image_tool(settings, run_executor)
     if tool is not None:
-        run_executor.image_tool_url = settings.image_tool.url   # the code gets IMAGE_TOOL_URL for its own run
+        run_executor.env_providers.append(tool.sandbox_env)   # the code gets IMAGE_TOOL_URL for its own run
     agent = CodeAgent(
         planner=planner,
         planner_factory=lambda spec: LLMPlanner(spec, registry=registry,

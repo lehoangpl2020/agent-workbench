@@ -101,7 +101,9 @@ def test_the_code_gets_only_a_url_for_its_own_run(tmp_path):
     ex = LocalExecutor(runs_dir=tmp_path)
     ws = RunWorkspace(tmp_path, "11111111-1111-1111-1111-111111111111").create()
     assert ex.tool_env(ws) == {}
-    ex.image_tool_url = "http://agent-server:8000"
+    tool = ImageTool(ImageToolSettings(enabled=True, url="http://agent-server:8000"), "test-openai-key",
+                     "https://openai.test/v1")
+    ex.env_providers.append(tool.sandbox_env)   # what api/bootstrap.py does when the server offers the tool
     env = ex.tool_env(ws)
     assert env == {"IMAGE_TOOL_URL": tool_url("http://agent-server:8000", ws.run_id)}
     assert env["IMAGE_TOOL_URL"].endswith("/api/runs/11111111-1111-1111-1111-111111111111/tools/generate_image")

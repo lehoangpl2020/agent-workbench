@@ -20,6 +20,7 @@ class LocalExecutor(BaseExecutor):
     """
 
     name = "local"
+    isolated = False
 
     def __init__(self, timeout: int = 30, runs_dir=None, python: str | None = None):
         super().__init__(timeout=timeout, runs_dir=runs_dir)

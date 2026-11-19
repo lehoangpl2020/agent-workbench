@@ -4,7 +4,6 @@ from fastapi import APIRouter, Request
 
 from agent_workbench.api.deps import manager, settings
 from agent_workbench.core.agent import CodeAgent
-from agent_workbench.execution import LocalExecutor
 from agent_workbench.llm.catalog import DEFAULT_MODEL, DEFAULT_PROVIDER
 
 router = APIRouter()
@@ -24,8 +23,8 @@ async def get_config(request: Request):
                      "provider": DEFAULT_PROVIDER, "model": DEFAULT_MODEL},
         "limits": LIMITS,
         "executor": agent.executor.describe(),
-        # False = LocalExecutor: model code runs directly on the machine running the server, not isolated
-        "sandboxed": not isinstance(agent.executor, LocalExecutor),
+        # False = e.g. LocalExecutor: model code runs directly on the machine running the server, not isolated
+        "sandboxed": agent.executor.isolated,
         "model": DEFAULT_MODEL,   # kept for older clients: the default model
         "llm_configured": state.providers.configured(DEFAULT_PROVIDER),
         "active_run_id": manager(request).active_run_id,

@@ -9,10 +9,10 @@ Execution adapters: run model-written code locally or in a Docker sandbox.
 A new executor subclasses BaseExecutor and implements _run() and _kill(); nothing else changes.
 """
 
-from agent_workbench.execution.base import BaseExecutor, ProgressFn, RawRun, SandboxUnavailable
+from agent_workbench.execution.base import BaseExecutor, ProgressFn, RawRun, SandboxEnvFn, SandboxUnavailable
 from agent_workbench.execution.docker_ephemeral import SandboxExecutor
 from agent_workbench.execution.docker_persistent import PersistentSandboxExecutor
 from agent_workbench.execution.local import LocalExecutor
 
 __all__ = ["BaseExecutor", "LocalExecutor", "PersistentSandboxExecutor", "ProgressFn", "RawRun",
-           "SandboxExecutor", "SandboxUnavailable"]
+           "SandboxEnvFn", "SandboxExecutor", "SandboxUnavailable"]

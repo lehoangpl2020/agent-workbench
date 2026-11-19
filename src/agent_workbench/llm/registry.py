@@ -50,23 +50,33 @@ class ProviderRegistry:
         missing = self.settings.missing_config(spec.provider)
         if missing:
             raise ProviderError(NOT_CONFIGURED, spec.provider, missing)
-        s = self.settings
-        if spec.provider == "anthropic":
-            if self._anthropic is None:
-                from anthropic import AsyncAnthropic
-                # Retries and timeout are the SDK's own defaults, written out so they are visible and tested:
-                # a transient error (429/5xx/connection) is retried inside ONE model call and is not logged.
-                limits = dict(max_retries=ANTHROPIC_MAX_RETRIES, timeout=ANTHROPIC_TIMEOUT_SECONDS)
-                self._anthropic = (AsyncAnthropic(api_key=s.anthropic_api_key, **limits) if s.anthropic_api_key
-                                   else AsyncAnthropic(**limits))
-            return AnthropicChat(spec, self._anthropic)
-        if spec.provider == "openai":
-            # Reasoning models can stay silent for quite a while before the first token
-            return OpenAIChat(spec, self._client("openai", 300.0), s.openai_base_url, s.openai_api_key)
-        if spec.provider == "ollama":
-            # On first use Ollama must load the model into RAM/VRAM → long wait before the first token
-            return OllamaChat(spec, self._client("ollama", 300.0), s.ollama_base_url)
-        raise ProviderError(NOT_CONFIGURED, spec.provider, f"No adapter for provider '{spec.provider}'.")
+        # provider id -> adapter factory. A new provider is one <name>_chat.py module and one entry here
+        # (open/closed principle): the code of create() itself never changes.
+        factories = {"anthropic": self._anthropic_chat, "openai": self._openai_chat, "ollama": self._ollama_chat}
+        factory = factories.get(spec.provider)
+        if factory is None:
+            raise ProviderError(NOT_CONFIGURED, spec.provider, f"No adapter for provider '{spec.provider}'.")
+        return factory(spec)
+
+    def _anthropic_chat(self, spec: ModelSpec) -> ChatClient:
+        if self._anthropic is None:
+            from anthropic import AsyncAnthropic
+            s = self.settings
+            # Retries and timeout are the SDK's own defaults, written out so they are visible and tested:
+            # a transient error (429/5xx/connection) is retried inside ONE model call and is not logged.
+            limits = dict(max_retries=ANTHROPIC_MAX_RETRIES, timeout=ANTHROPIC_TIMEOUT_SECONDS)
+            self._anthropic = (AsyncAnthropic(api_key=s.anthropic_api_key, **limits) if s.anthropic_api_key
+                               else AsyncAnthropic(**limits))
+        return AnthropicChat(spec, self._anthropic)
+
+    def _openai_chat(self, spec: ModelSpec) -> ChatClient:
+        # Reasoning models can stay silent for quite a while before the first token
+        return OpenAIChat(spec, self._client("openai", 300.0), self.settings.openai_base_url,
+                          self.settings.openai_api_key)
+
+    def _ollama_chat(self, spec: ModelSpec) -> ChatClient:
+        # On first use Ollama must load the model into RAM/VRAM → long wait before the first token
+        return OllamaChat(spec, self._client("ollama", 300.0), self.settings.ollama_base_url)
 
     # ── Status shown by the UI before pressing Run ──
     async def ollama_models(self) -> tuple[set[str] | None, str | None, str | None]:

@@ -31,7 +31,6 @@ from agent_workbench.domain.events import Flow, artifact_label
 from agent_workbench.domain.schemas import ExecutionResult
 from agent_workbench.observability.runlog import ERROR, INFO, WARN, LogFn, fmt_bytes, no_log
 from agent_workbench.storage.workspace import RunWorkspace
-from agent_workbench.tools.image import tool_url
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +44,8 @@ MAX_STDERR = 5_000
 
 # Reports progress outward: progress(phase, text), e.g. ("installing", "Installing 'seaborn'")
 ProgressFn = Callable[[str, str], Awaitable[None]]
+# Extra environment variables for the code of one run: env_for(run_id) -> {name: value}. Never secrets.
+SandboxEnvFn = Callable[[str], dict[str, str]]
 
 
 async def notify_progress(progress: ProgressFn | None, phase: str, text: str) -> None:
@@ -70,19 +71,23 @@ def decode_output(data: bytes | None) -> str:
 
 class BaseExecutor:
     name = "base"
+    # Whether model-written code is isolated from the server's machine. The UI warns when it is not (GET /api/config).
+    isolated = True
 
     def __init__(self, timeout: int = 30, runs_dir: str | Path | None = None):
         self.timeout = timeout
         self.runs_dir = Path(runs_dir or Path(tempfile.gettempdir()) / "agent-workbench-runs")
         self._counter = itertools.count(1)
-        # The server as the SANDBOX reaches it. Set by api/app.py only when the image tool is on; None = not offered.
-        self.image_tool_url: str | None = None
+        # Filled by the composition root (api/bootstrap.py), e.g. with ImageTool.sandbox_env, so the executor never
+        # has to know which tools exist (dependency inversion: tools plug in, the executor does not import them).
+        self.env_providers: list[SandboxEnvFn] = []
 
     def tool_env(self, workspace: RunWorkspace) -> dict[str, str]:
-        """Environment variables that tell the code which tools it may call. Never secrets: only a URL for this run."""
-        if not self.image_tool_url:
-            return {}
-        return {"IMAGE_TOOL_URL": tool_url(self.image_tool_url, workspace.run_id)}
+        """Environment variables that tell the code which tools it may call. Never secrets: only URLs for this run."""
+        env: dict[str, str] = {}
+        for env_for in self.env_providers:
+            env.update(env_for(workspace.run_id))
+        return env
 
     # ── Public API ─────────────────────────────────
     async def execute(
