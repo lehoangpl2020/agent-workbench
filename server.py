@@ -35,6 +35,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Str
 from fastapi.staticfiles import StaticFiles
 
 from agent import CodeAgent
+from events import Event
 from executor import BaseExecutor, LocalExecutor, PersistentSandboxExecutor, SandboxExecutor
 from llm_providers import ProviderError, ProviderRegistry
 from model_catalog import DEFAULT_MODEL, DEFAULT_PROVIDER, InvalidModelSelection, describe, resolve
@@ -282,13 +283,13 @@ def create_app(
         if queue is None:
             # The run already finished → send the final state, then close the stream
             async def finished():
-                yield _sse("done", {"session_id": run_id, "status": run["status"],
+                yield _sse(Event.DONE, {"session_id": run_id, "status": run["status"],
                                     "answer": run["answer"], "message": run["message"],
                                     "iterations": run["iteration_count"]})
             return _sse_response(finished())
 
         async def live():
-            yield _sse("status", {"session_id": run_id, "status": "running"})
+            yield _sse(Event.STATUS, {"session_id": run_id, "status": "running"})
             async for chunk in _drain(queue):
                 yield chunk
         return _sse_response(live(), on_close=lambda: manager().unsubscribe(run_id, queue))
@@ -410,7 +411,7 @@ async def _drain(queue: asyncio.Queue):
             yield ": ping\n\n"
             continue
         yield _sse(event, data)
-        if event == "done":
+        if event == Event.DONE:
             return
 
 

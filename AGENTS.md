@@ -18,6 +18,7 @@ Out of scope unless a maintainer asks: new frameworks, queues, databases, authen
 ```text
 schemas.py        data models + ExecutionStatus      planner.py        one model call (streaming, format retry) → CodeBlock
 prompts.py        system prompt + context builder    parsing.py        validates the model's JSON reply (pure functions)
+events.py         event names, `flow` tags, payloads  (the contract with runs.py, SSE and web/src/lib/api.ts)
 model_catalog.py  providers/models + default         llm_providers.py  Anthropic / OpenAI / Ollama adapters
 agent.py          the agent loop                     executor.py       Local / Sandbox / PersistentSandbox executors
 runs.py           RunManager (background, Stop, SSE) store.py          SQLite (runs, iterations, run_logs)
@@ -88,6 +89,7 @@ The code default for `SANDBOX_MODE` is `ephemeral`, but `docker-compose.yml` set
 - Keep changes small and focused. Do not refactor beyond the task. Do not add dependencies to `requirements.txt` or `web/package.json` without a clear need and a note in the PR.
 - Do not edit generated or installed files: `web/dist/`, `static/`, `data/`, `.venv/`, `node_modules/`, `__pycache__/`, `*.tsbuildinfo`.
 - Adding an API field: update `schemas.py`/`server.py`, `web/src/lib/api.ts`, the related tests, and `docs/api.md` for a new endpoint.
+- Adding an event, a `flow` tag or a payload key: declare it in `events.py` and mirror it in `web/src/lib/api.ts` (`SSE_EVENTS`, `FLOWS`); `tests/test_event_contract.py` fails if the two sides differ. Only add; never change the meaning of an old one.
 - Adding a log or event: emit it where the action really happens (`emit("log", entry)`), with the right `source` (`runtime`, `llm`, `model`, `sandbox`), and pass it through `redact()`.
 - Tests use `ScriptedPlanner` (`tests/conftest.py`): a script is a list of `CodeBlock`, `Exception` (planner error) or `Hang()` (a slow model, to test Stop while planning). Do not add tests that need a real model API or Docker unless they are gated by a skip flag such as `DOCKER_SANDBOX_TESTS`.
 

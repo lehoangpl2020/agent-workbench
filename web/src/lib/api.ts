@@ -198,7 +198,7 @@ export const api = {
     `/api/runs/${id}/logs/download${iteration ? `?iteration=${iteration}` : ""}`,
 };
 
-// SSE events emitted by the backend (see agent.py / server.py)
+// SSE events emitted by the backend. Mirrors `EVENTS` in events.py; tests/test_event_contract.py compares them.
 export const SSE_EVENTS = [
   "session",
   "status",
@@ -212,3 +212,25 @@ export const SSE_EVENTS = [
   "error",
   "done",
 ] as const;
+
+/**
+ * `flow` tags in a log entry's data: they place a step in Live Flow / Replay.
+ * Mirrors `FLOWS` in events.py; tests/test_event_contract.py compares them.
+ */
+export const FLOWS = [
+  "started",
+  "write",
+  "fix",
+  "review",
+  "code",
+  "done_reply",
+  "executing",
+  "installing",
+  "rerunning",
+  "install_failed",
+  "artifacts",
+  "checking",
+  "result",
+  "finished",
+] as const;
+export type Flow = (typeof FLOWS)[number];

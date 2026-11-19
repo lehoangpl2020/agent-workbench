@@ -100,6 +100,8 @@ Messages and data go through `redact()`, which masks `sk-ant-…` keys, auth hea
 
 `session`, `iteration`, `code`, `result`, `model_done`, `error` and `done` are the legacy events and old clients keep working. The newer events are `activity` (the current action), `code_progress` (code being streamed), `log` (an activity-log entry) and `status`.
 
+The names, the `flow` tags of log entries and the payload of each event are declared in `events.py` (TypedDicts); `web/src/lib/api.ts` mirrors the names, and `tests/test_event_contract.py` checks both sides and the payloads the agent actually emits. `RunManager._persist` is a table from event to the SQLite update it causes.
+
 ## Live Flow and Replay (UI)
 
 - **Live Flow** shows the model, the agent runtime and the Python sandbox as three actors. A data card moves only when a real log entry arrives; the code file only reaches the sandbox after the backend has parsed the response and written `code/iter_NN.py`. After a refresh or reconnect the view is rebuilt from the stored snapshot and logs; history is not replayed as if it were live.

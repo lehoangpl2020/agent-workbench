@@ -1,6 +1,6 @@
 // Agent Studio: turns the recorded activity log of ONE agent run into ordered steps.
 // Live and Replay both read these steps; nothing here invents events, durations or model reasoning.
-import type { Intent, IterationArtifact, LogEntry, RunDetail } from "./api";
+import type { Flow, Intent, IterationArtifact, LogEntry, RunDetail } from "./api";
 import { RUN_STATUS } from "./format";
 
 export type Actor = "model" | "runtime" | "sandbox";
@@ -62,7 +62,7 @@ function exitFrom(text: string): number | null {
 /** Classify one log entry. Uses the backend's `flow` tag first, then its stable source/data shape. */
 function classify(log: LogEntry, run: RunDetail): Omit<StudioStep, "key" | "index" | "ts" | "iteration" | "level" | "log"> {
   const n = log.iteration;
-  const flow = log.data.flow;
+  const flow = log.data.flow as Flow | undefined;
   switch (flow) {
     case "started": return { beat: "start", actor: "runtime", title: "Run started" };
     case "write": case "fix": case "review": {

@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
+from events import Flow, artifact_label
 from runlog import ERROR, INFO, WARN, LogFn, fmt_bytes, no_log
 from schemas import ExecutionResult
 from workspace import RunWorkspace
@@ -101,8 +102,8 @@ class BaseExecutor:
         async def report(phase: str, text: str) -> None:
             # Progress from a subclass (package install, re-run...) → both the "current action" and a log entry
             await _notify(progress, phase, text)
-            if phase in ("installing", "rerunning", "install_failed"):
-                await log(WARN if phase == "install_failed" else INFO, "sandbox", text, flow=phase)
+            if phase in (Flow.INSTALLING, Flow.RERUNNING, Flow.INSTALL_FAILED):
+                await log(WARN if phase == Flow.INSTALL_FAILED else INFO, "sandbox", text, flow=phase)
 
         code_path = workspace.write_code(
             iteration, self.prepare_code(code, workspace), _extension(language)
@@ -110,7 +111,7 @@ class BaseExecutor:
         await log(INFO, "sandbox", f"Wrote code to code/{code_path.name}",
                   lines=len(code.splitlines()), chars=len(code))
         before = workspace.scan()
-        await log(INFO, "sandbox", f"Starting execution ({self.describe()}, timeout {timeout}s)", flow="executing")
+        await log(INFO, "sandbox", f"Starting execution ({self.describe()}, timeout {timeout}s)", flow=Flow.EXECUTING)
         start = time.monotonic()
 
         try:
@@ -175,11 +176,11 @@ class BaseExecutor:
         changed = workspace.changed_files(before, workspace.scan())
         workspace.snapshot(iteration, changed)
         sizes = workspace.scan()
-        artifacts = {p: f"<file: {sizes[p][0]} bytes>" for p in changed if p in sizes}
+        artifacts = {p: artifact_label(sizes[p][0]) for p in changed if p in sizes}
         if artifacts:
             listing = ", ".join(f"{p} ({fmt_bytes(sizes[p][0])})" for p in artifacts)
             await log(INFO, "sandbox", f"Collected {len(artifacts)} new/changed file(s): {listing}",
-                      flow="artifacts", files={p: sizes[p][0] for p in artifacts})
+                      flow=Flow.ARTIFACTS, files={p: sizes[p][0] for p in artifacts})
         else:
             await log(INFO, "sandbox", "No new or changed files in /workspace/output")
 

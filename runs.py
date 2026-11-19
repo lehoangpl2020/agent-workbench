@@ -19,11 +19,11 @@ Calling start() while a run is active → RunBusyError (the API returns 409).
 
 import asyncio
 import logging
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from agent import CodeAgent
+from events import Event, artifact_size
 from runlog import WARN, make_entry
 from schemas import AgentRequest, AgentResponse, ExecutionStatus
 from store import (
@@ -38,7 +38,6 @@ from store import (
 from workspace import RunWorkspace
 
 logger = logging.getLogger(__name__)
-_SIZE_RE = re.compile(r"(\d+)")
 
 
 class RunBusyError(Exception):
@@ -107,7 +106,7 @@ class RunManager:
             self._persist(active.run_id, event, data)
         except Exception:
             logger.exception(f"[{active.run_id}] Failed to persist event '{event}'")
-        if event == "done":
+        if event == Event.DONE:
             active.finished = True
         for q in list(active.subscribers):
             q.put_nowait((event, data))
@@ -124,7 +123,7 @@ class RunManager:
             if row and row["status"] == ExecutionStatus.RUNNING.value:
                 msg = "Run ended unexpectedly."
                 self.store.finish_run(active.run_id, "error", "", msg, row["iteration_count"])
-                await emit("done", {"session_id": active.run_id, "status": "error",
+                await emit(Event.DONE, {"session_id": active.run_id, "status": "error",
                                     "answer": msg, "message": msg, "iterations": row["iteration_count"]})
             active.finished = True
             if self._active is active:
@@ -132,57 +131,80 @@ class RunManager:
 
     # ── Event → SQLite ─────────────────────────────
     def _persist(self, run_id: str, event: str, data: dict) -> None:
-        n = data.get("iteration")
-        if event == "log":
-            data["id"] = self.store.add_log(run_id, data)   # id lets the client continue / de-duplicate
-        elif event == "iteration" and data.get("phase") == "planning":
-            self.store.start_iteration(run_id, n, data.get("intent", "write"), data.get("detail", ""))
-        elif event == "activity":
-            data["at"] = self.store.set_activity(run_id, n, data["phase"], data["text"])
-        elif event == "code_progress":
-            # Code is streaming: store the partial version so the UI (even after a refresh) sees it right away
-            self.store.update_iteration(run_id, n, code=data["code"], explanation=data["explanation"])
-            self.store.set_activity(
-                run_id, n, "streaming", f"Model is writing code… {data['chars']:,} chars", touch=False
-            )
-        elif event == "iteration" and data.get("phase") == "executing":
-            self.store.update_iteration(run_id, n, status=ITER_EXECUTING)
-        elif event == "code":
-            self.store.update_iteration(
-                run_id, n, code=data["code"], language=data["language"], explanation=data["explanation"]
-            )
-        elif event == "model_done":
-            self.store.update_iteration(
-                run_id, n, status=ITER_DONE, explanation=data["explanation"], finished_at=now_iso()
-            )
-        elif event == "result":
-            if data["timed_out"]:
-                status = ITER_TIMED_OUT
-            elif data["exit_code"] == 0:
-                status = ITER_SUCCEEDED
-            else:
-                status = ITER_FAILED
-            artifacts = [
-                {"path": p, "size": int(_SIZE_RE.search(s).group(1)) if _SIZE_RE.search(s) else 0}
-                for p, s in data["artifacts"].items()
-            ]
-            self.store.update_iteration(
-                run_id,
-                n,
-                status=status,
-                stdout=data["stdout"],
-                stderr=data["stderr"],
-                exit_code=data["exit_code"],
-                execution_time_ms=data["time_ms"],
-                timed_out=data["timed_out"],
-                false_success=data["false_success"],
-                artifacts=artifacts,
-                finished_at=now_iso(),
-            )
-        elif event == "done":
-            self.store.finish_run(
-                run_id, data["status"], data["answer"], data.get("message", ""), data["iterations"]
-            )
+        """
+        Projects one event onto the stored history. Some handlers ADD a field to `data` (the log entry's
+        `id`, the activity's `at`): the SSE clients receive the same dict, so they see the stored values.
+        Events with no handler (session, status, error) are not stored.
+        """
+        handler = self._PERSIST.get(event)
+        if handler:
+            handler(self, run_id, data)
+
+    def _on_log(self, run_id: str, data: dict) -> None:
+        data["id"] = self.store.add_log(run_id, data)   # id lets the client continue / de-duplicate
+
+    def _on_iteration(self, run_id: str, data: dict) -> None:
+        if data.get("phase") == "planning":
+            self.store.start_iteration(run_id, data["iteration"], data.get("intent", "write"), data.get("detail", ""))
+        elif data.get("phase") == "executing":
+            self.store.update_iteration(run_id, data["iteration"], status=ITER_EXECUTING)
+
+    def _on_activity(self, run_id: str, data: dict) -> None:
+        data["at"] = self.store.set_activity(run_id, data.get("iteration"), data["phase"], data["text"])
+
+    def _on_code_progress(self, run_id: str, data: dict) -> None:
+        # Code is streaming: store the partial version so the UI (even after a refresh) sees it right away
+        n = data["iteration"]
+        self.store.update_iteration(run_id, n, code=data["code"], explanation=data["explanation"])
+        self.store.set_activity(
+            run_id, n, "streaming", f"Model is writing code… {data['chars']:,} chars", touch=False
+        )
+
+    def _on_code(self, run_id: str, data: dict) -> None:
+        self.store.update_iteration(
+            run_id, data["iteration"], code=data["code"], language=data["language"], explanation=data["explanation"]
+        )
+
+    def _on_model_done(self, run_id: str, data: dict) -> None:
+        self.store.update_iteration(
+            run_id, data["iteration"], status=ITER_DONE, explanation=data["explanation"], finished_at=now_iso()
+        )
+
+    def _on_result(self, run_id: str, data: dict) -> None:
+        if data["timed_out"]:
+            status = ITER_TIMED_OUT
+        elif data["exit_code"] == 0:
+            status = ITER_SUCCEEDED
+        else:
+            status = ITER_FAILED
+        artifacts = [{"path": p, "size": artifact_size(label)} for p, label in data["artifacts"].items()]
+        self.store.update_iteration(
+            run_id,
+            data["iteration"],
+            status=status,
+            stdout=data["stdout"],
+            stderr=data["stderr"],
+            exit_code=data["exit_code"],
+            execution_time_ms=data["time_ms"],
+            timed_out=data["timed_out"],
+            false_success=data["false_success"],
+            artifacts=artifacts,
+            finished_at=now_iso(),
+        )
+
+    def _on_done(self, run_id: str, data: dict) -> None:
+        self.store.finish_run(run_id, data["status"], data["answer"], data.get("message", ""), data["iterations"])
+
+    _PERSIST = {
+        Event.LOG: _on_log,
+        Event.ITERATION: _on_iteration,
+        Event.ACTIVITY: _on_activity,
+        Event.CODE_PROGRESS: _on_code_progress,
+        Event.CODE: _on_code,
+        Event.MODEL_DONE: _on_model_done,
+        Event.RESULT: _on_result,
+        Event.DONE: _on_done,
+    }
 
     # ── Wait / Stop / Subscribe ────────────────────
     async def wait(self, run_id: str) -> AgentResponse | None:
@@ -196,7 +218,7 @@ class RunManager:
         if not active or active.run_id != run_id or active.finished or not active.task:
             return False
         logger.info(f"[{run_id}] Stop requested")
-        self._publish(active, "log", make_entry(None, WARN, "runtime", "Stop requested by user"))
+        self._publish(active, Event.LOG, make_entry(None, WARN, "runtime", "Stop requested by user"))
         active.stop_requested = True
         active.task.cancel()
         await asyncio.wait({active.task}, timeout=wait_seconds)
