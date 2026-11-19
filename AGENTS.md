@@ -45,11 +45,11 @@ Run everything from the repository root.
 
 | Task | Command |
 |---|---|
-| Run the full stack (Docker) | `docker compose up -d --build` → http://localhost:8000 (set `HOST_PORT` if 8000 is taken) |
+| Run the full stack (Docker) | `docker compose up -d --build` → http://localhost:8668 (set `HOST_PORT` if 8668 is taken) |
 | Run without Docker (not isolated) | `USE_DOCKER=false python server.py` |
 | Backend tests (offline, scripted planner) | `.venv/Scripts/python -m pytest tests -q` (Windows) or `.venv/bin/python -m pytest tests -q` |
 | Real-sandbox tests | see the docstring of `tests/test_docker_executor.py` (needs `DOCKER_SANDBOX_TESTS=1`, runs inside the server container) |
-| UI development server | `cd web && npm run dev` → http://localhost:5173 (proxies to :8000) |
+| UI development server | `cd web && npm run dev` → http://localhost:5173 (proxies to :8668) |
 | UI type-check + production build | `cd web && npm run build` |
 
 If Docker reports `additional privileges requested: pass "--allow=fs.read=..."`, build the images directly; see [docs/troubleshooting.md](docs/troubleshooting.md).
@@ -70,8 +70,8 @@ Environment variables (read in `server.py` unless noted). Never read or print th
 | `SANDBOX_RUNS_DIR` | `/workspace/runs` | Runs directory as seen from inside the sandbox |
 | `SANDBOX_RUNS_MOUNT` | volume `agent-runs` | Compose only; set `./data/runs` for hybrid mode |
 | `DATA_DIR`, `DB_PATH`, `RUNS_DIR`, `STATIC_DIR` | under `./data`, `./static` | SQLite, runs, UI build |
-| `PORT`, `HOST` | `8000`, `127.0.0.1` | Listen port/address for `python server.py` |
-| `BIND_ADDRESS`, `HOST_PORT` | `127.0.0.1`, `8000` | Compose only: published address and port |
+| `PORT`, `HOST` | `8668`, `127.0.0.1` | Listen port/address for `python server.py` |
+| `BIND_ADDRESS`, `HOST_PORT` | `127.0.0.1`, `8668` | Compose only: published address and port |
 | `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Browser origins allowed to call the API |
 | `LOCAL_PYTHON` | `sys.executable` | Python used by `LocalExecutor` |
 | `DOCKER_SANDBOX_TESTS` | unset | `1` enables the real-sandbox tests |
@@ -104,7 +104,7 @@ These are covered by tests or are deliberate decisions. Change one only with an 
 8. **One run at a time.** The backend returns `409`, the UI disables Run. Changing this means changing the backend, the UI and the tests together.
 9. **History survives restarts.** A run still `running` after a restart is marked `error`. Old databases must migrate (`test_old_database_is_migrated`); a schema change needs a migration and a test.
 10. **Provider and model are fixed for a whole run**, validated against `model_catalog.py` (422 if invalid), preflighted (400 for a missing key, unreachable Ollama or an unpulled model), and never silently replaced by another provider. A request without a choice uses the default in `model_catalog.py`: Ollama `qwen3.5:4b` (the UI preselects the same one from `GET /api/providers`). If the default is unavailable the request fails with a clear error; it never falls back to Claude, OpenAI or another Ollama model. Old runs with no provider keep it empty; the default is never written into history (`test_providers.py`).
-11. **Localhost only by default.** The server runs model-written code and has no auth: Compose publishes `127.0.0.1:${HOST_PORT:-8000}`, `python server.py` listens on `HOST=127.0.0.1`, and CORS never contains `*` (`test_cors_rejects_unknown_origin`, `test_server_defaults_to_localhost_only`).
+11. **Localhost only by default.** The server runs model-written code and has no auth: Compose publishes `127.0.0.1:${HOST_PORT:-8668}`, `python server.py` listens on `HOST=127.0.0.1`, and CORS never contains `*` (`test_cors_rejects_unknown_origin`, `test_server_defaults_to_localhost_only`).
 12. **Stop conditions.** `max_iterations` counts code runs. If the last run succeeds, one extra final-review model call is made and its code is not run; if the last run fails or times out, the loop stops without another model call (`test_single_code_run_can_still_succeed`, `test_failed_last_run_stops_without_extra_model_call`, `test_success_without_done_hits_run_limit_and_keeps_partial`).
 
 Run statuses: `success` (Completed), `max_retries` (Code run limit reached), `timeout`, `error` (Failed), `stopped`; `pending` and `running` are not terminal. The table with examples is in [docs/architecture.md](docs/architecture.md#run-status).

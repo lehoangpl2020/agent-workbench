@@ -440,4 +440,4 @@ if __name__ == "__main__":
     if HOST not in ("127.0.0.1", "localhost", "::1"):
         logger.warning(f"⚠️  Listening on {HOST}: other machines on the network can run code here. "
                        "There is no authentication.")
-    uvicorn.run(app, host=HOST, port=int(os.getenv("PORT", "8000")))
+    uvicorn.run(app, host=HOST, port=int(os.getenv("PORT", "8668")))

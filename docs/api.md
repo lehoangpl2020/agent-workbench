@@ -1,6 +1,6 @@
 # API, CLI and security notes
 
-Interactive Swagger docs are served at <http://localhost:8000/docs> when the server is running.
+Interactive Swagger docs are served at <http://localhost:8668/docs> when the server is running.
 
 ## HTTP API
 
@@ -22,9 +22,9 @@ Interactive Swagger docs are served at <http://localhost:8000/docs> when the ser
 `POST /api/runs` and `/api/execute*` accept optional `provider` and `model` fields. If omitted, Ollama `qwen3.5:4b` is used (the default in `model_catalog.py`). A choice outside the catalog returns `422`; a missing key, an unreachable Ollama or an unpulled model returns `400` with `detail.code`. Run details, history, responses and the `session` event include `provider`, `model` (+ `provider_name`, `model_name`). See [providers.md](providers.md).
 
 ```bash
-curl -X POST http://localhost:8000/api/execute -H "Content-Type: application/json" \
+curl -X POST http://localhost:8668/api/execute -H "Content-Type: application/json" \
   -d '{"message": "Calculate pi to 100 decimal places", "max_iterations": 5, "timeout_seconds": 30}'
-curl -X POST http://localhost:8000/api/execute -H "Content-Type: application/json" \
+curl -X POST http://localhost:8668/api/execute -H "Content-Type: application/json" \
   -d '{"message": "Calculate pi", "provider": "ollama", "model": "qwen3.5:4b"}'
 ```
 
@@ -57,7 +57,7 @@ python client.py --provider openai --model gpt-6-luna "Your task"
 
 # Health check, and a custom server URL
 python client.py --health
-python client.py --base-url http://localhost:8000 "Your task"
+python client.py --base-url http://localhost:8668 "Your task"
 ```
 
 ## Executor modes
@@ -79,7 +79,7 @@ $env:USE_DOCKER = "true"
 $env:SANDBOX_MODE = "persistent"
 $env:SANDBOX_CONTAINER_NAME = "agent-workbench-sandbox"
 $env:RUNS_DIR = "./data/runs"
-python server.py                            # API on http://127.0.0.1:8000
+python server.py                            # API on http://127.0.0.1:8668
 ```
 
 `./run.sh hybrid` does the same in Git Bash/WSL.
@@ -128,7 +128,7 @@ This is a learning/showcase project. What exists today, and what does **not**:
 
 | Area | Current state |
 |---|---|
-| Access | `127.0.0.1` only (Compose publishes `127.0.0.1:8000`, `python server.py` defaults to `HOST=127.0.0.1`); CORS only allows the Vite dev server. **No authentication.** |
+| Access | `127.0.0.1` only (Compose publishes `127.0.0.1:8668`, `python server.py` defaults to `HOST=127.0.0.1`); CORS only allows the Vite dev server. **No authentication.** |
 | Persistent sandbox (Compose) | A separate container, non-root user `sandbox`, `cap_drop: ALL`, `no-new-privileges`, 512 MB memory, 1 CPU. **Network is enabled** (for auto `pip install`). All runs share one container, so code in one run could in theory read another run's directory. |
 | Ephemeral sandbox | A new container per run, 256 MB memory, 1 CPU, **network disabled**. Only works when the server runs directly on the host. |
 | Local mode | **Not isolated**: code runs with your user's permissions. |

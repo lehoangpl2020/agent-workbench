@@ -36,9 +36,9 @@ If you use `run.sh`, `.env` must have LF line endings: with CRLF, `source .env` 
 | Run **Failed**, `llm` log has `error_kind: auth` | Wrong or revoked key | Fix `.env`, check whether an old shell variable overrides it, then `--force-recreate agent-server` |
 | `model_not_found` | Wrong model ID, or the key may not use that model | The model list lives in `model_catalog.py`. See [providers.md](providers.md), section 1 |
 | `Server unreachable` / `Connection refused` | The server is not running or crashed | `docker compose ps`, `docker compose logs agent-server` |
-| Other machines on the network cannot open `:8000` | **By design.** The port is published on `127.0.0.1` only | Leave it. To demo to another machine: `BIND_ADDRESS=0.0.0.0` in `.env`. The server has no auth, so anyone who can reach it can run code and use your key |
+| Other machines on the network cannot open `:8668` | **By design.** The port is published on `127.0.0.1` only | Leave it. To demo to another machine: `BIND_ADDRESS=0.0.0.0` in `.env`. The server has no auth, so anyone who can reach it can run code and use your key |
 | Calling the API from another web page fails with a CORS error | **By design.** CORS only allows `http://localhost:5173` and `http://127.0.0.1:5173` (Vite dev) | Change `CORS_ORIGINS` if you really need to |
-| `Bind for 0.0.0.0:8000 failed` / `127.0.0.1:8000 ... port is already allocated` | Port 8000 is taken, often by a hybrid-mode server | Set `HOST_PORT` in `.env`, stop the Python server, or `docker compose stop agent-server` before running hybrid |
+| `Bind for 0.0.0.0:8668 failed` / `127.0.0.1:8668 ... port is already allocated` | Port 8668 is taken, often by a hybrid-mode server | Set `HOST_PORT` in `.env`, stop the Python server, or `docker compose stop agent-server` before running hybrid |
 | `409 Another run is in progress` | Only one run at a time | Wait, or press **Stop** |
 | Run **Failed** with `Sandbox error: Container 'agent-workbench-sandbox' not found. Run: docker compose up sandbox -d` | The sandbox was not created | `docker compose up -d sandbox` |
 | `Sandbox cannot see /workspace/runs/<id>/code/iter_01.py` | Hybrid mode: the server and sandbox do not share the runs directory | Start the sandbox with `SANDBOX_RUNS_MOUNT=./data/runs` and the server with `RUNS_DIR=./data/runs` (section 4), or use `./run.sh hybrid` |
@@ -81,7 +81,7 @@ The sandbox runs in Docker and the server runs as Python so you can set breakpoi
 
    ```powershell
    $env:SANDBOX_RUNS_MOUNT = "./data/runs"; docker compose up -d sandbox
-   docker compose stop agent-server   # frees port 8000 if Compose is running
+   docker compose stop agent-server   # frees port 8668 if Compose is running
    ```
 
 3. Create `.vscode/launch.json` (a suggestion; the repository does not ship this file):
@@ -115,7 +115,7 @@ The sandbox runs in Docker and the server runs as Python so you can set breakpoi
    - `planner.py` `LLMPlanner.generate_code`: the `messages` sent to the model;
    - `agent.py` `CodeAgent._loop`: the stop conditions;
    - `executor.py` `_run_with_auto_install`: auto-install.
-5. Press F5, then open http://127.0.0.1:8000. The UI needs a build in `static/`; if there is none, run `cd web && npm run dev` and open http://localhost:5173. Or call the server with `python client.py --stream "..."`.
+5. Press F5, then open http://127.0.0.1:8668. The UI needs a build in `static/`; if there is none, run `cd web && npm run dev` and open http://localhost:5173. Or call the server with `python client.py --stream "..."`.
 
 Stopping at a breakpoint for too long can make the CLI client report `ReadTimeout` (600-second timeout). When you are done, stop debugging and run `docker compose up -d agent-server`.
 
@@ -126,11 +126,11 @@ Stopping at a breakpoint for too long can make the CLI client report `ReadTimeou
 $sec = Read-Host -AsSecureString "ANTHROPIC_API_KEY"
 $env:ANTHROPIC_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
 
-curl.exe -s http://localhost:8000/health
-Invoke-RestMethod http://localhost:8000/health
+curl.exe -s http://localhost:8668/health
+Invoke-RestMethod http://localhost:8668/health
 
 # Raw SSE
-curl.exe -N http://localhost:8000/api/execute/stream -H "Content-Type: application/json" -d '{\"message\": \"Calculate 2 + 2 and print the result\"}'
+curl.exe -N http://localhost:8668/api/execute/stream -H "Content-Type: application/json" -d '{\"message\": \"Calculate 2 + 2 and print the result\"}'
 
 # Run the CLI client inside the container (no local Python needed)
 docker compose exec agent-server python client.py --stream "Calculate 2 + 2 and print the result"

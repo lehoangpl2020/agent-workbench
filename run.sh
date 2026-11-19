@@ -3,7 +3,7 @@
 #   ./run.sh local    - run the server with Python; code runs in a NON-isolated subprocess (dev only, default)
 #   ./run.sh docker   - build + run the server (API + Web UI) and the sandbox with docker compose
 #   ./run.sh hybrid   - sandbox in Docker, server in Python
-#   ./run.sh web      - run the Vite dev server for the UI (http://localhost:5173, proxies to :8000)
+#   ./run.sh web      - run the Vite dev server for the UI (http://localhost:5173, proxies to :8668)
 #   ./run.sh check    - run the offline tests (mock planner, no model API calls)
 #   ./run.sh test     - send one task to the running server (a REAL model call: the server default, local Ollama qwen3.5:4b)
 set -euo pipefail
@@ -34,7 +34,7 @@ setup_venv() {
 case "$MODE" in
   docker)
     load_env
-    echo "Web UI + API: http://localhost:8000"
+    echo "Web UI + API: http://localhost:8668"
     docker compose up --build
     ;;
   local)

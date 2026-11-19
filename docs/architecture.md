@@ -109,6 +109,6 @@ Messages and data go through `redact()`, which masks `sk-ant-…` keys, auth hea
 
 - Only one run at a time (the backend returns 409, the UI disables the Run button).
 - The persistent sandbox is one shared container: code from one run could in theory read another run's directory. Use ephemeral mode for stronger separation.
-- There is no authentication. As mitigation the default is `127.0.0.1` only (Compose publishes `127.0.0.1:8000`, `python server.py` defaults to `HOST=127.0.0.1`) and CORS only allows the Vite dev server.
+- There is no authentication. As mitigation the default is `127.0.0.1` only (Compose publishes `127.0.0.1:8668`, `python server.py` defaults to `HOST=127.0.0.1`) and CORS only allows the Vite dev server.
 - Local mode is not isolated: model code runs with the permissions of the user running the server.
 - No agent-quality evaluation, cost limits, or observability beyond the log and the UI. **Not production-ready.**

@@ -3,7 +3,7 @@ Client for Code Execution Agent API.
 Usage:
     python client.py "Calculate pi to 100 decimal places"
     python client.py --stream "Generate a chart of sin(x)"
-    python client.py --base-url http://your-server:8000 "Your task here"
+    python client.py --base-url http://your-server:8668 "Your task here"
 """
 
 import argparse
@@ -12,7 +12,7 @@ import sys
 import httpx
 
 
-DEFAULT_BASE_URL = "http://localhost:8000"
+DEFAULT_BASE_URL = "http://localhost:8668"
 
 
 def execute_sync(

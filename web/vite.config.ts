@@ -3,9 +3,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-// Dev: Vite runs on :5173 and proxies /api and /health to FastAPI on :8000.
+// Dev: Vite runs on :5173 and proxies /api and /health to FastAPI on :8668.
 // Prod: `npm run build` → dist/ → FastAPI serves it from the same origin.
-const backend = process.env.VITE_BACKEND_URL ?? "http://localhost:8000";
+const backend = process.env.VITE_BACKEND_URL ?? "http://localhost:8668";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],

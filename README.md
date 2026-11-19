@@ -64,9 +64,9 @@ cp .env.example .env        # then add the key(s) for the provider(s) you use
 docker compose up -d --build
 ```
 
-Open <http://localhost:8000>. Check the stack with `curl http://localhost:8000/health` and `docker compose ps`.
+Open <http://localhost:8668>. Check the stack with `curl http://localhost:8668/health` and `docker compose ps`.
 
-- Port 8000 is bound to `127.0.0.1` only. If it is taken, set `HOST_PORT` in `.env`.
+- Port 8668 is bound to `127.0.0.1` only. If it is taken, set `HOST_PORT` in `.env`.
 - The Compose project is named `agent-workbench`, with its own container (`agent-workbench-sandbox`), image and volumes, so it does not collide with other Compose projects.
 - History and artifacts live in Docker volumes and survive `docker compose down`. `docker compose down -v` deletes them.
 
@@ -91,7 +91,7 @@ The server image bakes in the root `*.py` files (including `model_catalog.py`) a
 ```bash
 docker compose up -d --build        # rebuild agent-server (and the sandbox if its Dockerfile changed) and recreate what changed
 docker compose ps                   # agent-server should become "healthy"
-curl http://localhost:8000/health
+curl http://localhost:8668/health
 ```
 
 - **History is kept.** Runs and artifacts live in the `agent-db` and `agent-runs` volumes, which survive a rebuild and `docker compose down`. Only `docker compose down -v` deletes them.
@@ -111,8 +111,8 @@ python -m venv .venv
 .venv/Scripts/pip install -r requirements-dev.txt     # Linux/macOS: .venv/bin/pip
 # Default: local Ollama with qwen3.5:4b pulled. For Anthropic/OpenAI, export the key instead (billed by the provider).
 export ANTHROPIC_API_KEY=...                          # optional
-USE_DOCKER=false python server.py                     # API on http://127.0.0.1:8000
-cd web && npm ci && npm run dev                       # UI on http://localhost:5173 (proxies to :8000)
+USE_DOCKER=false python server.py                     # API on http://127.0.0.1:8668
+cd web && npm ci && npm run dev                       # UI on http://localhost:5173 (proxies to :8668)
 ```
 
 In this mode model-written code runs on your machine with your user's permissions. `python server.py` does not read `.env`; export variables in your shell.

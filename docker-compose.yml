@@ -2,7 +2,7 @@
 name: agent-workbench
 
 services:
-  # ── Agent Server: FastAPI API + Web UI (http://localhost:8000, change the port with HOST_PORT) ──
+  # ── Agent Server: FastAPI API + Web UI (http://localhost:8668, change the port with HOST_PORT) ──
   agent-server:
     build:
       context: .
@@ -10,7 +10,7 @@ services:
     ports:
       # Reachable from this machine only. The server runs code written by a model and has no auth,
       # so it is NOT exposed to the LAN. To demo to another machine on purpose: BIND_ADDRESS=0.0.0.0 in .env (at your own risk).
-      - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-8000}:8000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-8668}:8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - agent-db:/data/db          # SQLite history (only the server sees it)
