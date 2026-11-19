@@ -1,5 +1,5 @@
 """
-The image tool (image_tool.py + POST /api/runs/{id}/tools/generate_image).
+The image tool (tools/image.py + POST /api/runs/{id}/tools/generate_image).
 OpenAI is a httpx.MockTransport: no key is used and nothing paid is called.
 """
 

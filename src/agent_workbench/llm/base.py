@@ -1,7 +1,7 @@
 """
 LLM provider contract — a thin layer that normalizes Anthropic / OpenAI / Ollama to one contract.
 
-The planner (planner.py) only knows about:
+The planner (core/planner.py) only knows about:
     result = await chat.stream(system, messages, max_tokens, on_text)
     result.text         the full text the model returned (JSON {thinking, code, language})
     result.stop         "end" | "max_tokens" | "refusal" | "other"   (normalized)

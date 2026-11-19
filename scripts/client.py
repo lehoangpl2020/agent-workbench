@@ -30,7 +30,7 @@ def execute_sync(
         "max_iterations": max_iterations,
         "timeout_seconds": timeout_seconds,
     }
-    # If omitted, the server uses the default in model_catalog.py (Ollama qwen3.5:4b)
+    # If omitted, the server uses the default in llm/catalog.py (Ollama qwen3.5:4b)
     if provider:
         payload["provider"] = provider
     if model:
@@ -76,7 +76,7 @@ def execute_stream(
         "max_iterations": max_iterations,
         "timeout_seconds": timeout_seconds,
     }
-    # If omitted, the server uses the default in model_catalog.py (Ollama qwen3.5:4b)
+    # If omitted, the server uses the default in llm/catalog.py (Ollama qwen3.5:4b)
     if provider:
         payload["provider"] = provider
     if model:

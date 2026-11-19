@@ -2,7 +2,7 @@
 What the model is told: the system prompt and the conversation built from a run's history.
 
 Pure functions of the run state. They never call a model, so they can be tested without one, and
-tests/test_characterization.py pins their output. Changing any text here changes model behavior:
+tests/contract/test_characterization.py pins their output. Changing any text here changes model behavior:
 do it in its own commit, never together with a structural refactor.
 """
 

@@ -1,5 +1,5 @@
 """
-P1.1: totals of tokens, time and cost per run (metrics.py, `summary` in GET /api/runs/{id}).
+P1.1: totals of tokens, time and cost per run (runs/metrics.py, `summary` in GET /api/runs/{id}).
 
 OFFLINE/MOCK: no real API. The "model" is a fake chat client that returns the text and `usage` we script; it goes
 through the REAL LLMPlanner, so the `metric` log entries are written exactly as in a real run, and the code the

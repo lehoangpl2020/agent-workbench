@@ -1,10 +1,10 @@
 """
-The contract between the agent loop, the persistence layer (runs.py), the SSE stream and the web UI.
+The contract between the agent loop, the persistence layer (runs/manager.py), the SSE stream and the web UI.
 
 Everything that crosses a module boundary as a bare string or dict is named here:
   - Event: names of the events passed to `emit(event, data)` and sent over SSE;
   - Flow: the `flow` tag in a log entry's data, which the UI uses to place a step in Live Flow / Replay;
-  - the payload of each event, as TypedDicts (documentation, plus tests/test_event_contract.py);
+  - the payload of each event, as TypedDicts (documentation, plus tests/contract/test_event_contract.py);
   - the text form of an artifact size, which is stored, sent to the model and parsed back.
 
 web/src/lib/api.ts mirrors Event (SSE_EVENTS) and Flow (FLOWS); a test compares both sides, so adding a
@@ -80,8 +80,8 @@ FLOWS = (
 )
 
 
-# ─── Log data that metrics.py aggregates ──────────────────────────
-# planner.py writes exactly ONE `source="llm"` log per model call (successful or failed) with this value under the
+# ─── Log data that runs/metrics.py aggregates ──────────────────────────
+# core/planner.py writes exactly ONE `source="llm"` log per model call (successful or failed) with this value under the
 # `metric` key of its data, plus ok, attempt (> 0 = resent after invalid JSON), duration_ms, first_token_ms and the
 # token counts the provider reported. metrics.summarize_run() counts by this tag, not by message text, so rewording
 # a message cannot change a run's totals. Only ADD keys; a run stored before the tag existed has no measured calls.
@@ -187,7 +187,7 @@ PAYLOADS: dict[str, type] = {
 
 # ─── Artifact size, in text form ──────────────────────────────────
 # `ExecutionResult.artifacts` is {path: "<file: N bytes>"}. The same text is stored, returned by the legacy
-# API and shown to the model in the next prompt, so its format is part of the prompt (prompts.py).
+# API and shown to the model in the next prompt, so its format is part of the prompt (core/prompts.py).
 _ARTIFACT_SIZE = re.compile(r"(\d+)")
 
 

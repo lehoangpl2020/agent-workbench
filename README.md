@@ -12,12 +12,12 @@ It is a learning and showcase project built while studying AI Agent Engineering.
 
 ## What problem does it solve?
 
-The core of most coding agents is a short loop, but it is easy to hide behind a framework. This project keeps the loop in one place (`agent.py`), keeps "what the model decides" separate from "what the application decides", and gives you the tools to watch it work: live flow, replay, activity logs, run history and downloadable artifacts.
+The core of most coding agents is a short loop, but it is easy to hide behind a framework. This project keeps the loop in one place (`core/agent.py`), keeps "what the model decides" separate from "what the application decides", and gives you the tools to watch it work: live flow, replay, activity logs, run history and downloadable artifacts.
 
 ## Features (implemented)
 
 - **Agent loop**: Plan → Execute → Evaluate → Retry/Done, implemented once in `CodeAgent.run()` and shared by the sync API, the SSE API and the Run API.
-- **Multiple model providers**, chosen per run and fixed for that run: local Ollama (default: `qwen3.5:4b`), Anthropic Claude and OpenAI (Responses API). The catalog lives in `model_catalog.py`. No automatic fallback between providers.
+- **Multiple model providers**, chosen per run and fixed for that run: local Ollama (default: `qwen3.5:4b`), Anthropic Claude and OpenAI (Responses API). The catalog lives in `llm/catalog.py`. No automatic fallback between providers.
 - **Three executors**: persistent Docker sandbox (default in Compose), ephemeral Docker container per run, and a local subprocess (development only, not isolated; the UI shows a warning).
 - **Real timeouts and Stop**: timeout inside the sandbox plus a Python safety net; *Stop* kills the running process, not just the task.
 - **Auto `pip install`** for missing modules (persistent sandbox) and **artifact collection** (files and images produced by the code).
@@ -30,15 +30,15 @@ The core of most coding agents is a short loop, but it is easy to hide behind a 
 ## Architecture
 
 ```text
-Browser (React UI) ──HTTP/SSE──▶ FastAPI server (server.py)
+Browser (React UI) ──HTTP/SSE──▶ FastAPI server (api/app.py)
                                       │
-                               RunManager (runs.py)   ── SQLite history (store.py)
-                                      │                 ── per-run workspace (workspace.py)
-                               CodeAgent.run() (agent.py)   ← the single agent loop
+                               RunManager (runs/manager.py)   ── SQLite history (storage/run_store.py)
+                                      │                 ── per-run workspace (storage/workspace.py)
+                               CodeAgent.run() (core/agent.py)   ← the single agent loop
                                  │            │
-                       LLMPlanner (planner.py)   Executor (executor.py)
+                       LLMPlanner (core/planner.py)   Executor (execution/)
                        + provider adapters       Persistent / Ephemeral sandbox / Local
-                       (llm_providers.py)
+                       (llm/)
 ```
 
 The loop, per iteration:
@@ -88,7 +88,7 @@ The default is Ollama with `qwen3.5:4b` (run `ollama pull qwen3.5:4b` first; the
 
 ### Rebuilding or recreating the agent
 
-The server image bakes in the root `*.py` files (including `model_catalog.py`) and the built UI, so after changing Python code, the model catalog or anything under `web/`, a restart is not enough: rebuild the image.
+The server image bakes in the backend package `src/agent_workbench/` (including the model catalog, `llm/catalog.py`) and the built UI, so after changing Python code, the model catalog or anything under `web/`, a restart is not enough: rebuild the image.
 
 ```bash
 docker compose up -d --build        # rebuild agent-server (and the sandbox if its Dockerfile changed) and recreate what changed
@@ -104,7 +104,7 @@ curl http://localhost:8668/health
 
 After the rebuild, check the default model: `ollama list` must show `qwen3.5:4b` on the machine that runs Ollama, and the backend must reach it. From the container: `docker compose exec agent-server curl -s http://host.docker.internal:11434/api/tags`. Then open the UI: the Model field should preselect **Ollama (local) / Qwen 3.5 4B** with a *ready* status, and `qwen3.8:latest` and `gemma4:12b` should be listed as well. The app never pulls models; a model that is not pulled is shown as *Not pulled yet*.
 
-Without Docker, restart `python server.py` after changing Python files or the catalog; `npm run dev` reloads the UI by itself.
+Without Docker, restart `PYTHONPATH=src python -m agent_workbench` after changing Python files or the catalog; `npm run dev` reloads the UI by itself.
 
 ### Local development (no Docker, not isolated)
 
@@ -113,11 +113,11 @@ python -m venv .venv
 .venv/Scripts/pip install -r requirements-dev.txt     # Linux/macOS: .venv/bin/pip
 # Default: local Ollama with qwen3.5:4b pulled. For Anthropic/OpenAI, export the key instead (billed by the provider).
 export ANTHROPIC_API_KEY=...                          # optional
-USE_DOCKER=false python server.py                     # API on http://127.0.0.1:8668
+PYTHONPATH=src USE_DOCKER=false python -m agent_workbench   # API on http://127.0.0.1:8668 (PowerShell: $env:PYTHONPATH="src")
 cd web && npm ci && npm run dev                       # UI on http://localhost:5173 (proxies to :8668)
 ```
 
-In this mode model-written code runs on your machine with your user's permissions. `python server.py` does not read `.env`; export variables in your shell.
+In this mode model-written code runs on your machine with your user's permissions. `python -m agent_workbench` does not read `.env`; export variables in your shell.
 
 ## Running the tests
 
@@ -130,7 +130,7 @@ cd web && npm run build
 cd web && npm test
 ```
 
-The offline tests never contact Ollama, Anthropic or OpenAI (they use mock transports and a scripted planner), so they pass whether or not Ollama is running. A test that needs the real Docker sandbox is skipped by default; see the docstring of `tests/test_docker_executor.py` to enable it. When a real model is needed to check a change, use local Ollama with `qwen3.5:4b`; see [AGENTS.md](AGENTS.md#8-verification-and-contribution-workflow).
+The offline tests never contact Ollama, Anthropic or OpenAI (they use mock transports and a scripted planner), so they pass whether or not Ollama is running. A test that needs the real Docker sandbox is skipped by default; see the docstring of `tests/integration/test_docker_executor.py` to enable it. When a real model is needed to check a change, use local Ollama with `qwen3.5:4b`; see [AGENTS.md](AGENTS.md#8-verification-and-contribution-workflow).
 
 ## Current limitations
 
@@ -154,6 +154,7 @@ These are ideas, not commitments; none of them exist yet:
 
 ## Documentation
 
+- [docs/project-structure.md](docs/project-structure.md): folder layout, the layers and their dependency rule, the design principles applied, and how to add a provider, executor, tool or endpoint.
 - [docs/architecture.md](docs/architecture.md): components, run flow, run statuses, data layout, activity log, Live Flow and Replay.
 - [docs/api.md](docs/api.md): HTTP API, CLI client, executor modes, using the agent from Python, security notes.
 - [docs/providers.md](docs/providers.md): provider and model catalog, configuration, Ollama connectivity, error codes.

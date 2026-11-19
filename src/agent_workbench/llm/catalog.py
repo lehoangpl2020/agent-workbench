@@ -19,7 +19,7 @@ class ModelSpec:
     provider_default: bool = False  # model preselected when the user switches to this provider
     note: str = ""                # short hint shown in the UI (price, speed...)
     max_output_tokens: int = 16000
-    # Per-model/provider parameters, read by the adapters in llm_providers.py:
+    # Per-model/provider parameters, read by the adapters in llm/*_chat.py:
     #   anthropic: structured_output (bool: constrain the reply to the JSON schema, API output_config.format)
     #   openai:  reasoning_effort ("none" | "low" | "medium" | ...)
     #   ollama:  num_ctx (context window), think (enable/disable thinking)

@@ -1,5 +1,5 @@
 """
-The event contract (events.py): what the agent emits matches the declared payloads, and the web UI's copy of
+The event contract (domain/events.py): what the agent emits matches the declared payloads, and the web UI's copy of
 the names (web/src/lib/api.ts) matches the backend's. Offline: scripted planner, local executor.
 """
 

@@ -2,9 +2,9 @@
 Agent Orchestrator — Component 3/3 (Feedback Loop)
 Agent loop orchestration: Plan → Execute → Evaluate → Retry/Done.
 
-This is the ONLY agent loop. The sync API, SSE API, CLI and example.py all call
+This is the ONLY agent loop. The sync API, SSE API, CLI and scripts/example.py all call
 CodeAgent.run(). Progress is reported through the `emit(event, data)` callback;
-RunManager (runs.py) uses that callback to persist to SQLite and push SSE events.
+RunManager (runs/manager.py) uses that callback to persist to SQLite and push SSE events.
 
 Who decides what:
   - The model (planner) decides: what code to write, and when to answer DONE.
@@ -85,7 +85,7 @@ class CodeAgent:
         default_timeout: int = 30,
         planner_factory: PlannerFactory | None = None,
     ):
-        # Fixed planner (tests / example.py), or a factory that builds a planner for each run's model
+        # Fixed planner (tests / scripts/example.py), or a factory that builds a planner for each run's model
         self.planner = planner
         self.planner_factory = planner_factory or (lambda spec: LLMPlanner(spec))
         self.executor = executor or LocalExecutor()

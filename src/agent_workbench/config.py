@@ -3,10 +3,10 @@ Application settings, read from environment variables in ONE place.
 
 `Settings.from_env()` is called once when the app starts (api/app.py) and the result is passed to the parts
 that need it. Nothing else reads these variables, so what the server runs with can be seen (and tested) by
-building a Settings. Provider keys and URLs are read the same way into `ProviderSettings` (llm_providers.py)
+building a Settings. Provider keys and URLs are read the same way into `ProviderSettings` (llm/base.py)
 and are never copied here, so Settings can be logged without leaking a secret.
 
-Not in here on purpose: redaction (runlog.py) reads the live environment every time, because it must mask
+Not in here on purpose: redaction (observability/runlog.py) reads the live environment every time, because it must mask
 the values that are set when a message is logged, not the ones that were set at startup.
 """
 
@@ -63,8 +63,8 @@ class Settings:
     # needs no CORS; only the Vite dev server (:5173) does.
     cors_origins: tuple[str, ...]
     providers: ProviderSettings
-    image_tool: ImageToolSettings     # opt-in tool: the code in the sandbox asks the server for an image (image_tool.py)
-    # Cost estimate (metrics.py): USD per 1M tokens, keyed "provider/model". Empty = tokens and time only; the code has no prices.
+    image_tool: ImageToolSettings     # opt-in tool: the code in the sandbox asks the server for an image (tools/image.py)
+    # Cost estimate (runs/metrics.py): USD per 1M tokens, keyed "provider/model". Empty = tokens and time only; the code has no prices.
     model_pricing: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     model_pricing_warnings: tuple[str, ...] = ()   # why part of MODEL_PRICING was ignored; api/app.py logs them at startup
 

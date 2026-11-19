@@ -25,7 +25,7 @@ FIXTURES = Path(__file__).resolve().parents[2] / "web" / "src" / "lib" / "__fixt
 RUN_ID = "00000000-0000-4000-8000-000000000001"
 BASE = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 TIME_KEYS = {"time_ms", "execution_time_ms", "elapsed_ms",
-              # P1.1 (metrics.py): measured in the log of each model call and in the run summary
+              # P1.1 (runs/metrics.py): measured in the log of each model call and in the run summary
               "duration_ms", "first_token_ms", "first_token_ms_avg", "first_token_ms_max", "llm_ms", "sandbox_ms", "wall_ms"}
 
 RUNS = {

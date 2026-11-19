@@ -1,5 +1,5 @@
 // What the "Usage & cost" card shows, as pure functions so it can be unit-tested. The totals come from the backend
-// (metrics.py). A missing value is null there, and it must read as "No data" here, never as 0.
+// (runs/metrics.py). A missing value is null there, and it must read as "No data" here, never as 0.
 import type { RunMetrics } from "./api";
 
 export const NO_DATA = "No data";

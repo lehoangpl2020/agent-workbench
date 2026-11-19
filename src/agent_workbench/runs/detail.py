@@ -39,6 +39,6 @@ def build_run_detail(store: RunStore, runs_dir: Path, run_id: str, active_run_id
     ]
     run["active"] = active_run_id == run_id
     run.update(describe(run.get("provider"), run.get("model")))
-    # Totals are recomputed from the stored log and iterations on every read (see metrics.py)
+    # Totals are recomputed from the stored log and iterations on every read (see runs/metrics.py)
     run["summary"] = summarize_run(run, store.list_logs(run_id, source="llm", limit=100_000), pricing)
     return run

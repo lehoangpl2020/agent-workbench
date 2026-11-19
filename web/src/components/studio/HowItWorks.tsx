@@ -3,10 +3,10 @@ import { BrainCircuit, ChevronDown, FolderOutput, SquareTerminal, Workflow } fro
 /** Static explainer under the Agent Studio. Nothing here depends on a run. */
 export function HowItWorks() {
   const items = [
-    { Icon: Workflow, title: "Agent runtime", file: "agent.py", text: "Application code that runs the loop: send the task, receive code, run it, check the exit code, and decide whether to continue. It stops on DONE, the code run limit, an infrastructure error or Stop. After the last allowed run succeeds, the model gets one final review call to reply DONE; no code runs in that call." },
-    { Icon: BrainCircuit, title: "Model", file: "planner.py", text: "The selected model (Ollama, OpenAI or Anthropic) writes Python code, fixes it from error feedback, or replies DONE when the previous output satisfies the task. It decides what to write, not how it runs." },
-    { Icon: SquareTerminal, title: "Python sandbox", file: "executor.py", text: "Runs each iter_NN.py with a timeout and returns stdout, stderr and the exit code. Missing packages may be installed and the code re-run." },
-    { Icon: FolderOutput, title: "Artifacts", file: "workspace.py", text: "Files written to /workspace/output are collected after each execution and kept per iteration, so replay shows the version that existed at that step." },
+    { Icon: Workflow, title: "Agent runtime", file: "core/agent.py", text: "Application code that runs the loop: send the task, receive code, run it, check the exit code, and decide whether to continue. It stops on DONE, the code run limit, an infrastructure error or Stop. After the last allowed run succeeds, the model gets one final review call to reply DONE; no code runs in that call." },
+    { Icon: BrainCircuit, title: "Model", file: "core/planner.py", text: "The selected model (Ollama, OpenAI or Anthropic) writes Python code, fixes it from error feedback, or replies DONE when the previous output satisfies the task. It decides what to write, not how it runs." },
+    { Icon: SquareTerminal, title: "Python sandbox", file: "execution/", text: "Runs each iter_NN.py with a timeout and returns stdout, stderr and the exit code. Missing packages may be installed and the code re-run." },
+    { Icon: FolderOutput, title: "Artifacts", file: "storage/workspace.py", text: "Files written to /workspace/output are collected after each execution and kept per iteration, so replay shows the version that existed at that step." },
   ];
   return <details className="studio-card group">
     <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold sm:px-5">

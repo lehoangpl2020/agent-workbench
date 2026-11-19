@@ -2,7 +2,7 @@
 Totals for ONE run: model calls, tokens, time spent in the model and in the sandbox, estimated cost.
 
 There is no table and no counter. Every number is recomputed from data that is already stored:
-  - run_logs with source="llm" and data.metric == events.METRIC_LLM_CALL: planner.py writes one per model call,
+  - run_logs with source="llm" and data.metric == events.METRIC_LLM_CALL: core/planner.py writes one per model call,
     with duration_ms, first_token_ms and the tokens the provider actually reported;
   - iterations.execution_time_ms: the time the executor measured for each code run.
 
@@ -35,7 +35,7 @@ def load_pricing(source: str | None) -> tuple[Pricing, list[str]]:
 
         {"anthropic/claude-sonnet-4-6": {"input": 3, "output": 15, "cache_read": 0.3, "cache_write": 3.75}}
 
-    Keys are "provider/model", as in model_catalog.py. Returns (valid prices, warnings). Never raises: a bad
+    Keys are "provider/model", as in llm/catalog.py. Returns (valid prices, warnings). Never raises: a bad
     price table only loses the cost estimate, it must not stop the server.
     """
     source = (source or "").strip()
