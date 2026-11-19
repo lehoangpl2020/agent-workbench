@@ -109,7 +109,7 @@ class BaseExecutor:
             iteration, self.prepare_code(code, workspace), _extension(language)
         )
         await log(INFO, "sandbox", f"Wrote code to code/{code_path.name}",
-                  lines=len(code.splitlines()), chars=len(code))
+                  lines=len(code.splitlines()), chars=len(code), flow=Flow.HANDOFF)
         # Directory walks and snapshot copies (files up to 20 MB) are blocking I/O: keep them off the event loop
         before = await asyncio.to_thread(workspace.scan)
         await log(INFO, "sandbox", f"Starting execution ({self.describe()}, timeout {timeout}s)", flow=Flow.EXECUTING)
@@ -123,9 +123,9 @@ class BaseExecutor:
         except asyncio.CancelledError:
             # The user pressed Stop → the real process must be stopped, not just abandoned
             logger.info(f"[{workspace.run_id}] Execution cancelled → killing process")
-            await log(WARN, "sandbox", "Execution cancelled — killing the running process")
+            await log(WARN, "sandbox", "Execution cancelled — killing the running process", flow=Flow.KILLED)
             await self._kill_safely(workspace)
-            await log(WARN, "sandbox", f"Process killed after {time.monotonic() - start:.1f}s")
+            await log(WARN, "sandbox", f"Process killed after {time.monotonic() - start:.1f}s", flow=Flow.KILLED)
             raise
         except asyncio.TimeoutError:
             logger.warning(f"[{workspace.run_id}] Timeout guard fired → killing process")
@@ -166,12 +166,12 @@ class BaseExecutor:
 
         if timed_out:
             await log(WARN, "sandbox", f"Execution timed out after {timeout}s — process killed",
-                      exit_code=exit_code, time_ms=round(elapsed_ms))
+                      exit_code=exit_code, time_ms=round(elapsed_ms), flow=Flow.EXITED)
         else:
             await log(INFO if exit_code == 0 else WARN, "sandbox",
                       f"Execution finished: exit code {exit_code} in {elapsed_ms / 1000:.2f}s",
                       exit_code=exit_code, time_ms=round(elapsed_ms),
-                      stdout_bytes=len(raw.stdout), stderr_bytes=len(stderr))
+                      stdout_bytes=len(raw.stdout), stderr_bytes=len(stderr), flow=Flow.EXITED)
 
         await _notify(progress, "collecting", "Collecting files from /workspace/output")
         changed, sizes = await asyncio.to_thread(self._collect, workspace, before, iteration)
@@ -181,7 +181,7 @@ class BaseExecutor:
             await log(INFO, "sandbox", f"Collected {len(artifacts)} new/changed file(s): {listing}",
                       flow=Flow.ARTIFACTS, files={p: sizes[p][0] for p in artifacts})
         else:
-            await log(INFO, "sandbox", "No new or changed files in /workspace/output")
+            await log(INFO, "sandbox", "No new or changed files in /workspace/output", flow=Flow.NO_FILES)
 
         logger.info(
             f"[{workspace.run_id}] iter {iteration}: exit_code={exit_code}, "

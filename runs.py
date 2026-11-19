@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from agent import CodeAgent
-from events import Event, artifact_size
+from events import Event, Flow, artifact_size
 from runlog import WARN, make_entry
 from schemas import AgentRequest, AgentResponse, ExecutionStatus
 from store import (
@@ -218,7 +218,7 @@ class RunManager:
         if not active or active.run_id != run_id or active.finished or not active.task:
             return False
         logger.info(f"[{run_id}] Stop requested")
-        self._publish(active, Event.LOG, make_entry(None, WARN, "runtime", "Stop requested by user"))
+        self._publish(active, Event.LOG, make_entry(None, WARN, "runtime", "Stop requested by user", flow=Flow.STOP))
         active.stop_requested = True
         active.task.cancel()
         await asyncio.wait({active.task}, timeout=wait_seconds)

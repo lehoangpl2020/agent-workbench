@@ -32,6 +32,7 @@
     },
     {
       "data": {
+        "flow": "calling",
         "max_tokens": 8192,
         "messages": 1,
         "model": "qwen3.5:4b",
@@ -47,7 +48,9 @@
       "ts": "2026-01-01T12:00:00.300+00:00"
     },
     {
-      "data": {},
+      "data": {
+        "flow": "first_token"
+      },
       "id": 4,
       "iteration": 1,
       "level": "INFO",
@@ -59,6 +62,7 @@
     {
       "data": {
         "chars": 68,
+        "flow": "response",
         "stop_reason": "stop"
       },
       "id": 5,
@@ -70,7 +74,9 @@
       "ts": "2026-01-01T12:00:00.600+00:00"
     },
     {
-      "data": {},
+      "data": {
+        "flow": "parsed"
+      },
       "id": 6,
       "iteration": 1,
       "level": "INFO",
@@ -94,6 +100,7 @@
     {
       "data": {
         "chars": 15,
+        "flow": "handoff",
         "lines": 1
       },
       "id": 8,
@@ -119,6 +126,7 @@
     {
       "data": {
         "exit_code": 0,
+        "flow": "exited",
         "stderr_bytes": 0,
         "stdout_bytes": 8,
         "time_ms": 100
@@ -132,7 +140,9 @@
       "ts": "2026-01-01T12:00:01.350+00:00"
     },
     {
-      "data": {},
+      "data": {
+        "flow": "no_files"
+      },
       "id": 11,
       "iteration": 1,
       "level": "INFO",
@@ -143,6 +153,7 @@
     },
     {
       "data": {
+        "exit_code": 0,
         "flow": "checking"
       },
       "id": 12,
@@ -169,6 +180,7 @@
     {
       "data": {
         "final_review": true,
+        "flow": "iteration",
         "intent": "review"
       },
       "id": 14,
@@ -194,6 +206,7 @@
     },
     {
       "data": {
+        "flow": "calling",
         "max_tokens": 8192,
         "messages": 3,
         "model": "qwen3.5:4b",
@@ -209,7 +222,9 @@
       "ts": "2026-01-01T12:00:02.250+00:00"
     },
     {
-      "data": {},
+      "data": {
+        "flow": "first_token"
+      },
       "id": 17,
       "iteration": 2,
       "level": "INFO",
@@ -221,6 +236,7 @@
     {
       "data": {
         "chars": 68,
+        "flow": "response",
         "stop_reason": "stop"
       },
       "id": 18,
@@ -232,7 +248,9 @@
       "ts": "2026-01-01T12:00:02.550+00:00"
     },
     {
-      "data": {},
+      "data": {
+        "flow": "parsed"
+      },
       "id": 19,
       "iteration": 2,
       "level": "INFO",

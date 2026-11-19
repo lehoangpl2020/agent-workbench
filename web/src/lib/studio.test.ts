@@ -169,6 +169,33 @@ describe("log entries without a flow tag (written before tags existed)", () => {
   });
 });
 
+describe("runs recorded before the newer flow tags existed", () => {
+  const NEWER = new Set(["iteration", "calling", "first_token", "response", "parsed", "handoff", "exited", "killed",
+    "no_files", "stop"]);
+  const untagged = (recorded: Recorded): LogEntry[] => recorded.logs.map(l => {
+    const data = { ...l.data };
+    if (NEWER.has(String(data.flow))) delete data.flow;
+    if (data.flow === "checking") delete data.exit_code;
+    return { ...l, data };
+  });
+
+  it.each([["fix_then_done", fix], ["final_review_rejected", review]])("%s renders the same without them", (_name, recorded) => {
+    const tagged = buildSteps(recorded.run, recorded.logs);
+    const legacy = buildSteps(recorded.run, untagged(recorded));
+    expect(legacy.steps.map(s => [s.beat, s.title, s.actor, s.transfer])).toEqual(
+      tagged.steps.map(s => [s.beat, s.title, s.actor, s.transfer]));
+    expect(legacy.partial).toBe(tagged.partial);
+  });
+
+  it("the exit code of a check comes from the tag, or from the message when there is none", () => {
+    const entry = (data: Record<string, unknown>): LogEntry => ({ id: 1, ts: "2026-01-01T12:00:00.000+00:00", iteration: 1,
+      source: "runtime", level: "INFO", message: "Runtime checking the result (exit code 7)", data });
+    const run = clone(fix.run);
+    expect(buildSteps(run, [entry({ flow: "checking", exit_code: 3 })]).steps[0].transfer?.label).toBe("exit 3");
+    expect(buildSteps(run, [entry({ flow: "checking" })]).steps[0].transfer?.label).toBe("exit 7");
+  });
+});
+
 describe("replayGap", () => {
   const step = (ts: string, transfer = false) =>
     ({ ts, transfer: transfer ? { from: "model", to: "runtime", label: "x", tone: "code" } : undefined }) as StudioStep;

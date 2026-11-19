@@ -41,7 +41,8 @@ EVENTS = (
 
 
 class Flow:
-    """`flow` tags in log data. A log entry without one is a plain note."""
+    """`flow` tags in log data. A log entry without one is a plain note. Runs recorded before a tag existed have no
+    tag on those entries; the UI still recognizes them (web/src/lib/studio.ts, legacyFlow)."""
 
     STARTED = "started"
     WRITE = "write"
@@ -57,13 +58,25 @@ class Flow:
     CHECKING = "checking"
     RESULT = "result"
     FINISHED = "finished"
+    # Added so the UI no longer has to recognize these steps by their message text
+    ITERATION = "iteration"
+    CALLING = "calling"
+    FIRST_TOKEN = "first_token"
+    RESPONSE = "response"
+    PARSED = "parsed"
+    HANDOFF = "handoff"
+    EXITED = "exited"
+    KILLED = "killed"
+    NO_FILES = "no_files"
+    STOP = "stop"
 
 
 # Same order as FLOWS in web/src/lib/api.ts
 FLOWS = (
     Flow.STARTED, Flow.WRITE, Flow.FIX, Flow.REVIEW, Flow.CODE, Flow.DONE_REPLY, Flow.EXECUTING,
     Flow.INSTALLING, Flow.RERUNNING, Flow.INSTALL_FAILED, Flow.ARTIFACTS, Flow.CHECKING, Flow.RESULT,
-    Flow.FINISHED,
+    Flow.FINISHED, Flow.ITERATION, Flow.CALLING, Flow.FIRST_TOKEN, Flow.RESPONSE, Flow.PARSED, Flow.HANDOFF,
+    Flow.EXITED, Flow.KILLED, Flow.NO_FILES, Flow.STOP,
 )
 
 

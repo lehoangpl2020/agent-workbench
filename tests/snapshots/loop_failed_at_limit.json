@@ -163,6 +163,7 @@
     {
       "data": {
         "chars": 34,
+        "flow": "handoff",
         "lines": 1
       },
       "event": "log",
@@ -200,6 +201,7 @@
     {
       "data": {
         "exit_code": 1,
+        "flow": "exited",
         "stderr_bytes": 285,
         "stdout_bytes": 0,
         "time_ms": "<n>"
@@ -232,7 +234,9 @@
       ]
     },
     {
-      "data": {},
+      "data": {
+        "flow": "no_files"
+      },
       "event": "log",
       "iteration": 1,
       "keys": [
@@ -262,6 +266,7 @@
     },
     {
       "data": {
+        "exit_code": 1,
         "flow": "checking"
       },
       "event": "log",
@@ -355,6 +360,7 @@
     },
     {
       "data": {
+        "flow": "iteration",
         "intent": "fix"
       },
       "event": "log",
@@ -466,6 +472,7 @@
     {
       "data": {
         "chars": 34,
+        "flow": "handoff",
         "lines": 1
       },
       "event": "log",
@@ -503,6 +510,7 @@
     {
       "data": {
         "exit_code": 1,
+        "flow": "exited",
         "stderr_bytes": 285,
         "stdout_bytes": 0,
         "time_ms": "<n>"
@@ -535,7 +543,9 @@
       ]
     },
     {
-      "data": {},
+      "data": {
+        "flow": "no_files"
+      },
       "event": "log",
       "iteration": 2,
       "keys": [
@@ -565,6 +575,7 @@
     },
     {
       "data": {
+        "exit_code": 1,
         "flow": "checking"
       },
       "event": "log",

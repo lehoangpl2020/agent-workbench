@@ -163,6 +163,7 @@
     {
       "data": {
         "chars": 26,
+        "flow": "handoff",
         "lines": 2
       },
       "event": "log",
@@ -200,6 +201,7 @@
     {
       "data": {
         "exit_code": 124,
+        "flow": "exited",
         "time_ms": "<n>"
       },
       "event": "log",
@@ -230,7 +232,9 @@
       ]
     },
     {
-      "data": {},
+      "data": {
+        "flow": "no_files"
+      },
       "event": "log",
       "iteration": 1,
       "keys": [
@@ -260,6 +264,7 @@
     },
     {
       "data": {
+        "exit_code": 124,
         "flow": "checking"
       },
       "event": "log",

@@ -361,7 +361,7 @@ class CodeAgent:
                    if turn.final_review else
                    f"Iteration {n} started (code run {turn.runs_done + 1}/{state.max_iterations})")
         await log(INFO, "runtime", started, intent=intent, final_review=turn.final_review or None,
-                  flow=Flow.WRITE if intent == "write" else None)
+                  flow=Flow.WRITE if intent == "write" else Flow.ITERATION)
         if intent == "fix":
             await log(WARN, "runtime", f"Sending the error back to the model to fix: {detail}", flow=Flow.FIX)
         elif intent == "review":
@@ -453,7 +453,7 @@ class CodeAgent:
         n = turn.number
         checking = f"Runtime checking the result (exit code {result.exit_code})"
         await emit(Event.ACTIVITY, {"iteration": n, "phase": "checking", "text": checking})
-        await log(INFO, "runtime", checking, flow=Flow.CHECKING)
+        await log(INFO, "runtime", checking, flow=Flow.CHECKING, exit_code=result.exit_code)
         if result.exit_code == 0 and detect_false_success(result.stdout):
             logger.warning(f"[{state.session_id}] False success: '{result.stdout[:100].strip()}'")
             await log(WARN, "runtime", "Exit code 0 but the output looks like an error — "

@@ -9,6 +9,7 @@ import logging
 import time
 from typing import Awaitable, Callable
 
+from events import Flow
 from llm_providers import ChatClient, ProviderError, ProviderRegistry
 from model_catalog import ModelSpec, default_spec
 from parsing import extract_partial_json_string, parse_response
@@ -81,7 +82,7 @@ class LLMPlanner:
                 INFO, "llm",
                 f"Calling {self.model}" + (" (format retry)" if attempt else ""),
                 provider=self.provider, model=self.model,
-                messages=len(messages), max_tokens=self.max_tokens, stream=True,
+                messages=len(messages), max_tokens=self.max_tokens, stream=True, flow=Flow.CALLING,
             )
 
             started = time.monotonic()
@@ -97,7 +98,7 @@ class LLMPlanner:
                 raise
             content = response.text
             await log(INFO, "llm", f"Response received in {time.monotonic() - started:.1f}s",
-                      stop_reason=response.stop_reason, chars=len(content), **response.usage)
+                      stop_reason=response.stop_reason, chars=len(content), flow=Flow.RESPONSE, **response.usage)
 
             if response.stop == "refusal":
                 await log(ERROR, "llm", f"Model declined the request (stop_reason={response.stop_reason})")
@@ -116,10 +117,10 @@ class LLMPlanner:
             try:
                 block = parse_response(content)
                 if block.is_done:
-                    await log(INFO, "llm", "Parsed response: model replied DONE (no code)")
+                    await log(INFO, "llm", "Parsed response: model replied DONE (no code)", flow=Flow.PARSED)
                 else:
                     await log(INFO, "llm", f"Parsed response: {block.language} code, "
-                              f"{len(block.code.splitlines())} lines / {len(block.code):,} chars")
+                              f"{len(block.code.splitlines())} lines / {len(block.code):,} chars", flow=Flow.PARSED)
                 return block
             except ValueError as e:
                 logger.warning(
@@ -159,7 +160,7 @@ class LLMPlanner:
         async def on_text(chunk: str) -> None:
             nonlocal text, last_sent
             if not text:
-                await log(INFO, "llm", f"First token after {time.monotonic() - started:.1f}s")
+                await log(INFO, "llm", f"First token after {time.monotonic() - started:.1f}s", flow=Flow.FIRST_TOKEN)
             text += chunk
             now = time.monotonic()
             if on_progress and now - last_sent >= PROGRESS_INTERVAL:

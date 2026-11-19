@@ -232,5 +232,15 @@ export const FLOWS = [
   "checking",
   "result",
   "finished",
+  "iteration",
+  "calling",
+  "first_token",
+  "response",
+  "parsed",
+  "handoff",
+  "exited",
+  "killed",
+  "no_files",
+  "stop",
 ] as const;
 export type Flow = (typeof FLOWS)[number];
