@@ -20,6 +20,7 @@ class ModelSpec:
     note: str = ""                # short hint shown in the UI (price, speed...)
     max_output_tokens: int = 16000
     # Per-model/provider parameters, read by the adapters in llm_providers.py:
+    #   anthropic: structured_output (bool: constrain the reply to the JSON schema, API output_config.format)
     #   openai:  reasoning_effort ("none" | "low" | "medium" | ...)
     #   ollama:  num_ctx (context window), think (enable/disable thinking)
     options: dict[str, Any] = field(default_factory=dict)
@@ -49,15 +50,18 @@ CATALOG: list[ModelSpec] = [
     # ── Anthropic Claude ─────────────────────────────
     # Sonnet 4.6: no `thinking` is sent → runs without thinking (as before).
     ModelSpec("anthropic", "claude-sonnet-4-6", "Claude Sonnet 4.6", provider_default=True,
-              note="Preselected for Anthropic · $3 / $15 per 1M tokens"),
+              note="Preselected for Anthropic · $3 / $15 per 1M tokens", options={"structured_output": True}),
     # The 5.5 models always use adaptive thinking; thinking tokens count toward max_tokens
     # → leave enough headroom so the code is not truncated.
     ModelSpec("anthropic", "claude-sonnet-5-5", "Claude Sonnet 5.5",
-              note="Newer Sonnet · $2 / $10 per 1M tokens", max_output_tokens=32000),
+              note="Newer Sonnet · $2 / $10 per 1M tokens", max_output_tokens=32000,
+              options={"structured_output": True}),
     ModelSpec("anthropic", "claude-opus-5-5", "Claude Opus 5.5",
-              note="Most capable Opus · $4 / $20 per 1M tokens", max_output_tokens=32000),
+              note="Most capable Opus · $4 / $20 per 1M tokens", max_output_tokens=32000,
+              options={"structured_output": True}),
     ModelSpec("anthropic", "claude-haiku-5-5", "Claude Haiku 5.5",
-              note="Fast and cheap · $0.10 / $0.50 per 1M tokens", max_output_tokens=32000),
+              note="Fast and cheap · $0.10 / $0.50 per 1M tokens", max_output_tokens=32000,
+              options={"structured_output": True}),
 
     # ── OpenAI (Responses API) ───────────────────────
     # IDs and reasoning-effort levels checked against developers.openai.com/api/docs/models (2026-11).

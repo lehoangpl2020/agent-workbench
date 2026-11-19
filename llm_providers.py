@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 
 TextFn = Callable[[str], Awaitable[None]]
 
-# JSON schema the planner asks for. OpenAI/Ollama can enforce output against a schema;
-# Anthropic keeps the old approach (system prompt + parsing + format retry).
+# JSON schema the planner asks for. OpenAI and Ollama enforce it; Anthropic does too when the model's catalog
+# options say `structured_output` (otherwise: system prompt + parsing + format retry, which stay as a safety net).
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -125,8 +125,15 @@ class AnthropicChat:
 
         params: dict[str, Any] = dict(model=self.spec.id, max_tokens=max_tokens,
                                       system=system, messages=messages)
+        output_config: dict[str, Any] = {}
         if "effort" in self.spec.options:
-            params["output_config"] = {"effort": self.spec.options["effort"]}
+            output_config["effort"] = self.spec.options["effort"]
+        if self.spec.options.get("structured_output"):
+            # Constrains the reply to the same {thinking, code, language} object OpenAI and Ollama already get.
+            # Sent as extra_body so it also works with SDK versions that predate the output_config argument.
+            output_config["format"] = {"type": "json_schema", "schema": RESPONSE_SCHEMA}
+        if output_config:
+            params["extra_body"] = {"output_config": output_config}
         try:
             async with self.client.messages.stream(**params) as stream:
                 async for chunk in stream.text_stream:
