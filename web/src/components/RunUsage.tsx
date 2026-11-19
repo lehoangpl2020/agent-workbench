@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import type { RunDetail } from "@/lib/api";
 import { formatMs } from "@/lib/format";
 import { callsNote, costLabel, modelTimeShare, NO_DATA, tokensLabel } from "@/lib/usage";
@@ -61,4 +62,30 @@ export function RunUsage({ run }: { run: RunDetail }) {
       </dl>
     </section>
   );
+}
+
+/** One line for the run header: the numbers a learner needs, with the full card behind "Details". */
+export function UsageSummary({ run }: { run: RunDetail }) {
+  const [open, setOpen] = useState(false);
+  const { llm, sandbox, wall_ms, cost } = run.summary;
+  const running = run.status === "running" || run.status === "pending";
+  const c = costLabel(cost);
+  const parts = !llm && !sandbox ? [running ? "Usage: waiting for the first model response" : "Usage: no data for this run"] : [
+    llm ? `${llm.calls} model call${llm.calls === 1 ? "" : "s"}` : `model calls: ${NO_DATA}`,
+    `tokens ${tokensLabel(llm)}`,
+    `model ${formatMs(llm?.duration_ms ?? null)}`,
+    `sandbox ${sandbox ? formatMs(sandbox.duration_ms) : NO_DATA}`,
+    running ? "running…" : `total ${formatMs(wall_ms)}`,
+    `cost ${c.value}`,
+  ];
+  return <div className="text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="min-w-0 tabular-nums">{parts.join(" · ")}</span>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(v => !v)}
+        className="inline-flex items-center gap-0.5 rounded font-medium text-primary hover:underline">
+        {open ? "Hide usage details" : "Usage details"}<ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+      </button>
+    </div>
+    {open && <div className="mt-2"><RunUsage run={run} /></div>}
+  </div>;
 }

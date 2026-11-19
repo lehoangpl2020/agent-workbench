@@ -54,7 +54,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
   const focusPromptOnClose = useRef(false);
   // The latest example load. `previous` is the prompt it replaced (null if that was empty); it powers Undo.
   // Any manual edit clears this, so Undo can never silently throw those edits away.
-  const [loaded, setLoaded] = useState<{ title: string; prompt: string; previous: string | null } | null>(null);
+  const [loaded, setLoaded] = useState<{ title: string; prompt: string; previous: string | null; observe: string } | null>(null);
 
   useEffect(() => {
     if (!config) return;
@@ -116,7 +116,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
     const previous = prompt.trim() === "" ? null : prompt;
     flushSync(() => {
       setPrompt(example.prompt);
-      setLoaded({ title: example.title, prompt: example.prompt, previous });
+      setLoaded({ title: example.title, prompt: example.prompt, previous, observe: example.observe });
     });
   }
 
@@ -264,6 +264,8 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
             </p>
           )}
         </div>
+        {loaded && <p className="mt-1.5 rounded-md bg-accent/60 px-2.5 py-1.5 text-xs leading-relaxed text-accent-foreground">
+          <span className="font-semibold">What to watch: </span>{loaded.observe}</p>}
       </div>
 
       <div className="space-y-2 border-t px-4 py-3 sm:px-5">

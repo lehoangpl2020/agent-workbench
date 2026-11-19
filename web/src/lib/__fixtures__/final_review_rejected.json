@@ -37,6 +37,15 @@
         "messages": 1,
         "model": "qwen3.5:4b",
         "provider": "ollama",
+        "request": {
+          "messages": [
+            {
+              "content": "demo",
+              "role": "user"
+            }
+          ],
+          "system": "You are a code execution agent. Your job is to solve the user's request \nby writing Python code that will be executed in a sandboxed environment.\n\n## Rules\n1. Write complete, self-contained, runnable Python code.\n2. Always print() your final results to stdout.\n3. Save any generated files (charts, images, CSVs, etc.) to <path>\n   (this folder is private to the current run). Use a non-interactive backend for\n   matplotlib (Agg) and never call plt.show().\n4. Available packages: numpy, pandas, matplotlib, seaborn, scipy, scikit-learn, \n   requests, beautifulsoup4, openpyxl, Pillow, sympy, tabulate, plotly, xlsxwriter.\n5. Let errors crash naturally (DON'T wrap everything in try/except).\n   Only use try/except for specific, recoverable cases.\n   If a file doesn't exist or data is missing, generate realistic sample data\n   and proceed — don't just print \"file not found\" and exit.\n6. If you're fixing a previous error, address the SPECIFIC error message.\n7. Keep code concise — no unnecessary comments or boilerplate.\n8. The code must finish within the execution time limit; avoid infinite loops\n   and very long computations.\n9. After a successful run you will see its output. Only reply DONE when the\n   output fully satisfies the original request.\n\n## Response Format\nRespond ONLY with valid JSON (no markdown fences):\n{\n    \"thinking\": \"one short sentence telling the user what this code does\",\n    \"code\": \"your python code here\",\n    \"language\": \"python\"\n}\n"
+        },
         "stream": true
       },
       "id": 3,
@@ -216,6 +225,23 @@
         "messages": 3,
         "model": "qwen3.5:4b",
         "provider": "ollama",
+        "request": {
+          "messages": [
+            {
+              "content": "demo",
+              "role": "user"
+            },
+            {
+              "content": "{\"thinking\": \"One\", \"code\": \"print('step 1')\", \"language\": \"python\"}",
+              "role": "assistant"
+            },
+            {
+              "content": "✅ Code executed successfully (attempt 1/1).\nOutput:\nstep 1\r\n\n\nIf this fully answers the original request, respond with the same JSON format but set thinking to \"DONE\" and code to an empty string. This was the last allowed code run: any code you send now will NOT be executed. If the output does not fully answer the request, reply with the code you would run next and say in thinking what is still missing.",
+              "role": "user"
+            }
+          ],
+          "system": "You are a code execution agent. Your job is to solve the user's request \nby writing Python code that will be executed in a sandboxed environment.\n\n## Rules\n1. Write complete, self-contained, runnable Python code.\n2. Always print() your final results to stdout.\n3. Save any generated files (charts, images, CSVs, etc.) to <path>\n   (this folder is private to the current run). Use a non-interactive backend for\n   matplotlib (Agg) and never call plt.show().\n4. Available packages: numpy, pandas, matplotlib, seaborn, scipy, scikit-learn, \n   requests, beautifulsoup4, openpyxl, Pillow, sympy, tabulate, plotly, xlsxwriter.\n5. Let errors crash naturally (DON'T wrap everything in try/except).\n   Only use try/except for specific, recoverable cases.\n   If a file doesn't exist or data is missing, generate realistic sample data\n   and proceed — don't just print \"file not found\" and exit.\n6. If you're fixing a previous error, address the SPECIFIC error message.\n7. Keep code concise — no unnecessary comments or boilerplate.\n8. The code must finish within the execution time limit; avoid infinite loops\n   and very long computations.\n9. After a successful run you will see its output. Only reply DONE when the\n   output fully satisfies the original request.\n\n## Response Format\nRespond ONLY with valid JSON (no markdown fences):\n{\n    \"thinking\": \"one short sentence telling the user what this code does\",\n    \"code\": \"your python code here\",\n    \"language\": \"python\"\n}\n"
+        },
         "stream": true
       },
       "id": 16,

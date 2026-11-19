@@ -83,25 +83,29 @@ class LLMPlanner:
         """
         log = on_log or no_log
         messages = build_messages(state)
+        system = system_prompt(image_tool_max=self.image_tool_max if state.image_tool else None,
+                               timeout_seconds=state.timeout_seconds)
 
         for attempt in range(1 + MAX_FORMAT_RETRIES):
             logger.info(
                 f"[{state.session_id}] Calling LLM (iteration {state.current_iteration}"
                 f"{', format retry' if attempt else ''}), messages count: {len(messages)}"
             )
+            # `request` is exactly what is handed to the provider adapter (events.ModelRequest), so the UI can show
+            # what this call received instead of rebuilding it from the run history.
             await log(
                 INFO, "llm",
                 f"Calling {self.model}" + (" (format retry)" if attempt else ""),
                 provider=self.provider, model=self.model,
                 messages=len(messages), max_tokens=self.max_tokens, stream=True, flow=Flow.CALLING,
+                request={"system": system, "messages": messages},
             )
 
             started = time.monotonic()
             timing: dict[str, int] = {}   # _stream fills first_token_ms when the first token arrives
             # `metric` marks this entry as the measurement of ONE model call (events.METRIC_LLM_CALL)
             try:
-                response = await self._stream(messages, on_progress, log, started, state.timeout_seconds, timing,
-                                              self.image_tool_max if state.image_tool else None)
+                response = await self._stream(messages, on_progress, log, started, timing=timing, system=system)
             except ProviderError as e:
                 await log(ERROR, "llm", f"Model call failed after {time.monotonic() - started:.1f}s: {e}",
                           provider=self.provider, model=self.model, error_kind=e.kind, http_status=e.status,
@@ -183,7 +187,8 @@ class LLMPlanner:
 
     async def _stream(self, messages: list[dict], on_progress: ProgressFn | None,
                       log: LogFn = no_log, started: float | None = None, timeout_seconds: int = 30,
-                      timing: dict[str, int] | None = None, image_tool_max: int | None = None):
+                      timing: dict[str, int] | None = None, image_tool_max: int | None = None,
+                      system: str | None = None):
         """Calls the provider in streaming mode; on_progress receives code that is still being written (extracted from unclosed JSON)."""
         text = ""
         last_sent = 0.0
@@ -204,5 +209,6 @@ class LLMPlanner:
                     explanation = extract_partial_json_string(text, "thinking") or ""
                     await on_progress(code, explanation)
 
-        system = system_prompt(image_tool_max=image_tool_max, timeout_seconds=timeout_seconds)
+        if system is None:
+            system = system_prompt(image_tool_max=image_tool_max, timeout_seconds=timeout_seconds)
         return await self.chat.stream(system, messages, self.max_tokens, on_text)

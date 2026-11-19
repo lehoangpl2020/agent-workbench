@@ -5,7 +5,7 @@ import type { LogEntry, RunDetail } from "./api";
 import finalReview from "./__fixtures__/final_review_rejected.json";
 import fixThenDone from "./__fixtures__/fix_then_done.json";
 import {
-  artifactFor, buildSteps, explain, groupSteps, REPLAY_MAX_MS, REPLAY_MIN_MS, REPLAY_TRANSFER_MIN_MS, replayGap,
+  artifactFor, buildSteps, explain, REPLAY_MAX_MS, REPLAY_MIN_MS, REPLAY_TRANSFER_MIN_MS, replayGap,
   seenAt, type StudioStep,
 } from "./studio";
 
@@ -102,19 +102,10 @@ describe("seenAt: later steps never leak into an earlier view", () => {
   });
 });
 
-describe("groupSteps", () => {
-  it("groups the start, each iteration and the end", () => {
-    const groups = groupSteps(buildSteps(fix.run, fix.logs).steps);
-    expect(groups.map(g => g.label)).toEqual(["Start", "Iteration 1", "Iteration 2", "Iteration 3", "End"]);
-    expect(groups.flatMap(g => g.steps)).toHaveLength(fix.logs.length);
-  });
-});
-
 describe("a run that hit the limit", () => {
   it("keeps the final review as an extra iteration and the status label", () => {
     const { steps } = buildSteps(review.run, review.logs);
     expect(steps.at(-1)?.title).toBe("Run finished · Code run limit reached");
-    expect(groupSteps(steps).map(g => g.label)).toEqual(["Start", "Iteration 1", "Iteration 2", "End"]);
     expect(beats(steps)).not.toContain("done_reply");
   });
 });

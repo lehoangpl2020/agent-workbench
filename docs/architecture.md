@@ -94,11 +94,13 @@ Every real step calls `emit("log", entry)` exactly where it happens. `RunManager
 | source | Emitted by | Examples |
 |---|---|---|
 | `runtime` | `core/agent.py`, `runs/manager.py` | Run started (model, executor, limits), sending the error/result back to the model, Stop, Run finished |
-| `llm` | `core/planner.py` | Calling model, First token, Response received (timing, stop_reason, tokens when available), parse OK/error, and a WARN when the prompt uses 90% or more of an Ollama model's `num_ctx` |
+| `llm` | `core/planner.py` | Calling model (with `request`: the system prompt and messages exactly as handed to the provider adapter), First token, Response received (timing, stop_reason, tokens when available), parse OK/error, and a WARN when the prompt uses 90% or more of an Ollama model's `num_ctx` |
 | `model` | `core/agent.py` | The short explanation the model returned (the model's own words, not a runtime action) |
 | `sandbox` | `execution/` | Writing `code/iter_NN.py`, start of execution, package install, re-run, exit code/time/timeout, artifacts + sizes |
 
 Messages and data go through `redact()`, which masks `sk-ant-…` keys, auth headers, and the values of environment variables whose names contain KEY/TOKEN/SECRET/PASSWORD.
+
+The `request` of a model call (`REQUEST_KEY` / `ModelRequest` in `domain/events.py`) is what the UI shows under *What the model received*. It is the input passed to the adapter in `llm/`, which may still reshape it for its API (for example the system prompt as a separate parameter). Runs stored before this key existed have none, and the UI says *Not recorded* instead of rebuilding it from the run history. The text download (`/logs/download`) prints a one-line summary in its place; `GET /logs` returns it in full. Like prompts, code and stdout, it is stored as is apart from `redact()`.
 
 ## Run totals (tokens, time, cost)
 
@@ -126,11 +128,20 @@ How to read them:
 
 The names, the `flow` tags of log entries and the payload of each event are declared in `domain/events.py` (TypedDicts); `web/src/lib/api.ts` mirrors the names, and `tests/contract/test_event_contract.py` checks both sides and the payloads the agent actually emits. `RunManager._persist` is a table from event to the SQLite update it causes.
 
-## Live Flow and Replay (UI)
+## Agent journey, Live Flow and Replay (UI)
 
-- **Live Flow** shows the model, the agent runtime and the Python sandbox as three actors. A data card moves only when a real log entry arrives; the code file only reaches the sandbox after the backend has parsed the response and written `code/iter_NN.py`. After a refresh or reconnect the view is rebuilt from the stored snapshot and logs; history is not replayed as if it were live.
-- **Replay** of a finished run only reads the SQLite history and the per-iteration file snapshots. It never calls a model and never runs code. Partially streamed code is not stored per step, so Replay shows code from the moment the response was parsed. Old runs without detailed logs are labeled **Partial history**; files without a per-iteration snapshot are labeled **Snapshot unavailable**. `prefers-reduced-motion` is honored.
-- Both views are derived from stored events and logs (`web/src/lib/studio.ts`). Each step is placed by the `flow` tag of its log entry (`domain/events.py`); only runs stored before a tag existed are recognized by their message text (`legacyFlow` in `studio.ts`), so a changed message can still alter how an old run is shown; `web/src/lib/studio.test.ts` tests these views against runs recorded from the backend, and `tests/contract/test_ui_fixtures.py` keeps those recordings in sync with what the backend emits. Components and hooks are not tested automatically.
+The run page has one journey for live runs, finished runs and replay (`web/src/components/journey/`):
+
+- **Compact header**: status, model and provider, sandbox, code runs used, timeout, Stop or *Edit & re-run*. The prompt is clamped to two lines and the usage totals to one line, each with a toggle for the full text.
+- **Outcome** (finished runs) keeps three facts apart: the *code execution* result (the last code run's exit code, a timeout, or the runtime's false-success check), the *model signal* (`DONE` or not) and *task validation*, which is always "Not performed": nothing in the app checks that an answer is correct, and the false-success heuristic is not a validation.
+- **Journey**: the recorded steps grouped as *Run started*, *Model call N* (generate code, fix the error, review the result, final review), *Code run N*, *Runtime check* and *Run finished*, each labeled Model, Runtime or Sandbox. Bookkeeping events (calling, first token, parsing, process start) sit behind a per-section disclosure. The feedback path is the first row of the next model call (*Error sent back to the model* / *Output sent back to the model*).
+- **Inspector** for the selected step: who performed it, its input, its output and what happens next (the rule that explains the transition). For a model call the input is the recorded `request`; the output is the parsed reply (the short `thinking` explanation, which is not the model's internal reasoning, and the code), because the raw response text is not stored. The inspector only shows what was known at the selected step, so later results never leak into an earlier step.
+- **Flow diagram** (the former Live Flow stage) shows the same step with the model, the runtime and the sandbox as three actors: a data card moves only when a real log entry arrives, and the code file only reaches the sandbox after the backend has parsed the response and written `code/iter_NN.py`.
+- **Live**: the view follows the newest step. Selecting another step keeps it selected while events arrive; *Follow live* returns to the newest step. After a refresh or reconnect the view is rebuilt from the stored snapshot and logs; history is not replayed as if it were live.
+- **Replay** of a finished run walks the meaningful steps (Prev/Next work in every mode) and only reads the SQLite history and the per-iteration file snapshots. It never calls a model and never runs code. Partially streamed code is not stored per step, so Replay shows code from the moment the response was parsed. Old runs without detailed logs are labeled **Partial history** (their steps are rebuilt from the run record); files without a per-iteration snapshot are labeled **Snapshot unavailable**. `prefers-reduced-motion` is honored.
+- On a narrow screen the inspector opens inside the journey, under the selected section, instead of in its own column.
+
+All of it is derived from stored events and logs: `web/src/lib/studio.ts` turns log entries into steps, placing each by the `flow` tag of its log entry (`domain/events.py`); only runs stored before a tag existed are recognized by their message text (`legacyFlow`), so a changed message can still alter how an old run is shown. `web/src/lib/journey.ts` groups the steps into sections, transitions and the outcome. `studio.test.ts` and `journey.test.ts` test them against runs recorded from the backend, and `tests/contract/test_ui_fixtures.py` keeps those recordings in sync with what the backend emits. Components and hooks are not tested automatically.
 
 ## Current limitations
 

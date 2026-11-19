@@ -24,7 +24,7 @@ The core of most coding agents is a short loop, but it is easy to hide behind a 
 - **Image tool (opt-in per run)**: with `IMAGE_TOOL=true` on the server, an *Image tool* checkbox (unticked by default) lets a run ask an OpenAI image model (`IMAGE_MODEL`, default `gpt-image-1-mini`) for photos and illustrations that code cannot draw. Billed per image, capped per run, and the key stays on the server. See [docs/api.md](docs/api.md#image-tool).
 - **Run API**: background runs (one at a time), Server-Sent Events, SQLite history that survives restarts, per-run workspace with path-traversal protection.
 - **Activity log**: runtime / LLM / model / sandbox entries with secrets redacted before they are stored or sent.
-- **Web UI** (React, TypeScript, Vite, Tailwind, shadcn/ui): composer with presets, Live Flow (Agent Studio), Replay of finished runs, Logs, Files/preview, and History.
+- **Web UI** (React, TypeScript, Vite, Tailwind, shadcn/ui): composer with example prompts (each says what to watch), a run page built around the agent journey (model calls, code runs and runtime checks, with an inspector that shows what each model call received and what each step produced), a flow diagram, read-only Replay, the activity log, files, and searchable History.
 - **Offline test suite** that uses a scripted planner, so it never calls a paid model API.
 
 ## Architecture
@@ -125,7 +125,7 @@ In this mode model-written code runs on your machine with your user's permission
 # Backend: offline, scripted planner, no model API calls (code still runs for real via LocalExecutor)
 .venv/Scripts/python -m pytest tests -q               # Linux/macOS: .venv/bin/python
 
-# Frontend: type-check + production build, and unit tests of the Live Flow / Replay logic
+# Frontend: type-check + production build, and unit tests of the journey / Replay logic
 cd web && npm run build
 cd web && npm test
 ```
@@ -139,7 +139,7 @@ The offline tests never contact Ollama, Anthropic or OpenAI (they use mock trans
 - The persistent sandbox is shared by all runs; code from one run could in theory read another run's directory. The sandbox has network access (needed for auto-install).
 - The server container mounts `/var/run/docker.sock`, which is very powerful on the host.
 - Local mode is not isolated.
-- Frontend tests cover only the pure Live Flow / Replay logic (`web/src/lib`); React components and hooks were checked by building them and by manual use.
+- Frontend tests cover only the pure journey / Replay logic (`web/src/lib`); React components and hooks were checked by building them and by manual use.
 - Prompts, generated code and stdout are stored unredacted in SQLite.
 
 ## Roadmap (planned, not implemented)
@@ -155,7 +155,7 @@ These are ideas, not commitments; none of them exist yet:
 ## Documentation
 
 - [docs/project-structure.md](docs/project-structure.md): folder layout, the layers and their dependency rule, the design principles applied, and how to add a provider, executor, tool or endpoint.
-- [docs/architecture.md](docs/architecture.md): components, run flow, run statuses, data layout, activity log, Live Flow and Replay.
+- [docs/architecture.md](docs/architecture.md): components, run flow, run statuses, data layout, activity log, the agent journey and Replay.
 - [docs/api.md](docs/api.md): HTTP API, CLI client, executor modes, using the agent from Python, security notes.
 - [docs/providers.md](docs/providers.md): provider and model catalog, configuration, Ollama connectivity, error codes.
 - [docs/troubleshooting.md](docs/troubleshooting.md): common problems and debugging.

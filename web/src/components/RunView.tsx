@@ -1,20 +1,25 @@
-import { useState } from "react";
-import { AlertCircle, BrainCircuit, Clock, ImagePlus, ListChecks, Loader2, Pencil, RefreshCw, Repeat, Square } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import {
+  AlertCircle, Box, BrainCircuit, Clock, FolderOpen, ImagePlus, ListChecks, Loader2, Pencil, RefreshCw, Repeat,
+  Route, ScrollText, Square, TriangleAlert,
+} from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRun } from "@/hooks/useRun";
 import { api, type RunDetail } from "@/lib/api";
-import { RUN_STATUS, TONE_CLASSES, modelLabel, providerLabel, relativeTime } from "@/lib/format";
+import { modelLabel, providerLabel, relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ActivityLog } from "./ActivityLog";
 import type { ComposerDraft } from "./Composer";
 import { ExamplesSheet } from "./ExamplesSheet";
 import { LiveActivity } from "./LiveActivity";
-import { AgentStudio } from "./studio/AgentStudio";
-import { ResultTabs } from "./ResultTabs";
-import { RunUsage } from "./RunUsage";
+import { Outcome } from "./journey/Outcome";
+import { RunJourney, type JourneyHandle } from "./journey/RunJourney";
+import { FilesPanel } from "./ResultPanels";
+import { UsageSummary } from "./RunUsage";
 import { StatusBadge } from "./StatusBadge";
-import { Timeline } from "./Timeline";
 
 interface Props {
   runId: string;
@@ -24,10 +29,12 @@ interface Props {
 
 export function RunView({ runId, onChanged, onEdit }: Props) {
   const { run, error, refetch, ...activity } = useRun(runId, onChanged);
-  const [manual, setManual] = useState<number | null>(null);
-  const [tab, setTab] = useState(() => sessionStorage.getItem("live-flow-run") === runId ? "flow" : "preview");
+  const [tab, setTab] = useState("journey");
+  const [iteration, setIteration] = useState<number | null>(null);
   const [stopping, setStopping] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
+  const journey = useRef<JourneyHandle>(null);
+  const onIterationChange = useCallback((n: number | null) => setIteration(n), []);
 
   if (error && !run) {
     return (
@@ -44,10 +51,9 @@ export function RunView({ runId, onChanged, onEdit }: Props) {
   }
   if (!run) return <RunSkeleton />;
 
-  // Defaults to the latest iteration; once the user clicks, the user's choice is kept
-  const last = run.iterations[run.iterations.length - 1];
-  const selectedNumber = manual ?? last?.number ?? null;
-  const iteration = run.iterations.find((i) => i.number === selectedNumber) ?? null;
+  const running = run.status === "running" || run.status === "pending";
+  // The step selected in the journey decides which iteration the log and files tabs point at
+  const selectedIteration = run.iterations.find(i => i.number === iteration) ?? run.iterations.at(-1) ?? null;
 
   async function stop() {
     setStopping(true);
@@ -65,7 +71,7 @@ export function RunView({ runId, onChanged, onEdit }: Props) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <RunHeader
         run={run}
         stopping={stopping}
@@ -80,94 +86,92 @@ export function RunView({ runId, onChanged, onEdit }: Props) {
         </Alert>
       )}
       {error && (
-        <p className="flex items-center gap-1.5 text-xs text-destructive">
+        <p className="flex items-center gap-1.5 text-xs text-destructive" role="status">
           <AlertCircle className="size-3.5" /> {error}
           <button className="underline" onClick={() => void refetch()}>Refresh</button>
         </p>
       )}
 
-      <RunUsage run={run} />
+      {!running && <div className="@container"><Outcome run={run} onOpenEnd={() => { setTab("journey"); journey.current?.selectEnd(); }} /></div>}
 
-      <ResultTabs run={run} iteration={iteration} logs={activity.logs} logError={activity.logError}
-        retryLogs={() => void activity.retryLogs()} tab={tab} onTabChange={value => {
-        setTab(value);
-        if (value === "flow") sessionStorage.setItem("live-flow-run", runId);
-        else sessionStorage.removeItem("live-flow-run");
-      }} flow={<AgentStudio run={run} {...activity} stopping={stopping} onStop={stop} />} timeline={
-        <section>
-          <h2 className="mb-2.5 flex items-center justify-between text-sm font-semibold">
-            Timeline
-            <span className="text-xs font-normal text-muted-foreground">
-              {run.iterations.filter((it) => it.exit_code !== null).length}/{run.max_iterations} code runs
-              · {run.iterations.length} model call{run.iterations.length === 1 ? "" : "s"}
-            </span>
-          </h2>
-          <Timeline run={run} selected={selectedNumber} onSelect={setManual} />
-        </section>
-      } />
+      <Tabs value={tab} onValueChange={setTab} className="gap-3">
+        <TabsList className="h-auto max-w-full flex-wrap justify-start sm:h-9">
+          <TabsTrigger value="journey" className="px-2 sm:px-3"><Route /> Journey</TabsTrigger>
+          <TabsTrigger value="logs" className="px-2 sm:px-3"><ScrollText /> Activity log</TabsTrigger>
+          <TabsTrigger value="files" className="px-2 sm:px-3">
+            <FolderOpen /> Files
+            {run.artifacts.length > 0 && (
+              <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-semibold text-primary">{run.artifacts.length}</span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+        {/* Kept mounted so the selected step, follow-live and replay position survive a tab switch */}
+        <TabsContent value="journey" forceMount className="min-w-0 data-[state=inactive]:hidden">
+          <RunJourney ref={journey} run={run} {...activity} stopping={stopping} onStop={stop} onIterationChange={onIterationChange} />
+        </TabsContent>
+        <TabsContent value="logs" className="min-w-0">
+          <ActivityLog run={run} logs={activity.logs} selected={selectedIteration} logError={activity.logError}
+            onRetry={() => void activity.retryLogs()} />
+        </TabsContent>
+        <TabsContent value="files" className="min-w-0">
+          <FilesPanel run={run} iteration={selectedIteration} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
 
 function RunHeader({ run, stopping, onStop, onEdit }: { run: RunDetail; stopping: boolean; onStop: () => void; onEdit: () => void }) {
-  const running = run.status === "running";
-  const tone = RUN_STATUS[run.status]?.tone ?? "neutral";
-  // Read-only reference: it does not know whether this run came from an example, and does not guess
+  const running = run.status === "running" || run.status === "pending";
   const [examplesOpen, setExamplesOpen] = useState(false);
+  const [fullTask, setFullTask] = useState(false);
+  const long = run.prompt.length > 160 || run.prompt.split("\n").length > 2;
+  const codeRuns = run.iterations.filter(i => i.exit_code !== null).length;
+  const local = /^local/i.test(run.executor);
   return (
-    <div className="rounded-xl border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:p-5">
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
+    <div className="studio-card">
+      <div className="flex flex-col gap-3 p-3.5 sm:flex-row sm:items-start sm:px-5">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
             <StatusBadge status={run.status} />
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground/80"
-              title={`${providerLabel(run)} · ${run.model || "model not recorded"}`}>
-              <BrainCircuit className="size-3.5 text-muted-foreground" /> {modelLabel(run)}
+            <span className="inline-flex items-center gap-1 font-medium text-foreground/80" title={`${providerLabel(run)} · ${run.model || "model not recorded"}`}>
+              <BrainCircuit className="size-3.5 text-[var(--model)]" /> {modelLabel(run)}
               <span className="font-normal text-muted-foreground">· {providerLabel(run)}</span>
             </span>
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <Repeat className="size-3.5" /> max {run.max_iterations} code runs
+            <span className={cn("inline-flex items-center gap-1", local && "text-warning")} title={local ? "Local executor: code is not isolated" : "Where the code runs"}>
+              {local ? <TriangleAlert className="size-3.5" /> : <Box className="size-3.5 text-[var(--sandbox)]" />} {run.executor || "executor not recorded"}
             </span>
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="size-3.5" /> {run.timeout_seconds}s timeout
+            <span className="inline-flex items-center gap-1" title="Code runs used / allowed (max_iterations)">
+              <Repeat className="size-3.5" /> {codeRuns}/{run.max_iterations} code runs
             </span>
-            {run.image_tool && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"
-                title="The agent could ask the OpenAI image model for images in this run">
-                <ImagePlus className="size-3.5" /> Image tool
-              </span>
-            )}
-            <span className="text-xs text-muted-foreground">· {relativeTime(run.created_at)}</span>
+            <span className="inline-flex items-center gap-1"><Clock className="size-3.5" /> {run.timeout_seconds}s timeout</span>
+            {run.image_tool && <span className="inline-flex items-center gap-1" title="The agent could ask the OpenAI image model for images in this run">
+              <ImagePlus className="size-3.5" /> Image tool</span>}
+            <time dateTime={run.created_at} title={new Date(run.created_at).toLocaleString()}>{relativeTime(run.created_at)}</time>
           </div>
-          <p className="text-[15px] leading-relaxed font-medium break-words whitespace-pre-wrap">{run.prompt}</p>
+          <div>
+            <p id="run-task" className={cn("text-[15px] leading-relaxed font-medium break-words whitespace-pre-wrap", !fullTask && "line-clamp-2")}>
+              {run.prompt}
+            </p>
+            {long && <button type="button" aria-expanded={fullTask} aria-controls="run-task" onClick={() => setFullTask(v => !v)}
+              className="mt-0.5 rounded text-xs font-medium text-primary hover:underline">
+              {fullTask ? "Show less" : "Show full task"}</button>}
+          </div>
+          <UsageSummary run={run} />
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <ExamplesSheet
-            trigger={
-              <Button variant="ghost">
-                <ListChecks /> Examples
-              </Button>
-            }
-            open={examplesOpen}
-            onOpenChange={setExamplesOpen}
-          />
+          <ExamplesSheet trigger={<Button variant="ghost" size="sm"><ListChecks /> Examples</Button>}
+            open={examplesOpen} onOpenChange={setExamplesOpen} />
           {running ? (
-            <Button variant="destructive" onClick={onStop} disabled={stopping}>
+            <Button variant="destructive" size="sm" onClick={onStop} disabled={stopping}>
               {stopping ? <Loader2 className="animate-spin" /> : <Square className="fill-current" />}
               {stopping ? "Stopping…" : "Stop"}
             </Button>
           ) : (
-            <Button variant="outline" onClick={onEdit}>
-              <Pencil /> Edit & re-run
-            </Button>
+            <Button variant="outline" size="sm" onClick={onEdit}><Pencil /> Edit & re-run</Button>
           )}
         </div>
       </div>
-      {!running && run.message && (
-        <div className={cn("rounded-b-xl border-t px-4 py-2.5 text-sm sm:px-5", TONE_CLASSES[tone])}>
-          <span className="font-semibold">{RUN_STATUS[run.status]?.label}.</span> {run.message}
-        </div>
-      )}
       {running && <LiveActivity run={run} />}
       {running && (
         <div className="h-0.5 overflow-hidden rounded-b-xl bg-accent">
@@ -180,13 +184,11 @@ function RunHeader({ run, stopping, onStop, onEdit }: { run: RunDetail; stopping
 
 function RunSkeleton() {
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <Skeleton className="h-28 w-full rounded-xl" />
-      <div className="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="space-y-2">
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
-        </div>
+      <Skeleton className="h-12 w-full rounded-xl" />
+      <div className="grid gap-3 lg:grid-cols-[340px_minmax(0,1fr)]">
+        <Skeleton className="h-80 w-full rounded-xl" />
         <Skeleton className="h-80 w-full rounded-xl" />
       </div>
     </div>

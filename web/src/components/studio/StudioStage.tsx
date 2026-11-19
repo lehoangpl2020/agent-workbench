@@ -70,7 +70,8 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
   // ── Model pane ──
   const lastModel = iterSteps.filter(s => s.actor === "model" || s.beat === "send").at(-1);
   const response = iterSteps.filter(s => s.beat === "response").at(-1);
-  const accepted = upto.filter(s => s.beat === "accepted" && s.log?.source === "model").at(-1);
+  // The model's short explanation in THIS model call (code accepted, or a final review's rejected step)
+  const accepted = iterSteps.filter(s => s.log?.source === "model" && (s.beat === "accepted" || s.beat === "note")).at(-1);
   const modelDone = n != null && seen.done.has(n);
   let modelStatus = "Idle";
   if (streaming) modelStatus = run.activity || "Writing code…";
@@ -102,9 +103,9 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
       <Station actor="model" active={active === "model"} waiting={modelWaiting} iconRef={el => { icons.current.model = el; }}
         title="Model" sub={run.model_name ?? (run.model || "LLM")} />
       <Station actor="runtime" active={active === "runtime"} iconRef={el => { icons.current.runtime = el; }}
-        title="Agent runtime" sub={n != null ? `Iteration ${n}${n > run.max_iterations ? " · final review" : ""}` : "Coordinator"} />
+        title="Runtime" sub={n != null ? `Model call ${n}${n > run.max_iterations ? " · final review" : ""}` : "Coordinator"} />
       <Station actor="sandbox" active={active === "sandbox"} waiting={runningNow} iconRef={el => { icons.current.sandbox = el; }}
-        title="Python sandbox" sub={run.executor || "executor"} />
+        title="Sandbox" sub={run.executor || "executor"} />
     </div>
 
     <div className="studio-panes">
@@ -118,9 +119,9 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
         {streaming && it?.code ? <pre className="studio-codetail" aria-label="Code being written">
             {tail(it.code, 6).map((line, i) => <span key={i} className="block truncate">{line}</span>)}
           </pre>
-          : modelDone ? <p className="studio-quote">DONE — the output satisfies the request.</p>
+          : modelDone ? <p className="studio-quote">DONE — the model judged the output sufficient. Nothing checked that it is correct.</p>
           : accepted ? <figure className="space-y-1">
-              <figcaption className="text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">Model’s explanation · iter {accepted.iteration}</figcaption>
+              <figcaption className="text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">Short explanation · model call {accepted.iteration}</figcaption>
               <blockquote className="studio-quote">{accepted.log?.message}</blockquote>
             </figure>
           : <p className="text-xs text-muted-foreground">{n == null ? "No request yet." : "Nothing returned yet in this iteration."}</p>}

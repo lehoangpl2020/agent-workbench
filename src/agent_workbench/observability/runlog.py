@@ -78,8 +78,17 @@ def fmt_bytes(n: int) -> str:
     return f"{n / 1024 / 1024:.1f} MB"
 
 
+def _short(key: str, value: Any) -> Any:
+    # The recorded model input (domain/events.py, REQUEST_KEY) holds the whole prompt; one text line cannot.
+    # It stays complete in GET /api/runs/{id}/logs.
+    if key == "request" and isinstance(value, dict):
+        n = len(value.get("messages") or [])
+        return f"<{n} message{'' if n == 1 else 's'} + system prompt; see GET /logs>"
+    return value
+
+
 def format_log_line(e: dict) -> str:
     """One stored log entry as a line of text: time, iteration, level, source, message, data."""
     it = f"iter {e['iteration']}" if e.get("iteration") else "run"
-    data = " ".join(f"{k}={v}" for k, v in (e.get("data") or {}).items())
+    data = " ".join(f"{k}={_short(k, v)}" for k, v in (e.get("data") or {}).items())
     return f"{e['ts']}  {it:<7} {e['level']:<5} {e['source']:<7} {e['message']}" + (f"  [{data}]" if data else "")

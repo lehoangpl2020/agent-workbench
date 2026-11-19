@@ -11,8 +11,8 @@ const ICONS: Record<string, typeof Brain> = {
   rerunning: RotateCw, collecting: FileSearch, checking: ClipboardCheck,
 };
 
-const ACTOR: Record<string, "llm" | "sandbox"> = {
-  write: "llm", fix: "llm", review: "llm", streaming: "llm",
+const ACTOR: Record<string, "model" | "sandbox"> = {
+  write: "model", fix: "model", review: "model", streaming: "model",
   executing: "sandbox", installing: "sandbox", install_failed: "sandbox", rerunning: "sandbox", collecting: "sandbox",
 };
 
@@ -39,14 +39,14 @@ export function LiveActivity({ run }: { run: RunDetail }) {
       <span
         className={cn(
           "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide uppercase",
-          actor === "llm" ? "bg-violet-100 text-violet-800" : "bg-primary/10 text-primary",
+          actor === "model" ? "bg-[var(--model-soft)] text-[var(--model)]" : actor === "sandbox" ? "bg-[var(--sandbox-soft)] text-[var(--sandbox)]" : "bg-primary/10 text-primary",
         )}
       >
-        {actor === "llm" ? "LLM" : actor === "sandbox" ? "Python Sandbox" : "Runtime"}
+        {actor === "model" ? "Model" : actor === "sandbox" ? "Sandbox" : "Runtime"}
       </span>
       {iteration && (
         <span className="text-xs font-medium text-muted-foreground">
-          Iteration {iteration}{iteration > run.max_iterations && " · final review"}
+          Model call {iteration}{iteration > run.max_iterations && " · final review"}
         </span>
       )}
       <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-foreground">

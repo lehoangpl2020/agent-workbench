@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { EXAMPLES, OUTPUT_LABELS, type PromptExample } from "@/lib/examples";
+import { CONCEPT_LABELS, EXAMPLES, OUTPUT_LABELS, type PromptExample } from "@/lib/examples";
 
 interface Props {
   /** The element that opens the sheet. It must be a single element that accepts a ref, such as a button. */
@@ -24,7 +24,7 @@ export function ExamplesSheet({ trigger, open, onOpenChange, onUse, onCloseAutoF
           <SheetTitle>Examples</SheetTitle>
           <SheetDescription>
             {onUse
-              ? "Choose one to fill the prompt box. You can edit it before pressing Run."
+              ? "Each example shows one part of the agent loop. Choosing one only fills the prompt box; nothing runs until you press Run, and a model may behave differently each time."
               : "Reference only. Open New run to load an example into the prompt box."}
           </SheetDescription>
         </SheetHeader>
@@ -33,6 +33,9 @@ export function ExamplesSheet({ trigger, open, onOpenChange, onUse, onCloseAutoF
             <li key={example.id} className="rounded-lg border bg-card p-3.5">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <h3 className="text-sm font-semibold">{example.title}</h3>
+                <span className="rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  <span className="sr-only">Concept:</span>{CONCEPT_LABELS[example.concept]}
+                </span>
                 <span className="flex gap-1">
                   <span className="sr-only">Output:</span>
                   {example.outputs.map((kind) => (
@@ -46,6 +49,10 @@ export function ExamplesSheet({ trigger, open, onOpenChange, onUse, onCloseAutoF
                 </span>
               </div>
               <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{example.summary}</p>
+              <p className="mt-1.5 text-xs leading-relaxed">
+                <span className="font-medium">What to watch: </span>
+                <span className="text-foreground/80">{example.observe}</span>
+              </p>
               <details className="mt-2 text-[13px]">
                 <summary className="cursor-pointer rounded-sm text-xs font-medium text-primary outline-none select-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
                   Prompt and how to check

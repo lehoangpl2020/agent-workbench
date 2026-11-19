@@ -161,10 +161,10 @@ export function buildSteps(run: RunDetail, logs: LogEntry[]): BuiltSteps {
       actor: "runtime", title: "Run created", level: "INFO", synthetic: true });
     for (const it of run.iterations) {
       if (!logs.length) steps.push({ key: `start-${it.number}`, ts: it.started_at, iteration: it.number,
-        beat: "iteration", actor: "runtime", intent: it.intent, title: `Iteration ${it.number} started`, level: "INFO", synthetic: true });
+        beat: "iteration", actor: "runtime", intent: it.intent, title: `Model call ${it.number} started`, level: "INFO", synthetic: true });
       if (it.finished_at) steps.push({ key: `snapshot-${it.number}`, ts: it.finished_at, iteration: it.number,
         beat: "snapshot", actor: it.status === "done" ? "model" : it.exit_code !== null ? "sandbox" : "runtime",
-        title: it.status === "done" ? "Model replied DONE" : it.exit_code !== null ? `Iteration ${it.number} · exit ${it.exit_code}` : `Iteration ${it.number} ended`,
+        title: it.status === "done" ? "Model replied DONE" : it.exit_code !== null ? `Code run ${it.number} · exit ${it.exit_code} (rebuilt)` : `Model call ${it.number} ended (rebuilt)`,
         level: it.exit_code ? "WARN" : "INFO", synthetic: true });
     }
     steps.sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
@@ -248,8 +248,8 @@ export function explain(step: StudioStep, run: RunDetail): string {
   switch (step.beat) {
     case "start": return step.synthetic ? "The run was created. Detailed activity was not recorded for this older run."
       : "The runtime starts the loop with your task.";
-    case "iteration": return step.intent === "fix" ? "A new iteration starts to fix the previous error."
-      : step.intent === "review" ? "A new iteration starts so the model can review the output." : "A new iteration starts.";
+    case "iteration": return step.intent === "fix" ? "The runtime starts a new model call to fix the previous error."
+      : step.intent === "review" ? "The runtime starts a new model call so the model can review the output." : "The runtime starts a new model call.";
     case "send": return step.intent === "fix" ? "The runtime sends the error back so the model can fix the code."
       : step.intent === "review" ? "The runtime sends the output back so the model can decide: DONE or another step."
       : "The runtime sends your task to the model.";
@@ -262,7 +262,12 @@ export function explain(step: StudioStep, run: RunDetail): string {
     case "handoff": return `The runtime wrote ${file} and handed it to the sandbox.`;
     case "executing": return `The sandbox is running ${file}.`;
     case "install": return "The sandbox is installing a missing package.";
-    case "exited": return exitFrom(step.title) === 0 ? "The process exited successfully." : step.title;
+    case "exited": {
+      const code = typeof step.log?.data.exit_code === "number" ? step.log.data.exit_code : exitFrom(step.title);
+      if (code === 0) return "The process exited successfully (exit code 0).";
+      if (code === 124 || /timed out/i.test(step.title)) return `The sandbox killed the process at the ${run.timeout_seconds}s time limit (exit 124).`;
+      return `The process exited with an error${code != null ? ` (exit code ${code})` : ""}; stderr holds the details.`;
+    }
     case "killed": return "The running process was killed.";
     case "artifact": return "The code saved files to the output folder.";
     case "no_files": return "The code did not save any new files.";
@@ -276,7 +281,7 @@ export function explain(step: StudioStep, run: RunDetail): string {
       stopped: "The runtime stopped the run at your request.",
       error: "The runtime ended the run because of an error.",
     } as Partial<Record<string, string>>)[run.status] ?? `The run ended: ${RUN_STATUS[run.status]?.label}.`;
-    case "snapshot": return "Iteration result restored from the run record.";
+    case "snapshot": return "Result restored from the run record (no detailed log exists for this older run).";
     default: return step.title;
   }
 }
@@ -290,30 +295,6 @@ export function replayGap(current: StudioStep, next: StudioStep) {
   const recorded = Date.parse(next.ts) - Date.parse(current.ts);
   const min = current.transfer ? REPLAY_TRANSFER_MIN_MS : REPLAY_MIN_MS;
   return Math.min(REPLAY_MAX_MS, Math.max(min, Number.isFinite(recorded) ? recorded : min));
-}
-
-export interface StepGroup {
-  key: string;
-  label: string;
-  iteration: number | null;
-  steps: StudioStep[];
-}
-
-/** Timeline groups: run start, one group per iteration, then the run's end. */
-export function groupSteps(steps: StudioStep[]): StepGroup[] {
-  const groups: StepGroup[] = [];
-  for (const s of steps) {
-    const end = s.beat === "finished";
-    const key = end ? "end" : s.iteration != null ? `iter-${s.iteration}` : groups.at(-1)?.key ?? "setup";
-    let group = groups.at(-1);
-    if (!group || group.key !== key) {
-      group = { key, iteration: end ? null : s.iteration, steps: [],
-        label: end ? "End" : s.iteration != null ? `Iteration ${s.iteration}` : "Start" };
-      groups.push(group);
-    }
-    group.steps.push(s);
-  }
-  return groups;
 }
 
 export function stepTime(ts: string) {

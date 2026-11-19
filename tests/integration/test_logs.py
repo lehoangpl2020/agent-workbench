@@ -196,3 +196,32 @@ def test_parse_error_is_logged_then_retried():
     warn = [m for lvl, _, m, _ in logs if lvl == "WARN"]
     assert warn and warn[0].startswith("Could not parse response")
     assert any(m == "Calling fake-model (format retry)" for _, _, m, _ in logs)
+
+
+def test_each_model_call_records_the_exact_request():
+    # The UI's "What did the model receive?" reads this; it must be what the adapter got, not a rebuild.
+    from agent_workbench.core.prompts import SYSTEM_PROMPT, build_messages
+    texts = iter(["not json at all", GOOD])
+    planner = fake_planner(GOOD, None)
+    planner.chat.client = SimpleNamespace(messages=SimpleNamespace(
+        stream=lambda **kw: FakeStream(next(texts), None)))
+    logs = run_planner(planner)
+    calls = [d for _, _, m, d in logs if d.get("flow") == "calling"]
+    assert len(calls) == 2
+    first, retry = calls[0]["request"], calls[1]["request"]
+    assert first["system"] == SYSTEM_PROMPT and retry["system"] == SYSTEM_PROMPT
+    assert first["messages"] == build_messages(AgentState(user_request="x"))
+    assert calls[0]["messages"] == len(first["messages"]) == 1
+    # The format retry sends the unusable reply back plus the correction request
+    assert [m["role"] for m in retry["messages"]] == ["user", "assistant", "user"]
+    assert retry["messages"][1]["content"] == "not json at all"
+
+
+def test_recorded_request_is_redacted_and_summarized_in_the_download(monkeypatch):
+    from agent_workbench.observability.runlog import format_log_line, make_entry
+    monkeypatch.setenv("MY_API_KEY", "supersecretvalue123")
+    entry = make_entry(1, "INFO", "llm", "Calling m", flow="calling",
+                       request={"system": "s", "messages": [{"role": "user", "content": "use supersecretvalue123"}]})
+    assert entry["data"]["request"]["messages"][0]["content"] == "use ***"
+    line = format_log_line(entry)
+    assert "supersecretvalue123" not in line and "<1 message + system prompt" in line

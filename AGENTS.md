@@ -137,11 +137,12 @@ Run statuses: `success` (Completed), `max_retries` (Code run limit reached), `ti
 
 ## 6. UI, streaming and replay requirements
 
-- The UI must show only what actually happened: Live Flow cards move on real log events, and a code file appears in the sandbox only after the backend parsed the response and wrote `code/iter_NN.py`. No fake progress.
+- The UI must show only what actually happened: flow-diagram cards move on real log events, and a code file appears in the sandbox only after the backend parsed the response and wrote `code/iter_NN.py`. No fake progress.
+- Keep three facts apart: exit code 0, the model's `DONE`, and task correctness (never validated by the app). Show a model call's input only from its recorded `request`; for runs without one say *Not recorded*, never a reconstruction. The model's `thinking` text is a short explanation, not its reasoning.
 - Streaming: code being written is shown live via `code_progress`; a refresh or reconnect rebuilds the view from `GET /api/runs/{id}` and `GET /logs?after=<id>`, it does not replay history as if live.
 - Replay only reads stored history and per-iteration snapshots. It never calls a model and never runs code. Old runs without detailed logs are labeled *Partial history*; files without a snapshot are labeled *Snapshot unavailable*.
 - Honor `prefers-reduced-motion`.
-- Live Flow places each step by the `flow` tag of its log entry (`domain/events.py`, `web/src/lib/studio.ts`). Only runs stored before a tag existed are recognized by their message text, in `legacyFlow()`: do not rely on that for new log entries, and give a new kind of step its own tag. Changing the text of a message no longer changes the UI for new runs. `web/src/lib/studio.test.ts` tests that logic against runs recorded from the backend (`web/src/lib/__fixtures__/`); `tests/contract/test_ui_fixtures.py` fails when the backend's output no longer matches those fixtures (regenerate with `UPDATE_SNAPSHOTS=1`, then run `npm test`). Components and hooks have no automated tests, so say so when you change them.
+- The journey (`web/src/lib/journey.ts`) and the flow diagram place each step by the `flow` tag of its log entry (`domain/events.py`, `web/src/lib/studio.ts`). Only runs stored before a tag existed are recognized by their message text, in `legacyFlow()`: do not rely on that for new log entries, and give a new kind of step its own tag. Changing the text of a message no longer changes the UI for new runs. `web/src/lib/studio.test.ts` and `journey.test.ts` test that logic against runs recorded from the backend (`web/src/lib/__fixtures__/`); `tests/contract/test_ui_fixtures.py` fails when the backend's output no longer matches those fixtures (regenerate with `UPDATE_SNAPSHOTS=1`, then run `npm test`). Components and hooks have no automated tests, so say so when you change them.
 - Never put secrets in the frontend.
 
 ## 7. Security and secret handling

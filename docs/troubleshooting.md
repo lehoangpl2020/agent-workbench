@@ -54,7 +54,7 @@ If you use `run.sh`, `.env` must have LF line endings: with CRLF, `source .env` 
 | Status **Code run limit reached** although the output looks right | The model reviewed the output in the final-review turn but did not answer `DONE`, or the last run failed | Read the log of the last iteration. Raise *Max code runs* or make the prompt clearer. Semantics: [architecture.md](architecture.md#run-status) |
 | Log `Exit code 0 but the output looks like an error — treating this run as failed` | The false-success heuristic: the first stdout line (under 200 characters) contains `error:`, `not found`, `could not`, ... | Intentional. If it misfires, ask the code to print something else on the first line |
 | Run **Failed**: `Interrupted: the server restarted while this run was in progress.` | The server was stopped or restarted during the run | Run it again. Resuming is not supported |
-| `docker logs agent-workbench-sandbox` is empty | The sandbox only runs `tail -f /dev/null`; code runs through `docker exec` | Read `docker compose logs -f agent-server`, or the **Logs** tab in the UI |
+| `docker logs agent-workbench-sandbox` is empty | The sandbox only runs `tail -f /dev/null`; code runs through `docker exec` | Read `docker compose logs -f agent-server`, or the **Activity log** tab in the UI |
 | PowerShell: `curl` fails with odd `Invoke-WebRequest` errors | In Windows PowerShell 5.1, `curl` is an alias | Use `curl.exe` or `Invoke-RestMethod` |
 | WSL: `ensurepip is not available` when creating a venv | `python3-venv` is missing | `sudo apt install -y python3-venv` |
 

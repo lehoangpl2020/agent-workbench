@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Cpu, FileImage, Menu, RotateCcw, TriangleAlert } from "lucide-react";
+import { BrainCircuit, Menu, PanelLeftOpen, SquareTerminal, TriangleAlert, Workflow } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -7,6 +7,7 @@ import { Composer, type ComposerDraft } from "@/components/Composer";
 import { RunView } from "@/components/RunView";
 import { Sidebar } from "@/components/Sidebar";
 import { api, type AppConfig, type RunSummary } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 // Minimal routing via the URL hash: #/ = New run, #/runs/<id> = view one run.
 function readRoute(): string | null {
@@ -23,6 +24,14 @@ export default function App() {
   const [draft, setDraft] = useState<ComposerDraft | null>(null);
   const [draftKey, setDraftKey] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Wide screens can hide the history so a run gets the full width; remembered per browser
+  const [historyOpen, setHistoryOpen] = useState(() => {
+    try { return localStorage.getItem("history-open") !== "0"; } catch { return true; }
+  });
+  const toggleHistory = useCallback((open: boolean) => {
+    setHistoryOpen(open);
+    try { localStorage.setItem("history-open", open ? "1" : "0"); } catch { /* storage blocked */ }
+  }, []);
 
   useEffect(() => {
     const onHash = () => setRunId(readRoute());
@@ -59,8 +68,9 @@ export default function App() {
     return () => window.clearInterval(t);
   }, [activeRunId, refreshRuns]);
 
-  const sidebar = (
+  const sidebar = (collapsible: boolean) => (
     <Sidebar
+      onCollapse={collapsible ? () => toggleHistory(false) : undefined}
       runs={runs}
       selectedId={runId}
       activeRunId={activeRunId}
@@ -77,11 +87,11 @@ export default function App() {
 
   return (
     <div className="flex h-full">
-      <aside className="hidden w-72 shrink-0 border-r lg:block">{sidebar}</aside>
+      {historyOpen && <aside className="hidden w-72 shrink-0 border-r lg:block">{sidebar(true)}</aside>}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left" className="w-72 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          {sidebar}
+          {sidebar(false)}
         </SheetContent>
       </Sheet>
 
@@ -93,7 +103,10 @@ export default function App() {
           <span className="text-sm font-semibold">Agent Workbench</span>
         </div>
 
-        <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+        {!historyOpen && <Button variant="outline" size="sm" className="fixed top-3 left-3 z-20 hidden shadow-sm lg:inline-flex"
+          onClick={() => toggleHistory(true)} aria-label="Show run history"><PanelLeftOpen /> History</Button>}
+        <div className={cn("mx-auto w-full px-4 py-4 sm:px-6 sm:py-6 lg:px-8", runId ? "max-w-[1480px]" : "max-w-5xl",
+          !historyOpen && "lg:pt-14")}>
           {runId ? (
             <RunView
               key={runId}
@@ -152,25 +165,26 @@ function LocalModeWarning() {
 
 function EmptyState({ sandboxed }: { sandboxed: boolean }) {
   const steps = [
-    { icon: Cpu, title: "Plan", text: "The model writes a complete Python script for your request." },
-    { icon: FileImage, title: "Execute", text: sandboxed
-      ? "The script runs in a Docker sandbox with a real timeout. Files land in this run's output folder."
-      : "The script runs as a local process with a real timeout (not isolated). Files land in this run's output folder." },
-    { icon: RotateCcw, title: "Evaluate", text: "Errors and output go back to the model. It fixes the code or replies DONE." },
+    { icon: BrainCircuit, who: "Model", cls: "bg-[var(--model-soft)] text-[var(--model)]",
+      text: "Decides what Python to write for your task, how to fix it after an error, and when to reply DONE." },
+    { icon: Workflow, who: "Runtime", cls: "bg-accent text-primary",
+      text: "Application code that runs the loop: sends the task and every result to the model, and applies the stop rules." },
+    { icon: SquareTerminal, who: "Sandbox", cls: "bg-[var(--sandbox-soft)] text-[var(--sandbox)]",
+      text: sandboxed ? "Runs each script in Docker with a real timeout and returns stdout, stderr, the exit code and files."
+        : "Runs each script as a local process (not isolated) with a real timeout and returns stdout, stderr, the exit code and files." },
   ];
   return (
     <div className="rounded-xl border border-dashed bg-card/50 p-5 sm:p-6">
-      <div className="text-sm font-medium">Results will appear here</div>
+      <div className="text-sm font-medium">Who does what in a run</div>
+      <p className="mt-1 text-xs text-muted-foreground">After you press Run, the run page shows every recorded step, who performed it, and what was passed between them.</p>
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        {steps.map((s, i) => (
-          <div key={s.title} className="flex gap-3">
-            <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground">
+        {steps.map((s) => (
+          <div key={s.who} className="flex gap-3">
+            <div className={cn("grid size-8 shrink-0 place-items-center rounded-lg", s.cls)}>
               <s.icon className="size-4" />
             </div>
             <div>
-              <div className="text-sm font-semibold">
-                {i + 1}. {s.title}
-              </div>
+              <div className="text-sm font-semibold">{s.who}</div>
               <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{s.text}</p>
             </div>
           </div>

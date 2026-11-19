@@ -11,7 +11,7 @@ Interactive Swagger docs are served at <http://localhost:8668/docs> when the ser
 | GET | `/api/runs/{id}/events` | SSE progress (`activity`, `code_progress`, `iteration`, `code`, `result`, `done`, ...) |
 | POST | `/api/runs/{id}/stop` | Stop the run and kill the running process |
 | GET | `/api/runs/{id}/artifacts/{path}` | View/download a file (`?iteration=N`, `?download=1`) |
-| GET | `/api/runs/{id}/logs` | Activity log (`?after=<id>` returns only newer entries, `?iteration=N`) |
+| GET | `/api/runs/{id}/logs` | Activity log (`?after=<id>` returns only newer entries, `?iteration=N`). The `calling` entry of each model call carries `data.request` (`{system, messages}`) in full |
 | GET | `/api/runs/{id}/logs/download` | Download the activity log as text (`?iteration=N`) |
 | POST | `/api/runs/{id}/tools/generate_image` | **Called by the run's own code, not the UI** (see [Image tool](#image-tool)). `404` if the server does not offer the tool, `409` if `{id}` is not the running run, `403` if that run did not tick *Image tool* |
 | POST | `/api/execute` | Legacy API: run and wait for the result (sync) |

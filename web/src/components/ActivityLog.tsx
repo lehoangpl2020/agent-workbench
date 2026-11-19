@@ -30,7 +30,9 @@ function formatData(data: Record<string, unknown>) {
     // "files": a file name that appears in the message · "flow": internal key for the Live Flow tab
     // "metric": internal tag that runs/metrics.py counts by (duration_ms, tokens... stay visible)
     .filter(([k]) => k !== "files" && k !== "flow" && k !== "metric")
-    .map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+    // "request": the model call's full input; the Journey inspector shows it, one log line cannot
+    .map(([k, v]) => k === "request" ? "request=<recorded input, see Journey>"
+      : `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
     .join("  ");
 }
 
@@ -96,7 +98,7 @@ export function ActivityLog({ run, logs, selected, logError, onRetry }: Props) {
             </FilterChip>
             {iterations.map((n) => (
               <FilterChip key={n} active={filter === n} onClick={() => setFilter(n)}>
-                Iter {n}
+                Call {n}
               </FilterChip>
             ))}
             <FilterChip active={onlyProblems} onClick={() => setOnlyProblems((v) => !v)} tone="warn">

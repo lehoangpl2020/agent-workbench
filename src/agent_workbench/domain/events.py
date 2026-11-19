@@ -87,6 +87,17 @@ FLOWS = (
 # a message cannot change a run's totals. Only ADD keys; a run stored before the tag existed has no measured calls.
 METRIC_LLM_CALL = "llm_call"
 
+# The `flow="calling"` log entry of every model call also carries `request` (ModelRequest): the system prompt and the
+# message list exactly as core/planner.py hands them to the provider adapter (after redact()). The adapter may still
+# reshape them for its API (llm/*_chat.py). Runs stored before this key existed have none: the UI says "Not recorded"
+# and never rebuilds it. The text download (runlog.format_log_line) summarizes it instead of printing it.
+REQUEST_KEY = "request"
+
+
+class ModelRequest(TypedDict):
+    system: str
+    messages: list[dict[str, str]]  # {"role": "user" | "assistant", "content": str}
+
 
 # ─── Payloads (what `emit(event, data)` receives) ─────────────────
 class SessionEvent(TypedDict):

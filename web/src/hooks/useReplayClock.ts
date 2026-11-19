@@ -2,59 +2,68 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { replayGap, type StudioStep } from "@/lib/studio";
 
 /**
- * Replay playback over recorded steps. It only moves a cursor through data that is already loaded:
- * it never calls the backend, a model or the sandbox. `active` is false while the Live view is shown.
- * Waits are the recorded gaps, clamped by `replayGap`; Pause keeps the time left on the current step.
+ * Replay playback over recorded steps. It only moves the shared selection through data that is already loaded:
+ * it never calls the backend, a model or the sandbox. `order` lists the step indices playback visits (the meaningful
+ * ones); waits are the recorded gaps, clamped by `replayGap`. Pause keeps the time left on the current step.
  */
-export function useReplayClock(steps: StudioStep[], active: boolean) {
-  const [cursor, setCursor] = useState(0);
+export function useReplayClock({ steps, order, index, onStep, active }: {
+  steps: StudioStep[];
+  order: number[];
+  index: number;
+  onStep: (index: number) => void;
+  active: boolean;
+}) {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [animatedKey, setAnimatedKey] = useState<string | null>(null);
   const remaining = useRef<{ key: string; ms: number } | null>(null);
-  const last = steps.length - 1;
+  const step = useRef(onStep);
+  step.current = onStep;
 
   useEffect(() => {
     if (!active || !playing) return;
-    const current = steps[cursor];
-    const next = steps[cursor + 1];
-    if (!current || !next) { setPlaying(false); return; }
+    const current = steps[index];
+    const nextIndex = order.find(i => i > index);
+    const next = nextIndex != null ? steps[nextIndex] : undefined;
+    if (!current || !next || nextIndex == null) { setPlaying(false); return; }
     const full = replayGap(current, next) / speed;
     const ms = remaining.current?.key === current.key ? remaining.current.ms : full;
     const started = performance.now();
     const t = window.setTimeout(() => {
       remaining.current = null;
       setAnimatedKey(next.key);
-      setCursor(cursor + 1);
+      step.current(nextIndex);
     }, ms);
     return () => {
       window.clearTimeout(t);
       remaining.current = { key: current.key, ms: Math.max(0, ms - (performance.now() - started)) };
     };
-  }, [active, playing, cursor, speed, steps]);
+  }, [active, playing, index, speed, steps, order]);
 
-  /** Jump to a step and pause. */
-  const seek = useCallback((i: number) => {
+  useEffect(() => { if (!active) setPlaying(false); }, [active]);
+
+  /** Stop playback (a manual jump also calls this). */
+  const pause = useCallback(() => {
     remaining.current = null;
-    setAnimatedKey(null);
     setPlaying(false);
-    setCursor(Math.max(0, Math.min(last, i)));
-  }, [last]);
+    setAnimatedKey(null);
+  }, []);
 
-  /** Play from the first step (used when entering Replay and by "Restart"). */
+  /** Play from the first step. */
   const restart = useCallback(() => {
-    seek(0);
-    setAnimatedKey(steps[0]?.key ?? null);
-    setPlaying(steps.length > 1);
-  }, [seek, steps]);
+    remaining.current = null;
+    const first = order[0] ?? 0;
+    step.current(first);
+    setAnimatedKey(steps[first]?.key ?? null);
+    setPlaying(order.length > 1);
+  }, [order, steps]);
 
-  const pause = useCallback(() => setPlaying(false), []);
-
+  const atEnd = order.length === 0 || index >= (order.at(-1) ?? 0);
   const toggle = useCallback(() => {
     if (playing) return setPlaying(false);
-    if (cursor >= last) { seek(0); setAnimatedKey(steps[0]?.key ?? null); }
+    if (atEnd) return restart();
     setPlaying(true);
-  }, [playing, cursor, last, seek, steps]);
+  }, [playing, atEnd, restart]);
 
-  return { cursor, playing, speed, setSpeed, animatedKey, seek, restart, pause, toggle };
+  return { playing, speed, setSpeed, animatedKey, pause, restart, toggle, atEnd };
 }
