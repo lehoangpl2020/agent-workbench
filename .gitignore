@@ -8,8 +8,15 @@ web/dist/
 # UI build copied into the server (the Dockerfile rebuilds it)
 static/
 
-# Runtime data: SQLite history + artifacts of each run
+# Runtime data: SQLite history + artifacts of each run (data/db/ also holds migration backups)
 data/
+
+# SQLite files, in case one ends up outside data/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.db.bak*
 
 # Python
 .venv/

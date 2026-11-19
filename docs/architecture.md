@@ -78,7 +78,7 @@ A run whose exit code is 0 but whose first stdout line looks like an error (for 
 <RUNS_DIR>/<run_id>/snapshots/01/       copy of the files changed in iteration 1 → lets you view that exact iteration
 ```
 
-- Docker Compose: volume `agent-db` (SQLite, visible to the server only) and volume `agent-runs` (server `/data/runs` = sandbox `/workspace/runs`).
+- Docker Compose: bind mount `./data/db` → `/data/db` (SQLite at `data/db/agent.db` on the host, readable with DB Browser for SQLite; see [troubleshooting](troubleshooting.md#opening-the-sqlite-database-in-db-browser-for-sqlite)) and volume `agent-runs` (server `/data/runs` = sandbox `/workspace/runs`).
 - On every run, `/workspace/output` is symlinked to the current run's `output/`, so a prompt that says "save to /workspace/output" stays valid while files from different runs do not mix.
 - `GET /api/runs/{id}/artifacts/{path}` only returns files inside that run's `output/` (or snapshot), after resolving the path. Symlinks pointing outside and `../` both return 404.
 

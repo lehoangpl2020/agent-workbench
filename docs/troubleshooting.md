@@ -66,11 +66,67 @@ docker exec agent-workbench-sandbox ls -R /workspace/runs/<run_id>
 docker exec -it agent-workbench-sandbox bash                 # a shell inside the sandbox
 
 docker compose up -d --force-recreate sandbox     # a clean sandbox (drops auto-installed packages)
-docker compose down                               # stop, KEEP history + artifacts (volumes agent-db, agent-runs)
-docker compose down -v                            # stop and DELETE history + artifacts
+docker compose down                               # stop, KEEP history + artifacts (data/db/agent.db, volume agent-runs)
+docker compose down -v                            # stop and DELETE the run artifacts (volume agent-runs); never needed for the database
 ```
 
-Run history (prompts, code, output) lives in the `agent-db` / `agent-runs` volumes under Compose, or in `data/` when running with Python. When sharing the project, **never** include `.env`, `data/` or `.venv/`.
+Run history (prompts, code, output) lives in `data/db/agent.db` (a bind mount) and the `agent-runs` volume under Compose, or in `data/` when running with Python. When sharing the project, **never** include `.env`, `data/` or `.venv/`: `data/` holds the unredacted history and any migration backups.
+
+### Opening the SQLite database in DB Browser for SQLite
+
+Compose mounts `./data/db` into the server container as `/data/db`, so the live database is a normal file on the host: `data\db\agent.db` in the repository root (the container still uses `DB_PATH=/data/db/agent.db`). It is Git-ignored.
+
+1. Start the stack once (`docker compose up -d --build`) so the file exists.
+2. In DB Browser for SQLite choose **File → Open Database Read Only** and select `data\db\agent.db`. Use read-only so you cannot lock or change the history by accident; the tables are `runs`, `iterations` and `run_logs`.
+3. DB Browser shows a snapshot of what it read. To see new runs or log entries, use **Refresh** (or close and reopen the file). Do not leave a transaction open in the *Execute SQL* tab while the server is writing.
+
+The file is a plain SQLite database, so copying it while a run is active may give an inconsistent copy; stop the server first (`docker compose stop agent-server`) if you want to copy it.
+
+### Migrating an existing history from the old `agent-db` volume (once)
+
+Older versions kept the database in the named volume `agent-workbench_agent-db`. To move it to `data/db/agent.db` without losing history, run this from the repository root in PowerShell. It never deletes the volume, and it refuses to overwrite an existing `data\db\agent.db`.
+
+```powershell
+# 1. Wait until no run is active: "active_run_id" must be null.
+curl.exe -s http://localhost:8668/health
+
+# 2. Stop only the server (never `docker compose down -v`). The sandbox keeps running.
+docker compose stop agent-server
+
+# 3. Copy. The script (a) saves a raw copy of every file in the volume, including any -wal/-shm files,
+#    under data\db-backups\, (b) writes a consistent database with SQLite's backup API (which also
+#    applies WAL content), and (c) checks integrity and row counts.
+New-Item -ItemType Directory -Force data\db, data\db-backups | Out-Null
+@'
+import glob, os, shutil, sqlite3, sys, time
+src, dst = "/src/agent.db", "/dst/db/agent.db"
+if os.path.exists(dst):
+    sys.exit(f"{dst} already exists: inspect it and back it up before migrating")
+stamp = time.strftime("%Y%m%d-%H%M%S")
+raw = f"/dst/db-backups/agent-db-volume-{stamp}"
+os.makedirs(raw)
+for f in glob.glob(src + "*"):
+    shutil.copy2(f, raw)
+s = sqlite3.connect(src)
+d = sqlite3.connect(dst)
+s.backup(d)
+tables = [r[0] for r in s.execute("select name from sqlite_master where type='table' and name not like 'sqlite_%'")]
+for t in tables:
+    a = s.execute(f'select count(*) from "{t}"').fetchone()[0]
+    b = d.execute(f'select count(*) from "{t}"').fetchone()[0]
+    print(f"{t}: source={a} copy={b}", "OK" if a == b else "MISMATCH")
+    if a != b:
+        sys.exit(1)
+print("integrity_check:", d.execute("pragma integrity_check").fetchone()[0])
+print("raw backup:", raw)
+'@ | docker run --rm -i -v agent-workbench_agent-db:/src -v "${PWD}\data:/dst" --entrypoint python agent-workbench-agent-server -
+
+# 4. Start the server on the new bind mount and check that the history is still there.
+docker compose up -d agent-server
+curl.exe -s http://localhost:8668/api/runs
+```
+
+Keep the `agent-workbench_agent-db` volume and `data\db-backups\` until you are happy with the result; the volume is the recovery copy. To roll back, restore the old `agent-db:/data/db` mount in `docker-compose.yml` and start the server again. Run artifacts are not part of this migration: `agent-runs` is unchanged.
 
 ## 4. Debugging the server in VS Code (hybrid)
 

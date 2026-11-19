@@ -13,7 +13,7 @@ services:
       - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-8668}:8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - agent-db:/data/db          # SQLite history (only the server sees it)
+      - ./data/db:/data/db         # SQLite history, openable from the host: data/db/agent.db (see docs/troubleshooting.md section 3)
       - agent-runs:/data/runs      # code + artifacts of each run (shared with the sandbox)
     environment:
       # Read from the shell or the .env file next to this file; only the backend has the keys.
@@ -66,5 +66,5 @@ services:
     # Network is on for auto pip install; for full isolation: network_mode: none
 
 volumes:
-  agent-db:
+  # The old agent-db volume is no longer mounted. Do not delete it: it is the recovery copy from the migration.
   agent-runs:

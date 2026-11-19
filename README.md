@@ -68,7 +68,8 @@ Open <http://localhost:8668>. Check the stack with `curl http://localhost:8668/h
 
 - Port 8668 is bound to `127.0.0.1` only. If it is taken, set `HOST_PORT` in `.env`.
 - The Compose project is named `agent-workbench`, with its own container (`agent-workbench-sandbox`), image and volumes, so it does not collide with other Compose projects.
-- History and artifacts live in Docker volumes and survive `docker compose down`. `docker compose down -v` deletes them.
+- History is a SQLite file on your machine, `data/db/agent.db` (bind mount, Git-ignored); run artifacts live in the `agent-runs` Docker volume. Both survive `docker compose down`; `docker compose down -v` deletes the artifacts.
+- To browse the history in DB Browser for SQLite, open `data\db\agent.db` read-only (File → Open Database Read Only) and refresh or reopen it to see new data. Upgrading from the old `agent-db` volume? See [docs/troubleshooting.md](docs/troubleshooting.md#3-inspecting-and-cleaning-up-data) for the one-time migration.
 
 > **Security:** the server executes code written by a model and has **no authentication**. It mounts the Docker socket to control the sandbox. Keep it on `127.0.0.1`, and do not expose it to a LAN or the internet.
 
@@ -94,7 +95,7 @@ docker compose ps                   # agent-server should become "healthy"
 curl http://localhost:8668/health
 ```
 
-- **History is kept.** Runs and artifacts live in the `agent-db` and `agent-runs` volumes, which survive a rebuild and `docker compose down`. Only `docker compose down -v` deletes them.
+- **History is kept.** The database is `data/db/agent.db` and the artifacts are in the `agent-runs` volume; both survive a rebuild and `docker compose down`. `docker compose down -v` deletes the artifacts, and deleting `data/` deletes the history.
 - **Changed `.env` or a key?** Recreate without rebuilding: `docker compose up -d --force-recreate agent-server`.
 - **Want a clean sandbox** (drops packages the agent installed)? `docker compose up -d --force-recreate sandbox`.
 - **Start over completely** (containers only, history kept): `docker compose down`, then `docker compose up -d --build`.
