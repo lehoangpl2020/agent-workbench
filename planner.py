@@ -13,7 +13,7 @@ from events import METRIC_LLM_CALL, Flow
 from llm_providers import ChatClient, ProviderError, ProviderRegistry
 from model_catalog import ModelSpec, default_spec
 from parsing import extract_partial_json_string, parse_response
-from prompts import SYSTEM_PROMPT, build_messages
+from prompts import build_messages, system_prompt
 from schemas import CodeBlock, AgentState
 from runlog import ERROR, INFO, WARN, LogFn, no_log
 
@@ -53,8 +53,12 @@ class LLMPlanner:
         chat: ChatClient | None = None,
         registry: ProviderRegistry | None = None,
         max_output_tokens: int | None = None,
+        image_tool_max: int | None = None,
     ):
         self.spec = spec or default_spec()
+        # Requests allowed per run, or None when the server offers no image tool. The prompt only mentions the tool
+        # for a run whose `state.image_tool` is set; any other run gets exactly SYSTEM_PROMPT.
+        self.image_tool_max = image_tool_max
         # Only create the client of the selected provider (Ollama does not need an Anthropic key...)
         self.chat = chat or (registry or ProviderRegistry()).create(self.spec)
         self.model = self.spec.id
@@ -96,7 +100,8 @@ class LLMPlanner:
             timing: dict[str, int] = {}   # _stream fills first_token_ms when the first token arrives
             # `metric` marks this entry as the measurement of ONE model call (events.METRIC_LLM_CALL)
             try:
-                response = await self._stream(messages, on_progress, log, started, timing)
+                response = await self._stream(messages, on_progress, log, started, state.timeout_seconds, timing,
+                                              self.image_tool_max if state.image_tool else None)
             except ProviderError as e:
                 await log(ERROR, "llm", f"Model call failed after {time.monotonic() - started:.1f}s: {e}",
                           provider=self.provider, model=self.model, error_kind=e.kind, http_status=e.status,
@@ -177,8 +182,8 @@ class LLMPlanner:
                       "the start of the conversation may have been cut off", input_tokens=used, num_ctx=window)
 
     async def _stream(self, messages: list[dict], on_progress: ProgressFn | None,
-                      log: LogFn = no_log, started: float | None = None,
-                      timing: dict[str, int] | None = None):
+                      log: LogFn = no_log, started: float | None = None, timeout_seconds: int = 30,
+                      timing: dict[str, int] | None = None, image_tool_max: int | None = None):
         """Calls the provider in streaming mode; on_progress receives code that is still being written (extracted from unclosed JSON)."""
         text = ""
         last_sent = 0.0
@@ -199,4 +204,5 @@ class LLMPlanner:
                     explanation = extract_partial_json_string(text, "thinking") or ""
                     await on_progress(code, explanation)
 
-        return await self.chat.stream(SYSTEM_PROMPT, messages, self.max_tokens, on_text)
+        system = system_prompt(image_tool_max=image_tool_max, timeout_seconds=timeout_seconds)
+        return await self.chat.stream(system, messages, self.max_tokens, on_text)

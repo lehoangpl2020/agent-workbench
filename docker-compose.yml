@@ -20,6 +20,12 @@ services:
       # If a provider has no key, only that provider is unavailable.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Image tool (OpenAI image model, billed by OpenAI): off unless IMAGE_TOOL=true in .env and OPENAI_API_KEY is set.
+      # The sandbox reaches this server by its service name; the key itself never leaves this container.
+      - IMAGE_TOOL=${IMAGE_TOOL:-false}
+      - IMAGE_MODEL=${IMAGE_MODEL:-gpt-image-1-mini}
+      - IMAGE_MAX_PER_RUN=${IMAGE_MAX_PER_RUN:-4}
+      - IMAGE_TOOL_URL=http://agent-server:8000
       # Price table for the cost estimate (JSON, USD per 1M tokens). Empty = the UI shows tokens and time only.
       - MODEL_PRICING=${MODEL_PRICING:-}
       # Ollama runs on the host machine: inside the container "localhost" is the container itself,

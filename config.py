@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
+from image_tool import DEFAULT_MAX_PER_RUN, DEFAULT_MODEL as DEFAULT_IMAGE_MODEL, ImageToolSettings
 from llm_providers import ProviderSettings
 from metrics import load_pricing
 
@@ -61,6 +62,7 @@ class Settings:
     # needs no CORS; only the Vite dev server (:5173) does.
     cors_origins: tuple[str, ...]
     providers: ProviderSettings
+    image_tool: ImageToolSettings     # opt-in tool: the code in the sandbox asks the server for an image (image_tool.py)
     # Cost estimate (metrics.py): USD per 1M tokens, keyed "provider/model". Empty = tokens and time only; the code has no prices.
     model_pricing: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     model_pricing_warnings: tuple[str, ...] = ()   # why part of MODEL_PRICING was ignored; server.py logs them at startup
@@ -70,6 +72,7 @@ class Settings:
         env = os.environ if env is None else env
         data_dir = Path(env.get("DATA_DIR") or base_dir / "data")
         max_output = env.get("MAX_OUTPUT_TOKENS")
+        port = _int(env, "PORT", 8668)
         pricing, pricing_warnings = load_pricing(env.get("MODEL_PRICING"))
         return cls(
             use_docker=_flag(env.get("USE_DOCKER", "false")),
@@ -85,9 +88,15 @@ class Settings:
             runs_dir=Path(env.get("RUNS_DIR") or data_dir / "runs"),
             static_dir=Path(env.get("STATIC_DIR") or base_dir / "static"),
             host=env.get("HOST", "127.0.0.1"),
-            port=_int(env, "PORT", 8668),
+            port=port,
             cors_origins=tuple(o.strip() for o in env.get("CORS_ORIGINS", DEFAULT_CORS_ORIGINS).split(",") if o.strip()),
             providers=ProviderSettings.from_env(env),
+            image_tool=ImageToolSettings(
+                enabled=_flag(env.get("IMAGE_TOOL", "false")),
+                model=env.get("IMAGE_MODEL") or DEFAULT_IMAGE_MODEL,
+                url=(env.get("IMAGE_TOOL_URL") or f"http://127.0.0.1:{port}").rstrip("/"),
+                max_per_run=_int(env, "IMAGE_MAX_PER_RUN", DEFAULT_MAX_PER_RUN),
+            ),
             model_pricing=pricing,
             model_pricing_warnings=tuple(pricing_warnings),
         )

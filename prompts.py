@@ -42,6 +42,36 @@ Respond ONLY with valid JSON (no markdown fences):
 }
 """
 
+# Appended to SYSTEM_PROMPT only when the image tool is on (IMAGE_TOOL=true), so a default run sends exactly the
+# text above. {max_images} and {timeout} are filled from the server settings and the run's own limits.
+IMAGE_TOOL_PROMPT = """
+## Image tool
+Code cannot draw photos, illustrations, 3D-looking scenes or artwork. For those, ask the image model instead of
+using matplotlib/Pillow drawing. Keep using code for charts, diagrams and anything built from data.
+
+    import os, requests
+    r = requests.post(os.environ["IMAGE_TOOL_URL"], timeout=200, json={{
+        "prompt": "...", "size": "1024x1024", "quality": "medium", "filename": "cover.png"}})
+    print(r.status_code, r.json())
+
+- prompt: describe subject, style, lighting, camera angle and composition in detail (English works best).
+- size: "1024x1024", "1536x1024" (landscape) or "1024x1536" (portrait). quality: "low", "medium" or "high".
+  background: "transparent" for a cut-out. filename is optional; the PNG is saved in /workspace/output/.
+- On success the JSON has path, filename, bytes and requests_left. On failure it has "detail": read it and change
+  the prompt if it is a safety block. Do NOT use try/except to hide a failure.
+- Each call costs money and takes 20-120 seconds. Make one image per code run, at most {max_images} requests in this
+  run, and do not regenerate an image unless the user asked.
+- This run's code timeout is {timeout}s. If it is below 120s a call will probably be killed: use quality "low" and,
+  if it still times out, say in your answer that the user must raise the timeout.
+"""
+
+
+def system_prompt(*, image_tool_max: int | None = None, timeout_seconds: int = 30) -> str:
+    """The system prompt for one model call. `image_tool_max` = requests allowed per run, None = tool is off."""
+    if image_tool_max is None:
+        return SYSTEM_PROMPT
+    return SYSTEM_PROMPT + IMAGE_TOOL_PROMPT.format(max_images=image_tool_max, timeout=timeout_seconds)
+
 
 # How much of a failed run's stderr the model gets back. A traceback ends with the line that names the error,
 # so a long one is cut at the START, not the end.

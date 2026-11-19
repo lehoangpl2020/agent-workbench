@@ -327,6 +327,7 @@
       "activity_phase": "finished",
       "answer": "ok\r\n",
       "executor": "local",
+      "image_tool": 0,
       "iteration_count": 3,
       "max_iterations": 4,
       "message": "The model confirmed the task is complete.",

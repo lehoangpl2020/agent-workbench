@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { AlertCircle, ArrowRight, BrainCircuit, CheckCircle2, ListChecks, Loader2, Play, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
+import { AlertCircle, ArrowRight, BrainCircuit, CheckCircle2, ImagePlus, ListChecks, Loader2, Play, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,11 @@ export interface ComposerDraft {
   timeoutSeconds?: number;
   provider?: string | null;
   model?: string;
+  imageTool?: boolean;
 }
+
+// One image call takes 20-120 s and the code is killed at the execution timeout, so a shorter one cannot work.
+const IMAGE_TOOL_MIN_TIMEOUT = 120;
 
 interface Props {
   config: AppConfig | null;
@@ -31,6 +35,8 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
   const [prompt, setPrompt] = useState(draft?.prompt ?? "");
   const [maxIterations, setMaxIterations] = useState<number | "">(draft?.maxIterations ?? "");
   const [timeoutSeconds, setTimeoutSeconds] = useState<number | "">(draft?.timeoutSeconds ?? "");
+  // Off by default: every image is billed by OpenAI, so each run has to ask for it
+  const [imageTool, setImageTool] = useState<boolean>(draft?.imageTool ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<{ message: string; activeRunId?: string } | null>(null);
   // The catalog comes from the backend (model_catalog.py); the frontend keeps no list of its own.
@@ -138,9 +144,21 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
   const [minIter, maxIter] = config?.limits.max_iterations ?? [1, 20];
   const [minTimeout, maxTimeout] = config?.limits.timeout_seconds ?? [1, 300];
   const busy = Boolean(activeRunId);
+  const imageCfg = config?.image_tool;
+  // "Edit & re-run" can carry a ticked box while the server no longer offers the tool: say so, never tick or drop it silently
+  const imageBlocked = imageTool && imageCfg ? !imageCfg.available : false;
+  const imageTimeoutTooShort = imageTool && timeoutSeconds !== "" && Number(timeoutSeconds) < IMAGE_TOOL_MIN_TIMEOUT;
   const canSubmit =
     prompt.trim().length > 0 && !submitting && !busy && maxIterations !== "" && timeoutSeconds !== "" &&
-    Boolean(modelInfo?.ready);
+    Boolean(modelInfo?.ready) && !imageBlocked;
+
+  function chooseImageTool(on: boolean) {
+    setImageTool(on);
+    // Ticking the box raises a too-short timeout for the user; it never lowers one and never changes it when unticked
+    if (on && timeoutSeconds !== "" && Number(timeoutSeconds) < IMAGE_TOOL_MIN_TIMEOUT) {
+      setTimeoutSeconds(clamp(IMAGE_TOOL_MIN_TIMEOUT, minTimeout, maxTimeout));
+    }
+  }
 
   async function submit() {
     if (!canSubmit) return;
@@ -153,6 +171,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
         timeout_seconds: Number(timeoutSeconds),
         provider,
         model,
+        image_tool: imageTool,
       });
       onStarted(run);
     } catch (e) {
@@ -299,6 +318,42 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
           notReady={notReady}
           onRecheck={() => void loadCatalog()}
         />
+        <div className="flex items-start gap-2.5 pt-1">
+          <input
+            id="image-tool"
+            type="checkbox"
+            checked={imageTool}
+            // Unavailable and unticked: nothing to turn on. Unavailable but ticked (old draft): it must stay untickable.
+            disabled={!imageCfg || (!imageCfg.available && !imageTool)}
+            onChange={(e) => chooseImageTool(e.target.checked)}
+            aria-describedby="image-tool-help"
+            className="mt-0.5 size-4 shrink-0 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+          />
+          <div className="min-w-0 text-xs">
+            <Label htmlFor="image-tool" className="inline-flex items-center gap-1.5 text-sm font-medium">
+              <ImagePlus className="size-4 text-muted-foreground" /> Image tool
+              <span className="font-mono text-xs font-normal text-muted-foreground">{imageCfg?.model}</span>
+            </Label>
+            <p id="image-tool-help" className="mt-0.5 text-muted-foreground">
+              {imageCfg && !imageCfg.available
+                ? imageCfg.reason
+                : `Lets the agent make photos and illustrations that code cannot draw. Billed per image by OpenAI, at most ${
+                    imageCfg?.max_per_run ?? "a few"
+                  } per run. Off unless you tick it.`}
+            </p>
+            {imageBlocked && (
+              <p className="mt-1 flex items-start gap-1 font-medium text-warning">
+                <TriangleAlert className="mt-px size-3.5 shrink-0" /> The server cannot offer it now. Untick it to run.
+              </p>
+            )}
+            {imageTimeoutTooShort && !imageBlocked && (
+              <p className="mt-1 flex items-start gap-1 font-medium text-warning">
+                <TriangleAlert className="mt-px size-3.5 shrink-0" /> An image takes 20–120 s. Set the execution timeout
+                to at least {IMAGE_TOOL_MIN_TIMEOUT} s or the code is killed first.
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 border-t bg-muted/40 px-4 py-3 sm:flex-row sm:items-end sm:px-5">

@@ -25,7 +25,7 @@ from pathlib import Path
 from agent import CodeAgent
 from events import Event, Flow, artifact_size
 from runlog import WARN, make_entry
-from schemas import AgentRequest, AgentResponse, ExecutionStatus
+from schemas import AgentRequest, AgentResponse, AgentState, ExecutionStatus
 from store import (
     ITER_DONE,
     ITER_EXECUTING,
@@ -50,6 +50,7 @@ class RunBusyError(Exception):
 class ActiveRun:
     run_id: str
     task: asyncio.Task | None = None
+    state: AgentState | None = None     # lets log() tag an entry with the iteration that is running now
     subscribers: list[asyncio.Queue] = field(default_factory=list)
     finished: bool = False
     stop_requested: bool = False
@@ -87,9 +88,10 @@ class RunManager:
             state.model,
             self.agent.executor.describe(),
             provider=state.provider,
+            image_tool=state.image_tool,
         )
 
-        active = ActiveRun(run_id=state.session_id)
+        active = ActiveRun(run_id=state.session_id, state=state)
         queue = None
         if subscribe:
             queue = asyncio.Queue()
@@ -110,6 +112,22 @@ class RunManager:
             active.finished = True
         for q in list(active.subscribers):
             q.put_nowait((event, data))
+
+    def image_tool_enabled(self, run_id: str) -> bool:
+        """Whether the ACTIVE run `run_id` was started with the image tool ticked."""
+        active = self._active
+        return bool(active and active.run_id == run_id and not active.finished
+                    and active.state and active.state.image_tool)
+
+    def log(self, run_id: str, level: str, source: str, message: str, **data) -> bool:
+        """Adds an entry to the activity log of the ACTIVE run, for code that acts outside the loop (the image tool).
+        Returns False when `run_id` is not the active run."""
+        active = self._active
+        if not active or active.run_id != run_id or active.finished:
+            return False
+        iteration = active.state.current_iteration if active.state else 0
+        self._publish(active, Event.LOG, make_entry(iteration or None, level, source, message, **data))
+        return True
 
     async def _run(self, request, state, workspace, active: ActiveRun) -> AgentResponse | None:
         async def emit(event: str, data: dict) -> None:

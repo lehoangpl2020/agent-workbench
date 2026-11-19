@@ -221,6 +221,7 @@ class CodeAgent:
             timeout_seconds=request.timeout_seconds or self.default_timeout,
             provider=spec.provider,
             model=spec.id,
+            image_tool=bool(request.image_tool),
         )
 
     def planner_for(self, state: AgentState):

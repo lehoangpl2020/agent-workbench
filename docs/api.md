@@ -13,6 +13,7 @@ Interactive Swagger docs are served at <http://localhost:8668/docs> when the ser
 | GET | `/api/runs/{id}/artifacts/{path}` | View/download a file (`?iteration=N`, `?download=1`) |
 | GET | `/api/runs/{id}/logs` | Activity log (`?after=<id>` returns only newer entries, `?iteration=N`) |
 | GET | `/api/runs/{id}/logs/download` | Download the activity log as text (`?iteration=N`) |
+| POST | `/api/runs/{id}/tools/generate_image` | **Called by the run's own code, not the UI** (see [Image tool](#image-tool)). `404` if the server does not offer the tool, `409` if `{id}` is not the running run, `403` if that run did not tick *Image tool* |
 | POST | `/api/execute` | Legacy API: run and wait for the result (sync) |
 | POST | `/api/execute/stream` | Legacy API: SSE (`session`, `iteration`, `code`, `result`, `done`, `error` + the newer events) |
 | GET | `/api/config` | Defaults and limits used by the UI form |
@@ -60,6 +61,28 @@ The numbers above are only an example of the format; check the provider's curren
 - A trivial task such as "2 + 2" costs **two model calls**: one to write the code and one to confirm `DONE`.
 
 The full status table is in [architecture.md](architecture.md#run-status).
+
+### Image tool
+
+Code written by the model draws charts and diagrams well, but not photos or illustrations. Two switches control the tool:
+
+1. **The server offers it:** `IMAGE_TOOL=true` and `OPENAI_API_KEY` set (not with ephemeral sandbox containers). `GET /api/config` reports this as `image_tool: {available, reason, model, max_per_run}`; `reason` says why it is not available.
+2. **The run asks for it:** the *Image tool* checkbox in the UI, or `"image_tool": true` in `POST /api/runs` / `/api/execute*`. It is **off by default**, stored with the run (`runs.image_tool`, returned as `image_tool` in the run and in the history), and a request for it while the server cannot offer it returns `400` with `detail.code = "image_tool_unavailable"` and the reason; no run is created. Runs stored before the option existed read as `false`.
+
+Only a run that asked for it gets the tool described in its system prompt, and the endpoint answers `403` to any other run. The model still only writes Python: the code reads `IMAGE_TOOL_URL` (the run's own URL, set by the executor) and POSTs to it with `requests`. The **server** then calls OpenAI with its key and saves the PNG in that run's `output/`, where the normal artifact collection finds it. The sandbox never receives the key.
+
+```json
+POST {IMAGE_TOOL_URL}
+{"prompt": "a red fox in snow, golden hour, 85mm photo", "size": "1536x1024", "quality": "medium",
+ "background": "auto", "filename": "fox.png"}
+→ {"path": "/workspace/output/fox.png", "filename": "fox.png", "bytes": 1234567, "model": "gpt-image-1-mini", "requests_left": 3}
+```
+
+`size` is `1024x1024`, `1536x1024` or `1024x1536`; `quality` is `low`, `medium` or `high`. Errors come back as `{"detail": "..."}` (`422` bad input, `429` per-run cap reached, `400` OpenAI rejected the prompt, `403` the run did not enable the tool, `409` the run is not active, `503` the image model is retired or not available to the key (set `IMAGE_MODEL` to one the key can use), `502`/`504` OpenAI unreachable or too slow) and are written to the run's activity log.
+
+- **Cost and limits:** every image is billed by OpenAI. `IMAGE_MAX_PER_RUN` (default 4) caps requests per run, failed ones included. A call takes 20-120 s, so set the run's timeout to at least 120 s; with the default 30 s the code is killed first, and the prompt says so to the model.
+- **Where it works:** local mode and the persistent sandbox (Compose). Ephemeral sandbox containers have no network, so the tool stays off and the server logs why.
+- **Not covered:** there is no authentication. Anything that can reach the server can call this endpoint for the running run, as it can call every other endpoint; that is why the server is localhost-only by default.
 
 ## CLI client
 
@@ -157,6 +180,7 @@ This is a learning/showcase project. What exists today, and what does **not**:
 | Server (Compose) | Mounts `/var/run/docker.sock` to control the sandbox, which gives it very broad control over the host's Docker. |
 | Timeout | 30 seconds per code run by default (`timeout -k` in the sandbox + a Python safety net); Stop kills the real process. |
 | Output | stdout is truncated to 10 KB and stderr to 5 KB. |
+| Image tool | Off unless the server enables it **and** the user ticks it for that run. Then code in the sandbox can make the server spend OpenAI credit (capped per run); the key stays in the server. The endpoint only answers for the running run and never writes through a symlink or outside `output/`. |
 | Secrets | API keys exist only in the backend; the sandbox does not receive keys; local mode filters environment variables containing KEY/TOKEN/SECRET/PASSWORD out of the subprocess; the activity log is redacted. Prompts, code and stdout stored in SQLite are **not** redacted. |
 
 These measures have not been independently reviewed. Do not expose the server beyond localhost.

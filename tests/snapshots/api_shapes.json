@@ -8,6 +8,12 @@
       "timeout_seconds": "int"
     },
     "executor": "str",
+    "image_tool": {
+      "available": "bool",
+      "max_per_run": "int",
+      "model": "str",
+      "reason": "str"
+    },
     "limits": {
       "max_iterations": [
         "int"
@@ -70,6 +76,7 @@
     "executor": "str",
     "finished_at": "str",
     "id": "str",
+    "image_tool": "bool",
     "iteration_count": "int",
     "iterations": [
       {
@@ -138,6 +145,7 @@
         "created_at": "str",
         "finished_at": "str",
         "id": "str",
+        "image_tool": "bool",
         "iteration_count": "int",
         "max_iterations": "int",
         "message": "str",
