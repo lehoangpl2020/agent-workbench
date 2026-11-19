@@ -90,7 +90,7 @@ Every real step calls `emit("log", entry)` exactly where it happens. `RunManager
 | source | Emitted by | Examples |
 |---|---|---|
 | `runtime` | `agent.py`, `runs.py` | Run started (model, executor, limits), sending the error/result back to the model, Stop, Run finished |
-| `llm` | `planner.py` | Calling model, First token, Response received (timing, stop_reason, tokens when available), parse OK/error |
+| `llm` | `planner.py` | Calling model, First token, Response received (timing, stop_reason, tokens when available), parse OK/error, and a WARN when the prompt uses 90% or more of an Ollama model's `num_ctx` |
 | `model` | `agent.py` | The short explanation the model returned (the model's own words, not a runtime action) |
 | `sandbox` | `executor.py` | Writing `code/iter_NN.py`, start of execution, package install, re-run, exit code/time/timeout, artifacts + sizes |
 

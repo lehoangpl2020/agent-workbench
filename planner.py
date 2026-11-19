@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 # How many times the LLM may retry after returning badly formatted JSON (a truncated response is not retried).
 MAX_FORMAT_RETRIES = 1
+# Warn when a prompt uses at least this share of the model's context window (Ollama `num_ctx`)
+CONTEXT_WARN_RATIO = 0.9
 
 
 # Callback while the model is streaming: (code_so_far, explanation_so_far)
@@ -99,6 +101,7 @@ class LLMPlanner:
             content = response.text
             await log(INFO, "llm", f"Response received in {time.monotonic() - started:.1f}s",
                       stop_reason=response.stop_reason, chars=len(content), flow=Flow.RESPONSE, **response.usage)
+            await self._warn_if_context_nearly_full(response.usage, log)
 
             if response.stop == "refusal":
                 await log(ERROR, "llm", f"Model declined the request (stop_reason={response.stop_reason})")
@@ -149,6 +152,18 @@ class LLMPlanner:
                 ]
 
         raise PlannerOutputError("unreachable")  # pragma: no cover
+
+    async def _warn_if_context_nearly_full(self, usage: dict, log: LogFn) -> None:
+        """
+        The history grows with every iteration and Ollama silently drops the start of a prompt that does not fit
+        `num_ctx`. The provider reports how many prompt tokens it processed (a lower bound when part of the prompt
+        was cached), so say so when that gets close to the window instead of leaving a mysteriously worse model.
+        """
+        window = self.spec.options.get("num_ctx")
+        used = usage.get("input_tokens")
+        if window and used and used >= CONTEXT_WARN_RATIO * window:
+            await log(WARN, "llm", f"The prompt used {used:,} of the {window:,}-token context window (num_ctx): "
+                      "the start of the conversation may have been cut off", input_tokens=used, num_ctx=window)
 
     async def _stream(self, messages: list[dict], on_progress: ProgressFn | None,
                       log: LogFn = no_log, started: float | None = None):
