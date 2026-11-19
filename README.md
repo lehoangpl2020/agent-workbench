@@ -84,6 +84,26 @@ Put keys in `.env` (Compose reads it); never commit that file. Only the provider
 
 The default is Ollama with `qwen3.5:4b` (run `ollama pull qwen3.5:4b` first; the app never pulls models). Pick another provider or model per run in the UI, or via `provider` / `model` in the API. A request that names neither uses the default, and a run never falls back to another model. A missing key, an unreachable Ollama or an unpulled model is reported before the run starts. More: [docs/providers.md](docs/providers.md).
 
+### Rebuilding or recreating the agent
+
+The server image bakes in the root `*.py` files (including `model_catalog.py`) and the built UI, so after changing Python code, the model catalog or anything under `web/`, a restart is not enough: rebuild the image.
+
+```bash
+docker compose up -d --build        # rebuild agent-server (and the sandbox if its Dockerfile changed) and recreate what changed
+docker compose ps                   # agent-server should become "healthy"
+curl http://localhost:8000/health
+```
+
+- **History is kept.** Runs and artifacts live in the `agent-db` and `agent-runs` volumes, which survive a rebuild and `docker compose down`. Only `docker compose down -v` deletes them.
+- **Changed `.env` or a key?** Recreate without rebuilding: `docker compose up -d --force-recreate agent-server`.
+- **Want a clean sandbox** (drops packages the agent installed)? `docker compose up -d --force-recreate sandbox`.
+- **Start over completely** (containers only, history kept): `docker compose down`, then `docker compose up -d --build`.
+- **Bake builder error** (`additional privileges requested`)? Build the images directly; see [docs/troubleshooting.md](docs/troubleshooting.md).
+
+After the rebuild, check the default model: `ollama list` must show `qwen3.5:4b` on the machine that runs Ollama, and the backend must reach it. From the container: `docker compose exec agent-server curl -s http://host.docker.internal:11434/api/tags`. Then open the UI: the Model field should preselect **Ollama (local) / Qwen 3.5 4B** with a *ready* status, and `qwen3.8:latest` and `gemma4:12b` should be listed as well. The app never pulls models; a model that is not pulled is shown as *Not pulled yet*.
+
+Without Docker, restart `python server.py` after changing Python files or the catalog; `npm run dev` reloads the UI by itself.
+
 ### Local development (no Docker, not isolated)
 
 ```bash
