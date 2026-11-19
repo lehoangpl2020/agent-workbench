@@ -17,7 +17,8 @@ from agent_workbench.config import Settings
 from agent_workbench.execution import LocalExecutor
 from agent_workbench.tools.image import DEFAULT_MODEL, ImageRequest, ImageTool, ImageToolError, ImageToolSettings, tool_url
 from agent_workbench.core.prompts import SYSTEM_PROMPT, system_prompt
-from agent_workbench.api.app import build_image_tool, create_app
+from agent_workbench.api.app import create_app
+from agent_workbench.api.bootstrap import build_image_tool
 from tests.conftest import ScriptedPlanner, code, fake_registry, wait_until
 from agent_workbench.storage.workspace import RunWorkspace
 
