@@ -30,7 +30,7 @@ def execute_sync(
         "max_iterations": max_iterations,
         "timeout_seconds": timeout_seconds,
     }
-    # If omitted, the server uses the default in model_catalog.py (Claude Sonnet 4.6)
+    # If omitted, the server uses the default in model_catalog.py (Ollama qwen3.5:4b)
     if provider:
         payload["provider"] = provider
     if model:
@@ -76,7 +76,7 @@ def execute_stream(
         "max_iterations": max_iterations,
         "timeout_seconds": timeout_seconds,
     }
-    # If omitted, the server uses the default in model_catalog.py (Claude Sonnet 4.6)
+    # If omitted, the server uses the default in model_catalog.py (Ollama qwen3.5:4b)
     if provider:
         payload["provider"] = provider
     if model:
@@ -241,11 +241,11 @@ def main():
     )
     parser.add_argument(
         "--provider",
-        help="anthropic | openai | ollama (default: server default, Claude Sonnet 4.6)",
+        help="anthropic | openai | ollama (default: server default, Ollama qwen3.5:4b)",
     )
     parser.add_argument(
         "--model",
-        help="Model ID from the server catalog, e.g. claude-sonnet-4-6, qwen3.5:4b",
+        help="Model ID from the server catalog, e.g. qwen3.5:4b, claude-sonnet-4-6",
     )
     parser.add_argument(
         "--health",

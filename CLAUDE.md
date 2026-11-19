@@ -10,12 +10,12 @@ The shared project guidance is in [AGENTS.md](AGENTS.md); read it first. This fi
 - Prefer small, verifiable changes. When asked to implement or fix something, change the repository rather than only describing the change.
 - Use the dedicated file and search tools for reading and editing files. Use the shell for git, docker, npm and pytest.
 - Ask a question only when the answer would change the approach. Otherwise state a reasonable assumption and continue.
-- Report outcomes faithfully: say which checks you ran (offline tests, Docker sandbox, real model call, UI build) and which you did not. If a check fails, show the failure.
+- Report outcomes faithfully: say which checks you ran (offline tests, real Ollama check, Docker sandbox, full end-to-end, UI build) and which you did not. If a check fails, show the failure. Follow the real-model verification policy in [AGENTS.md](AGENTS.md#real-model-verification-policy-claude-code-codex-and-any-other-assistant).
 
 ## Guardrails
 
 - Do not read or print `.env` or any secret, and do not ask for keys to be pasted into the chat.
-- Ask before: calling a paid model API or starting a run from the UI; adding dependencies; changing a runtime invariant, the SQLite schema, the default model or the default sandbox mode; deleting Docker volumes; adding a license or editing attribution in [NOTICE.md](NOTICE.md); committing or pushing.
+- Ask before: calling a paid model API (Anthropic or OpenAI); adding dependencies; changing a runtime invariant, the SQLite schema, the default model or the default sandbox mode; deleting Docker volumes; adding a license or editing attribution in [NOTICE.md](NOTICE.md); committing or pushing.
 - Never describe the project as production-ready, secure or fully tested; list the missing pieces instead.
 - Keep repository content in English, including comments, UI text, logs and tests.
 

@@ -92,7 +92,7 @@ class AgentRequest(BaseModel):
     # (the last turn only reviews the output and answers DONE). The field name is kept so older clients do not break.
     max_iterations: Optional[int] = Field(default=None, ge=1, le=20)
     timeout_seconds: Optional[int] = Field(default=None, ge=1, le=300)
-    # None → the default in model_catalog.py (Claude Sonnet 4.6). The backend validates against the catalog.
+    # None → the default in model_catalog.py (Ollama qwen3.5:4b). The backend validates against the catalog.
     provider: Optional[str] = Field(default=None, max_length=64)
     model: Optional[str] = Field(default=None, max_length=128)
 

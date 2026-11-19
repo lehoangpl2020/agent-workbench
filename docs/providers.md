@@ -1,6 +1,6 @@
 # Providers and models (Anthropic, OpenAI, Ollama)
 
-The user picks a **provider** and a **model** when creating a run. That choice is stored with the run and stays fixed for every iteration (writing code, fixing errors, the final DONE review). A new run defaults to **Claude Sonnet 4.6** (`anthropic` / `claude-sonnet-4-6`), including requests from the CLI or the legacy API that send no choice.
+The user picks a **provider** and a **model** when creating a run. That choice is stored with the run and stays fixed for every iteration (writing code, fixing errors, the final DONE review). A new run defaults to **Ollama `qwen3.5:4b`** (`ollama` / `qwen3.5:4b`), including requests from the CLI or the legacy API that send no choice, and the UI preselects it. If the default is not available (Ollama unreachable or the model not pulled), creating the run fails with a clear error; the app never switches to another model or provider. Old runs keep their stored provider/model (or none); the default is never written into them.
 
 ## 1. Adding or removing models: edit `model_catalog.py`
 
@@ -15,6 +15,8 @@ The user picks a **provider** and a **model** when creating a run. That choice i
 After editing, rebuild the server image (see section 4). The UI reads the list from `GET /api/providers`; the frontend keeps no list of its own. `tests/test_providers.py::test_catalog_is_consistent` checks that the catalog is valid.
 
 Ollama models must be **pulled by you beforehand** (`ollama pull <model>`). The app never downloads a model.
+
+The Ollama catalog entries use the exact tags from `ollama list`: `qwen3.5:4b` (default), `qwen3.8:latest` and `gemma4:12b`. A tag is matched exactly (`qwen3.8` does not select `qwen3.8:latest` in the catalog). The per-model `options` (`num_ctx`, `think`) and the output cap are application settings; check a model's real capabilities with `ollama show <tag>` instead of inferring them from its name.
 
 ## 2. Configuration (backend environment variables)
 
@@ -59,8 +61,9 @@ docker compose up -d --no-build
 CLI:
 
 ```bash
-python client.py "Compute 17 * 23"                                       # default: Claude Sonnet 4.6
-python client.py --provider ollama --model qwen3.5:4b --stream "Compute 17 * 23"
+python client.py "Compute 17 * 23"                                       # default: ollama / qwen3.5:4b
+python client.py --provider ollama --model qwen3.8:latest --stream "Compute 17 * 23"
+python client.py --provider anthropic --model claude-sonnet-4-6 "Compute 17 * 23"   # billed by Anthropic
 python client.py --provider openai --model gpt-6-luna "Compute 17 * 23"
 ```
 

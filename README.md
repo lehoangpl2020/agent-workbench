@@ -17,7 +17,7 @@ The core of most coding agents is a short loop, but it is easy to hide behind a 
 ## Features (implemented)
 
 - **Agent loop**: Plan → Execute → Evaluate → Retry/Done, implemented once in `CodeAgent.run()` and shared by the sync API, the SSE API and the Run API.
-- **Multiple model providers**, chosen per run and fixed for that run: Anthropic Claude (default: Claude Sonnet 4.6), OpenAI (Responses API) and local Ollama. The catalog lives in `model_catalog.py`. No automatic fallback between providers.
+- **Multiple model providers**, chosen per run and fixed for that run: local Ollama (default: `qwen3.5:4b`), Anthropic Claude and OpenAI (Responses API). The catalog lives in `model_catalog.py`. No automatic fallback between providers.
 - **Three executors**: persistent Docker sandbox (default in Compose), ephemeral Docker container per run, and a local subprocess (development only, not isolated; the UI shows a warning).
 - **Real timeouts and Stop**: timeout inside the sandbox plus a Python safety net; *Stop* kills the running process, not just the task.
 - **Auto `pip install`** for missing modules (persistent sandbox) and **artifact collection** (files and images produced by the code).
@@ -78,18 +78,19 @@ Put keys in `.env` (Compose reads it); never commit that file. Only the provider
 
 | Provider | Configuration |
 |---|---|
-| Anthropic Claude (default) | `ANTHROPIC_API_KEY` |
+| Anthropic Claude | `ANTHROPIC_API_KEY` |
 | OpenAI | `OPENAI_API_KEY` (optional `OPENAI_BASE_URL`) |
-| Ollama (local) | no key; `OLLAMA_BASE_URL` defaults to `http://host.docker.internal:11434` in Compose |
+| Ollama (local, default) | no key; `OLLAMA_BASE_URL` defaults to `http://host.docker.internal:11434` in Compose |
 
-Pick the provider and model per run in the UI, or via `provider` / `model` in the API. A missing key, an unreachable Ollama or an unpulled model is reported before the run starts. More: [docs/providers.md](docs/providers.md).
+The default is Ollama with `qwen3.5:4b` (run `ollama pull qwen3.5:4b` first; the app never pulls models). Pick another provider or model per run in the UI, or via `provider` / `model` in the API. A request that names neither uses the default, and a run never falls back to another model. A missing key, an unreachable Ollama or an unpulled model is reported before the run starts. More: [docs/providers.md](docs/providers.md).
 
 ### Local development (no Docker, not isolated)
 
 ```bash
 python -m venv .venv
 .venv/Scripts/pip install -r requirements-dev.txt     # Linux/macOS: .venv/bin/pip
-export ANTHROPIC_API_KEY=...                          # or use Ollama
+# Default: local Ollama with qwen3.5:4b pulled. For Anthropic/OpenAI, export the key instead (billed by the provider).
+export ANTHROPIC_API_KEY=...                          # optional
 USE_DOCKER=false python server.py                     # API on http://127.0.0.1:8000
 cd web && npm ci && npm run dev                       # UI on http://localhost:5173 (proxies to :8000)
 ```
@@ -106,7 +107,7 @@ In this mode model-written code runs on your machine with your user's permission
 cd web && npm run build
 ```
 
-A test that needs the real Docker sandbox is skipped by default; see the docstring of `tests/test_docker_executor.py` to enable it.
+The offline tests never contact Ollama, Anthropic or OpenAI (they use mock transports and a scripted planner), so they pass whether or not Ollama is running. A test that needs the real Docker sandbox is skipped by default; see the docstring of `tests/test_docker_executor.py` to enable it. When a real model is needed to check a change, use local Ollama with `qwen3.5:4b`; see [AGENTS.md](AGENTS.md#8-verification-and-contribution-workflow).
 
 ## Current limitations
 

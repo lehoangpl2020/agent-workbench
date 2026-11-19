@@ -81,10 +81,13 @@ FIX_FLOW = [step("print(undefined_name)", "Print"), step("print('fixed')", "Fix 
 
 
 # ── Catalog ───────────────────────────────────────
-def test_default_is_claude_sonnet_4_6():
-    assert (DEFAULT_PROVIDER, DEFAULT_MODEL) == ("anthropic", "claude-sonnet-4-6")
+OLLAMA_TAGS = ["qwen3.5:4b", "qwen3.8:latest", "gemma4:12b"]   # exact tags from `ollama list`
+
+
+def test_default_is_ollama_qwen3_5_4b():
+    assert (DEFAULT_PROVIDER, DEFAULT_MODEL) == ("ollama", "qwen3.5:4b")
     spec = resolve(None, None)
-    assert (spec.provider, spec.id, spec.name) == ("anthropic", "claude-sonnet-4-6", "Claude Sonnet 4.6")
+    assert (spec.provider, spec.id, spec.name) == ("ollama", "qwen3.5:4b", "Qwen 3.5 4B")
 
 
 def test_catalog_is_consistent():
@@ -95,7 +98,15 @@ def test_catalog_is_consistent():
         assert models, pid
         assert sum(m.provider_default for m in models) == 1, pid
     assert len(models_for("anthropic")) > 1 and len(models_for("openai")) > 1
-    assert find("ollama", "qwen3.5:4b") is not None
+    assert [m.id for m in models_for("ollama")] == OLLAMA_TAGS
+    assert find(DEFAULT_PROVIDER, DEFAULT_MODEL) is not None
+
+
+def test_existing_cloud_models_are_preserved():
+    assert [m.id for m in models_for("anthropic")] == [
+        "claude-sonnet-4-6", "claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"]
+    assert [m.id for m in models_for("openai")] == ["gpt-6.2-sol", "gpt-6-luna", "gpt-6.2-astra"]
+    assert resolve("anthropic", None).id == "claude-sonnet-4-6"      # still the Anthropic preselection
 
 
 @pytest.mark.parametrize("provider,model,code", [
@@ -117,6 +128,19 @@ def test_resolve_partial_selection():
     assert resolve(None, "gpt-6-luna").provider == "openai"
 
 
+@pytest.mark.parametrize("tag", OLLAMA_TAGS)
+def test_resolve_accepts_exact_ollama_tags(tag):
+    for spec in (resolve("ollama", tag), resolve(None, tag)):
+        assert (spec.provider, spec.id) == ("ollama", tag)
+
+
+@pytest.mark.parametrize("tag", ["qwen3.8", "gemma4", "qwen3.5", "gemma4:latest"])
+def test_resolve_does_not_guess_ollama_tags(tag):
+    with pytest.raises(InvalidModelSelection) as e:
+        resolve("ollama", tag)
+    assert e.value.code == "invalid_model"
+
+
 # ── API: validate + config ───────────────────────
 def test_api_rejects_invalid_selection_and_creates_no_run(data_dir):
     with TestClient(app_with(data_dir, RecordingRegistry([]))) as client:
@@ -133,7 +157,7 @@ def test_providers_endpoint_lists_catalog_and_status(data_dir):
     registry = RecordingRegistry([], openai=False, pulled=())
     with TestClient(app_with(data_dir, registry)) as client:
         data = client.get("/api/providers").json()
-    assert data["default"] == {"provider": "anthropic", "model": "claude-sonnet-4-6"}
+    assert data["default"] == {"provider": "ollama", "model": "qwen3.5:4b"}
     by_id = {p["id"]: p for p in data["providers"]}
     assert [m["id"] for m in by_id["anthropic"]["models"]] == [m.id for m in models_for("anthropic")]
     assert by_id["anthropic"]["ready"] is True
@@ -142,6 +166,16 @@ def test_providers_endpoint_lists_catalog_and_status(data_dir):
     assert qwen["ready"] is False and qwen["status"] == MODEL_NOT_PULLED and "ollama pull" in qwen["message"]
     # No secret in the response
     assert "test-anthropic-key" not in json.dumps(data)
+
+
+def test_ollama_readiness_is_per_exact_tag(data_dir):
+    registry = RecordingRegistry([], pulled=("qwen3.8:latest", "gemma4:12b"))
+    with TestClient(app_with(data_dir, registry)) as client:
+        ollama = next(p for p in client.get("/api/providers").json()["providers"] if p["id"] == "ollama")
+        ready = {m["id"]: m["ready"] for m in ollama["models"]}
+        assert ready == {"qwen3.5:4b": False, "qwen3.8:latest": True, "gemma4:12b": True}
+        resp = client.post("/api/runs", json={"message": "x", "provider": "ollama", "model": "qwen3.5:4b"})
+        assert resp.status_code == 400 and resp.json()["detail"]["code"] == MODEL_NOT_PULLED
 
 
 def test_ollama_unreachable_is_reported(data_dir):
@@ -169,10 +203,23 @@ def test_ollama_model_not_pulled_blocks_run_and_never_pulls(data_dir):
     assert registry.created == []                            # no automatic switch to another provider
 
 
+def test_default_model_unavailable_errors_without_fallback(data_dir):
+    # Anthropic and OpenAI are fully configured, yet a request without a choice must not switch to them
+    registry = RecordingRegistry([step("print(1)"), DONE_TEXT], pulled=("gemma4:12b",))
+    with TestClient(app_with(data_dir, registry)) as client:
+        resp = client.post("/api/runs", json={"message": "x"})
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert detail["code"] == MODEL_NOT_PULLED and (detail["provider"], detail["model"]) == ("ollama", "qwen3.5:4b")
+        assert "ollama pull qwen3.5:4b" in detail["message"]
+        assert client.get("/api/runs").json()["runs"] == []
+    assert registry.created == [] and registry.calls == []
+
+
 def test_missing_key_blocks_only_that_provider(data_dir):
     registry = RecordingRegistry([step("print(1)"), DONE_TEXT], anthropic=False, openai=False)
     with TestClient(app_with(data_dir, registry)) as client:
-        no_key = client.post("/api/runs", json={"message": "x"})        # default = Anthropic
+        no_key = client.post("/api/runs", json={"message": "x", "provider": "anthropic"})
         assert no_key.status_code == 400 and no_key.json()["detail"]["code"] == NOT_CONFIGURED
         assert "ANTHROPIC_API_KEY" in no_key.json()["detail"]["message"]
         assert client.post("/api/runs", json={"message": "x", "provider": "openai"}).status_code == 400
@@ -184,9 +231,10 @@ def test_missing_key_blocks_only_that_provider(data_dir):
 # ── Provider/model fixed for the whole run ────────────
 @pytest.mark.parametrize("provider,model", [
     ("openai", "gpt-6-luna"), ("ollama", "qwen3.5:4b"), ("anthropic", "claude-opus-5-5"),
+    ("ollama", "qwen3.8:latest"), ("ollama", "gemma4:12b"),
 ])
 def test_all_iterations_use_the_selected_model(data_dir, provider, model):
-    registry = RecordingRegistry(FIX_FLOW)
+    registry = RecordingRegistry(FIX_FLOW, pulled=tuple(OLLAMA_TAGS))
     with TestClient(app_with(data_dir, registry)) as client:
         run_id = client.post("/api/runs", json={"message": "x", "provider": provider, "model": model}).json()["id"]
         detail = wait_finished(client, run_id)
@@ -213,12 +261,14 @@ def test_legacy_request_uses_default_and_reports_it(data_dir):
             events = parse_sse(resp.read().decode())
         runs = client.get("/api/runs").json()["runs"]
         config = client.get("/api/config").json()
-    assert (sync["provider"], sync["model"]) == ("anthropic", "claude-sonnet-4-6")
+    assert (sync["provider"], sync["model"]) == ("ollama", "qwen3.5:4b")
     session = events[0][1]
-    assert (session["provider"], session["model"]) == ("anthropic", "claude-sonnet-4-6")
-    assert (events[-1][1]["provider"], events[-1][1]["model"]) == ("anthropic", "claude-sonnet-4-6")
-    assert all(r["provider"] == "anthropic" and r["model_name"] == "Claude Sonnet 4.6" for r in runs)
-    assert config["model"] == "claude-sonnet-4-6" and config["llm_configured"] is True
+    assert (session["provider"], session["model"]) == ("ollama", "qwen3.5:4b")
+    assert (events[-1][1]["provider"], events[-1][1]["model"]) == ("ollama", "qwen3.5:4b")
+    assert all(r["provider"] == "ollama" and r["model_name"] == "Qwen 3.5 4B" for r in runs)
+    assert config["defaults"]["provider"] == "ollama" and config["defaults"]["model"] == "qwen3.5:4b"
+    assert config["model"] == "qwen3.5:4b" and config["llm_configured"] is True
+    assert registry.created == ["ollama/qwen3.5:4b"] * 2          # no run touched Anthropic or OpenAI
 
 
 def test_streaming_code_progress_and_format_retry_keep_same_model(data_dir, monkeypatch):

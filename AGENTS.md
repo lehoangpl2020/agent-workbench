@@ -103,7 +103,7 @@ These are covered by tests or are deliberate decisions. Change one only with an 
 7. **Block path traversal and escaping symlinks** when serving artifacts (`workspace.py`): resolve the path and only return files inside `output/` or the snapshot of that run (`test_symlink_pointing_outside_is_blocked`, `test_artifacts_are_isolated_per_run`).
 8. **One run at a time.** The backend returns `409`, the UI disables Run. Changing this means changing the backend, the UI and the tests together.
 9. **History survives restarts.** A run still `running` after a restart is marked `error`. Old databases must migrate (`test_old_database_is_migrated`); a schema change needs a migration and a test.
-10. **Provider and model are fixed for a whole run**, validated against `model_catalog.py` (422 if invalid), preflighted (400 for a missing key, unreachable Ollama or an unpulled model), and never silently replaced by another provider. A request without a choice uses Claude Sonnet 4.6. Old runs with no provider keep it empty (`test_providers.py`).
+10. **Provider and model are fixed for a whole run**, validated against `model_catalog.py` (422 if invalid), preflighted (400 for a missing key, unreachable Ollama or an unpulled model), and never silently replaced by another provider. A request without a choice uses the default in `model_catalog.py`: Ollama `qwen3.5:4b` (the UI preselects the same one from `GET /api/providers`). If the default is unavailable the request fails with a clear error; it never falls back to Claude, OpenAI or another Ollama model. Old runs with no provider keep it empty; the default is never written into history (`test_providers.py`).
 11. **Localhost only by default.** The server runs model-written code and has no auth: Compose publishes `127.0.0.1:${HOST_PORT:-8000}`, `python server.py` listens on `HOST=127.0.0.1`, and CORS never contains `*` (`test_cors_rejects_unknown_origin`, `test_server_defaults_to_localhost_only`).
 12. **Stop conditions.** `max_iterations` counts code runs. If the last run succeeds, one extra final-review model call is made and its code is not run; if the last run fails or times out, the loop stops without another model call (`test_single_code_run_can_still_succeed`, `test_failed_last_run_stops_without_extra_model_call`, `test_success_without_done_hits_run_limit_and_keeps_partial`).
 
@@ -122,7 +122,7 @@ Run statuses: `success` (Completed), `max_retries` (Code run limit reached), `ti
 
 - Never read, print or commit `.env`, API keys or tokens. Do not paste them into issues, logs or screenshots. `.env.example` is the only env file that may be committed.
 - Do not run commands that dump secrets (`docker compose config`, `docker inspect`, `printenv`, `cat .env`). See [docs/troubleshooting.md](docs/troubleshooting.md) for safe ways to check a key.
-- Do not call paid model APIs (`client.py`, `./run.sh test`, starting a run from the UI) just to verify a change. Offline tests are enough for most changes.
+- Do not call paid model APIs (Anthropic, OpenAI) to verify a change without the maintainer's explicit authorization for that check. Offline tests are enough for most changes; use the policy in section 8 when a real model is needed.
 - Do not change the localhost-only defaults, mount more of the host into containers, or weaken sandbox settings (`cap_drop`, `no-new-privileges`, resource limits) without discussing it first.
 - The server mounts `/var/run/docker.sock`, which is very powerful. It is acceptable only for local development.
 - Prompts, generated code and stdout are stored unredacted in SQLite. Do not commit `data/` or run history.
@@ -130,9 +130,20 @@ Run statuses: `success` (Completed), `max_retries` (Code run limit reached), `ti
 
 ## 8. Verification and contribution workflow
 
-- Say precisely what was verified. Distinguish: offline/mock tests (`pytest`, scripted planner, but the code still runs for real in `LocalExecutor`); the real Docker sandbox; a real model API call; and the full flow (UI → server → real model → real sandbox → displayed result). Claim the full flow only if you ran all of it.
+- Say precisely what was verified. Distinguish four levels and name the one you ran: **offline tests** (`pytest`, scripted planner and mock transports, but the code still runs for real in `LocalExecutor`); **real Ollama checks** (a local model is actually called); **real Docker sandbox checks** (code runs in the sandbox container); and **full end-to-end** (UI → server → real model → real sandbox → displayed result). Claim the full flow only if you ran all of it.
 - After changing Python code run `pytest tests -q`. After changing `web/` run `npm run build` (it includes `tsc -b`).
 - Verify commands and relative links in documentation against the repository.
+
+### Real-model verification policy (Claude Code, Codex and any other assistant)
+
+This concerns the models the *application or its verification scripts* call. It does not change which model powers the assistant itself.
+
+- **Normal path: offline/scripted tests.** They need no model and must pass whether or not Ollama is running.
+- **When a real model is necessary,** use local Ollama with `qwen3.5:4b` (the app default). Use a trivial task and conservative limits (for example `max_iterations` 2 and a short `timeout_seconds`). Run one small check, not a benchmark.
+- **Other installed Ollama models** (`qwen3.8:latest`, `gemma4:12b`) only when the task requires comparing models or investigating model-specific behavior.
+- **Never pull models** automatically; the app and assistants do not run `ollama pull`. Ask the maintainer to pull a missing model.
+- **No paid APIs without explicit authorization.** Do not call Anthropic or OpenAI (directly, through `client.py`/`./run.sh test` against a non-Ollama selection, or from the UI) unless the maintainer explicitly authorizes that specific verification.
+- **If Ollama is unavailable or not enough for a check, report that limitation.** Do not silently switch to another provider or model, and do not present an unrun check as passed.
 - Commit messages use a conventional prefix: `feat:`, `fix:`, `docs:`, `chore:`, `test:`. Keep commits focused and describe the why.
 - Do not rewrite shared history or force-push.
 - Avoid destructive Docker commands on volumes (`docker compose down -v` deletes run history and artifacts).

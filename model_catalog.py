@@ -49,7 +49,7 @@ CATALOG: list[ModelSpec] = [
     # ── Anthropic Claude ─────────────────────────────
     # Sonnet 4.6: no `thinking` is sent → runs without thinking (as before).
     ModelSpec("anthropic", "claude-sonnet-4-6", "Claude Sonnet 4.6", provider_default=True,
-              note="Default · $3 / $15 per 1M tokens"),
+              note="Preselected for Anthropic · $3 / $15 per 1M tokens"),
     # The 5.5 models always use adaptive thinking; thinking tokens count toward max_tokens
     # → leave enough headroom so the code is not truncated.
     ModelSpec("anthropic", "claude-sonnet-5-5", "Claude Sonnet 5.5",
@@ -73,15 +73,27 @@ CATALOG: list[ModelSpec] = [
               options={"reasoning_effort": "low"}),
 
     # ── Ollama (runs locally; `ollama pull` the model first) ─
-    # think=False: return JSON immediately, spending no tokens on thinking (a 4B model running locally).
-    # num_ctx: Ollama's default context is small; a history of many iterations needs room.
+    # IDs are the exact tags shown by `ollama list` (sent verbatim, including ":latest").
+    # think=False: return JSON immediately, spending no tokens on thinking. `ollama show` lists `false` among
+    #   the thinking levels of all three models below.
+    # num_ctx: Ollama's default context is small; a history of many iterations needs room. 32768 is an
+    #   application setting, below the 262144 context length `ollama show` reports for these models.
+    # max_output_tokens: an application-side cap per model call, not a statement about what the model supports.
     ModelSpec("ollama", "qwen3.5:4b", "Qwen 3.5 4B", provider_default=True,
-              note="Local · free · needs `ollama pull qwen3.5:4b`",
+              note="Local · free · app default · needs `ollama pull qwen3.5:4b`",
+              max_output_tokens=8192, options={"num_ctx": 32768, "think": False}),
+    ModelSpec("ollama", "qwen3.8:latest", "Qwen 3.8 (latest)",
+              note="Local · free · needs `ollama pull qwen3.8:latest`",
+              max_output_tokens=8192, options={"num_ctx": 32768, "think": False}),
+    ModelSpec("ollama", "gemma4:12b", "Gemma 4 12B",
+              note="Local · free · needs `ollama pull gemma4:12b`",
               max_output_tokens=8192, options={"num_ctx": 32768, "think": False}),
 ]
 
-DEFAULT_PROVIDER = "anthropic"
-DEFAULT_MODEL = "claude-sonnet-4-6"
+# App-wide default: used only when a request names neither provider nor model. A run still keeps whatever
+# was chosen (or defaulted) for its whole life, and old runs with no stored provider are never given this.
+DEFAULT_PROVIDER = "ollama"
+DEFAULT_MODEL = "qwen3.5:4b"
 
 
 class InvalidModelSelection(ValueError):
@@ -110,7 +122,7 @@ def default_spec() -> ModelSpec:
 def resolve(provider: str | None, model: str | None) -> ModelSpec:
     """
     Normalizes the selection from a request:
-      both None        → default (Claude Sonnet 4.6) — old clients/CLI send nothing
+      both None        → default (Ollama qwen3.5:4b) — old clients/CLI send nothing
       provider only    → that provider's provider_default model
       model only       → the provider that has that model (if unique)
       both             → must match exactly one row in CATALOG

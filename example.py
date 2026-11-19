@@ -1,7 +1,8 @@
 """
 Test script — runs the agent directly (without the server).
-Usage: ANTHROPIC_API_KEY=... python example.py
-       (the default model comes from model_catalog.py; change it with LLMPlanner(resolve("ollama", "qwen3.5:4b")))
+Usage: python example.py   (needs a running Ollama with qwen3.5:4b pulled; this makes real model calls)
+       (the default model comes from model_catalog.py; change it with LLMPlanner(resolve("anthropic", "claude-sonnet-4-6")),
+       which needs ANTHROPIC_API_KEY and is billed by Anthropic)
 """
 
 import asyncio

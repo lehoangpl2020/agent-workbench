@@ -66,7 +66,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
       setCatalog(data);
       setCatalogError(null);
       if (!provider) {
-        // New run: the backend default (Claude Sonnet 4.6)
+        // New run: the backend default from model_catalog.py (currently Ollama / qwen3.5:4b)
         setProvider(data.default.provider);
         setModel(data.default.model);
       }

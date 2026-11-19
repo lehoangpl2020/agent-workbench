@@ -19,7 +19,7 @@ Interactive Swagger docs are served at <http://localhost:8000/docs> when the ser
 | GET | `/api/providers` | Provider/model catalog (`model_catalog.py`) + readiness: key present, Ollama reachable / model pulled |
 | GET | `/health` | Health check |
 
-`POST /api/runs` and `/api/execute*` accept optional `provider` and `model` fields. If omitted, Claude Sonnet 4.6 is used. A choice outside the catalog returns `422`; a missing key, an unreachable Ollama or an unpulled model returns `400` with `detail.code`. Run details, history, responses and the `session` event include `provider`, `model` (+ `provider_name`, `model_name`). See [providers.md](providers.md).
+`POST /api/runs` and `/api/execute*` accept optional `provider` and `model` fields. If omitted, Ollama `qwen3.5:4b` is used (the default in `model_catalog.py`). A choice outside the catalog returns `422`; a missing key, an unreachable Ollama or an unpulled model returns `400` with `detail.code`. Run details, history, responses and the `session` event include `provider`, `model` (+ `provider_name`, `model_name`). See [providers.md](providers.md).
 
 ```bash
 curl -X POST http://localhost:8000/api/execute -H "Content-Type: application/json" \
@@ -51,7 +51,7 @@ python client.py --stream "Generate a chart of sin(x)"
 # Custom options
 python client.py --stream --max-iterations 3 --timeout 60 "Your task"
 
-# Choose a provider/model (default: Claude Sonnet 4.6)
+# Choose a provider/model (default: ollama / qwen3.5:4b)
 python client.py --provider ollama --model qwen3.5:4b "Your task"
 python client.py --provider openai --model gpt-6-luna "Your task"
 
