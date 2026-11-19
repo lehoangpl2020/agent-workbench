@@ -110,7 +110,8 @@ class BaseExecutor:
         )
         await log(INFO, "sandbox", f"Wrote code to code/{code_path.name}",
                   lines=len(code.splitlines()), chars=len(code))
-        before = workspace.scan()
+        # Directory walks and snapshot copies (files up to 20 MB) are blocking I/O: keep them off the event loop
+        before = await asyncio.to_thread(workspace.scan)
         await log(INFO, "sandbox", f"Starting execution ({self.describe()}, timeout {timeout}s)", flow=Flow.EXECUTING)
         start = time.monotonic()
 
@@ -173,9 +174,7 @@ class BaseExecutor:
                       stdout_bytes=len(raw.stdout), stderr_bytes=len(stderr))
 
         await _notify(progress, "collecting", "Collecting files from /workspace/output")
-        changed = workspace.changed_files(before, workspace.scan())
-        workspace.snapshot(iteration, changed)
-        sizes = workspace.scan()
+        changed, sizes = await asyncio.to_thread(self._collect, workspace, before, iteration)
         artifacts = {p: artifact_label(sizes[p][0]) for p in changed if p in sizes}
         if artifacts:
             listing = ", ".join(f"{p} ({fmt_bytes(sizes[p][0])})" for p in artifacts)
@@ -196,6 +195,14 @@ class BaseExecutor:
             artifacts=artifacts,
             timed_out=timed_out,
         )
+
+    @staticmethod
+    def _collect(workspace: RunWorkspace, before: dict, iteration: int):
+        """Files created/changed by this run (snapshotted per iteration) and the current size of every file."""
+        after = workspace.scan()
+        changed = workspace.changed_files(before, after)
+        workspace.snapshot(iteration, changed)
+        return changed, after
 
     def describe(self) -> str:
         return self.name
