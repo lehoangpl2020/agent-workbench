@@ -43,6 +43,16 @@ Respond ONLY with valid JSON (no markdown fences):
 """
 
 
+# How much of a failed run's stderr the model gets back. A traceback ends with the line that names the error,
+# so a long one is cut at the START, not the end.
+MAX_STDERR_CHARS = 3000
+TRUNCATION_NOTE = "[earlier output truncated]\n"
+
+
+def _tail(text: str, limit: int) -> str:
+    return text if len(text) <= limit else TRUNCATION_NOTE + text[-limit:]
+
+
 def build_messages(state: AgentState) -> list[dict]:
     """
     Builds the conversation history for the LLM.
@@ -94,7 +104,7 @@ def build_messages(state: AgentState) -> list[dict]:
                     "content": (
                         f"❌ Execution FAILED (attempt {i + 1}/{state.max_iterations}).\n"
                         f"Exit code: {result.exit_code}\n"
-                        f"STDERR:\n{result.stderr[:3000]}\n"
+                        f"STDERR:\n{_tail(result.stderr, MAX_STDERR_CHARS)}\n"
                         f"STDOUT:\n{result.stdout[:1000]}\n\n"
                         "Fix the error and try again. "
                         "Focus on the specific error above."
