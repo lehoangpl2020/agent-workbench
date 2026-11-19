@@ -1,14 +1,14 @@
-# Agent Workbench — file sinh ra khi build/chạy, không commit
+# Agent Workbench — generated at build/run time, not committed
 
 # Frontend
 web/node_modules/
 web/dist/
 *.tsbuildinfo
 
-# Bản build UI copy vào server (Dockerfile tự build lại)
+# UI build copied into the server (the Dockerfile rebuilds it)
 static/
 
-# Dữ liệu runtime: SQLite history + artifacts của từng run
+# Runtime data: SQLite history + artifacts of each run
 data/
 
 # Python
@@ -20,7 +20,7 @@ __pycache__/
 .env
 .env.*
 
-# Rác của hệ điều hành / file zip / editor
+# OS / zip / editor junk
 .DS_Store
 __MACOSX/
 Thumbs.db
@@ -30,5 +30,8 @@ Thumbs.db
 # Log
 *.log
 
-# Secrets: chỉ .env.example được commit
+# Secrets: only .env.example is committed
 !.env.example
+
+# Local-only Vietnamese study notes (kept on disk, not published)
+/docs/vi/

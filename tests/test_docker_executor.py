@@ -1,7 +1,7 @@
 """
-Integration test cho PersistentSandboxExecutor với container `agent-workbench-sandbox` THẬT.
-Không gọi Claude API. Chỉ chạy khi DOCKER_SANDBOX_TESTS=1, bên trong container
-server (cần /var/run/docker.sock + volume agent-runs), ví dụ:
+Integration test for PersistentSandboxExecutor against the REAL `agent-workbench-sandbox` container.
+Makes no Claude API calls. Runs only when DOCKER_SANDBOX_TESTS=1, inside the
+server container (needs /var/run/docker.sock + the agent-runs volume), for example:
 
   docker compose run --rm --no-deps -e DOCKER_SANDBOX_TESTS=1 \
       -v "$PWD/tests:/app/tests" agent-server \
@@ -32,7 +32,7 @@ def make():
 
 
 def processes_of(ex, ws) -> str:
-    """Liệt kê process trong sandbox còn chứa đường dẫn của run."""
+    """Lists the processes in the sandbox that still reference the run's path."""
     container = ex._get_container()
     snippet = (
         "import os,sys\n"

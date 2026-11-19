@@ -21,8 +21,8 @@ interface Props {
 }
 
 /**
- * Mỗi iteration = 1 lần gọi model (+ 1 lần chạy code nếu model chưa báo DONE).
- * max_iterations = số lần chạy code tối đa; có thể có thêm 1 iteration "final review" không chạy code.
+ * Each iteration = one model call (+ one code run if the model has not said DONE).
+ * max_iterations = max number of code runs; there can be one extra "final review" iteration that runs no code.
  */
 export function Timeline({ run, selected, onSelect }: Props) {
   const runsUsed = run.iterations.filter((it) => it.exit_code !== null).length;
@@ -52,7 +52,7 @@ export function Timeline({ run, selected, onSelect }: Props) {
 
 function TimelineItem({ it, max, active, onSelect }: { it: Iteration; max: number; active: boolean; onSelect: (n: number) => void }) {
   const baseMeta = iterationStatus(it.status);
-  // Khi đang gọi model: nói rõ model được gọi để làm gì
+  // While calling the model: say clearly what the model is being called for
   const planningLabel =
     it.code.length > 0
       ? `Writing code · ${it.code.length.toLocaleString()} chars`

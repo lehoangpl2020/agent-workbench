@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { CopyButton } from "./CodeView";
 import { ProcessOutputPanel } from "./ResultPanels";
 
-// Nguồn của entry: ai đã làm việc này (xem runlog.py ở backend)
+// Source of the entry: who did this (see runlog.py in the backend)
 const SOURCES: Record<string, { label: string; cls: string; title: string }> = {
   runtime: { label: "RUNTIME", cls: "bg-sky-500/15 text-sky-300", title: "Agent loop (application) action" },
   llm: { label: "LLM CALL", cls: "bg-violet-500/15 text-violet-300", title: "Claude API request/response" },
@@ -27,7 +27,7 @@ function time(ts: string) {
 
 function formatData(data: Record<string, unknown>) {
   return Object.entries(data)
-    // "files": tên file đã có trong message · "flow": key nội bộ cho tab Live Flow
+    // "files": a file name that appears in the message · "flow": internal key for the Live Flow tab
     .filter(([k]) => k !== "files" && k !== "flow")
     .map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
     .join("  ");
@@ -46,7 +46,7 @@ function toText(entries: LogEntry[]) {
 interface Props {
   run: RunDetail;
   logs: LogEntry[];
-  /** Iteration đang chọn ở Timeline (dùng cho vùng stdout/stderr khi lọc "All") */
+  /** Iteration selected in the Timeline (used for the stdout/stderr area when filtering "All") */
   selected: Iteration | null;
   logError?: boolean;
   onRetry?: () => void;
@@ -75,7 +75,7 @@ export function ActivityLog({ run, logs, selected, logError, onRetry }: Props) {
   );
   const problems = logs.filter((l) => l.level !== "INFO").length;
 
-  // Auto-scroll xuống entry mới nhất (tắt khi user tự cuộn lên)
+  // Auto-scroll to the newest entry (turned off when the user scrolls up)
   useEffect(() => {
     const box = boxRef.current;
     if (follow && box) box.scrollTop = box.scrollHeight;
@@ -174,7 +174,7 @@ export function ActivityLog({ run, logs, selected, logError, onRetry }: Props) {
         </div>
       </div>
 
-      {/* stdout/stderr của Python — vùng riêng, thu gọn được */}
+      {/* Python stdout/stderr — a separate, collapsible area */}
       <div className="rounded-xl border bg-card">
         <button
           type="button"

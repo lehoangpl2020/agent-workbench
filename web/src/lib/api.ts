@@ -1,4 +1,4 @@
-// Typed client cho FastAPI backend. Không có secret nào ở frontend.
+// Typed client for the FastAPI backend. There are no secrets in the frontend.
 
 export type RunStatus =
   | "pending"
@@ -31,9 +31,9 @@ export type Intent = "write" | "fix" | "review";
 export interface Iteration {
   number: number;
   status: IterationStatus;
-  /** Model được gọi để: viết mới / sửa lỗi / xem kết quả và quyết định DONE */
+  /** What the model is called for: write new code / fix an error / review the result and decide on DONE */
   intent: Intent;
-  /** Với intent "fix": lỗi đang được sửa */
+  /** For intent "fix": the error being fixed */
   intent_detail: string;
   explanation: string;
   language: string;
@@ -66,10 +66,10 @@ export interface RunSummary {
   timeout_seconds: number;
   message: string;
   iteration_count: number;
-  /** Provider/model thật đã dùng. Run cũ (trước multi-provider) có provider = null. */
+  /** The provider/model actually used. Old runs (before multi-provider support) have provider = null. */
   provider: string | null;
   model: string;
-  /** Tên hiển thị tra từ catalog backend; null nếu model không còn trong catalog */
+  /** Display name looked up from the backend catalog; null if the model is no longer in the catalog */
   provider_name: string | null;
   model_name: string | null;
   created_at: string;
@@ -78,7 +78,7 @@ export interface RunSummary {
 
 export interface RunDetail extends RunSummary {
   answer: string;
-  /** Hành động hiện tại (realtime, từ backend events) */
+  /** Current action (real time, from backend events) */
   activity: string;
   activity_phase: string;
   activity_iteration: number | null;
@@ -89,12 +89,12 @@ export interface RunDetail extends RunSummary {
   active: boolean;
 }
 
-/** 1 dòng activity log (lưu ở SQLite, đẩy realtime qua SSE event "log") */
+/** One activity-log line (stored in SQLite, pushed in real time via the SSE "log" event) */
 export interface LogEntry {
   id: number;
   ts: string;
   iteration: number | null;
-  /** runtime = agent loop · llm = lời gọi model · model = lời giải thích model trả về · sandbox = executor */
+  /** runtime = agent loop · llm = model call · model = the model's explanation · sandbox = executor */
   source: "runtime" | "llm" | "model" | "sandbox" | string;
   level: "INFO" | "WARN" | "ERROR";
   message: string;
@@ -112,7 +112,7 @@ export interface AppConfig {
   active_run_id: string | null;
 }
 
-/** 1 model trong catalog backend (model_catalog.py) + trạng thái sẵn sàng */
+/** One model in the backend catalog (model_catalog.py) + readiness status */
 export interface CatalogModel {
   id: string;
   name: string;
@@ -166,7 +166,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     try {
       detail = (await res.json()).detail;
     } catch {
-      /* body không phải JSON */
+      /* the body is not JSON */
     }
     throw new ApiError(errorMessage(detail) ?? `Request failed (${res.status})`, res.status, detail);
   }
@@ -198,7 +198,7 @@ export const api = {
     `/api/runs/${id}/logs/download${iteration ? `?iteration=${iteration}` : ""}`,
 };
 
-// Các event SSE backend phát ra (xem agent.py / server.py)
+// SSE events emitted by the backend (see agent.py / server.py)
 export const SSE_EVENTS = [
   "session",
   "status",

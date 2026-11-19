@@ -1,6 +1,6 @@
 """
-Agent loop: mọi nhánh kết thúc phải ra đúng trạng thái.
-Mock planner + LocalExecutor chạy subprocess thật.
+Agent loop: every way of finishing must end in the right status.
+Mock planner + LocalExecutor running a real subprocess.
 """
 
 import asyncio
@@ -36,24 +36,24 @@ def test_success_without_done_hits_run_limit_and_keeps_partial(tmp_path):
              code("open('/workspace/output/never.txt','w').write('x')\nprint('step 3')")]
     agent, _ = make_agent(tmp_path, steps, max_iterations=2)
     resp = run(agent)
-    # Chạy thành công KHÔNG có nghĩa là xong: model xem output lần cuối và chưa báo DONE
+    # A successful run does NOT mean it is done: the model reviews the output one last time and has not said DONE
     assert resp.status == ExecutionStatus.MAX_RETRIES
-    assert resp.answer.strip() == "step 2"  # giữ kết quả tạm
+    assert resp.answer.strip() == "step 2"  # the partial result is kept
     assert "code run limit" in resp.message.lower()
-    # 2 lần chạy code + 1 lượt final review; code của lượt final review KHÔNG được chạy
+    # 2 code runs + 1 final review turn; the code of the final review turn must NOT be run
     assert resp.iterations == 3 and len(resp.execution_results) == 2
     assert not list((tmp_path / "runs").glob("*/output/never.txt"))
     assert not list((tmp_path / "runs").glob("*/code/iter_03.py"))
 
 
-# ─── Điều kiện dừng: max_iterations = số lần CHẠY CODE ─────────────────
+# ─── Stop conditions: max_iterations = number of CODE RUNS ─────────────────
 def test_single_code_run_can_still_succeed(tmp_path):
     agent, planner = make_agent(tmp_path, [code("print(2 + 2)"), DONE], max_iterations=1)
     resp = run(agent)
     assert resp.status == ExecutionStatus.SUCCESS
     assert resp.answer.strip() == "4"
     assert len(resp.execution_results) == 1 and resp.iterations == 2
-    # Lượt final review được báo là không còn lượt chạy
+    # The final review turn is reported as having no run turns left
     review = LLMPlanner._build_messages(None, planner.seen_states[1])[-1]["content"]
     assert "last allowed code run" in review
 
@@ -72,7 +72,7 @@ def test_failed_last_run_stops_without_extra_model_call(tmp_path):
     agent, planner = make_agent(tmp_path, [code("raise RuntimeError('still broken')")], max_iterations=2)
     resp = run(agent)
     assert resp.status == ExecutionStatus.MAX_RETRIES
-    # Không còn lượt chạy để sửa → không gọi model thêm lần nào
+    # No run turn left to fix anything → the model is not called again
     assert len(planner.seen_states) == 2 and resp.iterations == 2
 
 
@@ -95,7 +95,7 @@ def test_error_is_fed_back_then_fixed(tmp_path):
     resp = run(agent)
     assert resp.status == ExecutionStatus.SUCCESS
     assert resp.answer.strip() == "fixed"
-    # Lần gọi model thứ 2 phải thấy stderr của lần 1 trong messages
+    # The 2nd model call must see the 1st run's stderr in its messages
     messages = LLMPlanner._build_messages(None, planner.seen_states[1])
     assert "boom" in messages[-1]["content"] and "FAILED" in messages[-1]["content"]
 
@@ -146,7 +146,7 @@ def test_stop_during_execution_kills_process(tmp_path):
         task = asyncio.create_task(agent.run(AgentRequest(message="t"), emit=emit))
         while not any(e == "iteration" and d.get("phase") == "executing" for e, d in events):
             await asyncio.sleep(0.05)
-        await asyncio.sleep(0.5)  # process đã chạy
+        await asyncio.sleep(0.5)  # the process is already running
         task.cancel()
         return await task
 

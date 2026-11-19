@@ -11,15 +11,15 @@ import uuid
 
 class ExecutionStatus(str, Enum):
     """
-    Trạng thái của một run. Giữ nguyên các giá trị cũ để client cũ không vỡ.
+    State of a run. The old values are kept as they are so that older clients do not break.
 
-    UI hiển thị:
-      success     → Completed              (model báo DONE sau ít nhất 1 lần chạy thành công)
-      error       → Failed                 (lỗi planner / sandbox, không tự sửa được)
-      stopped     → Stopped                (user bấm Stop)
-      timeout     → Timed out              (hết lượt chạy code, lần chạy cuối bị timeout)
-      max_retries → Code run limit reached (hết lượt chạy code mà model chưa báo DONE)
-    Tên `max_retries` giữ nguyên vì là giá trị API cũ; ý nghĩa: đã dùng hết max_iterations lần chạy code.
+    What the UI shows:
+      success     → Completed              (the model said DONE after at least one successful code run)
+      error       → Failed                 (planner / sandbox error that cannot be fixed automatically)
+      stopped     → Stopped                (the user pressed Stop)
+      timeout     → Timed out              (code-run limit reached and the last run timed out)
+      max_retries → Code run limit reached (code-run limit reached and the model has not said DONE)
+    The name `max_retries` is kept because it is an existing API value; it means all max_iterations code runs were used.
     """
 
     PENDING = "pending"
@@ -47,7 +47,7 @@ class CodeBlock(BaseModel):
 
     @property
     def is_done(self) -> bool:
-        """Model báo DONE: không còn code cần chạy, yêu cầu đã xong."""
+        """The model said DONE: no more code to run, the request is complete."""
         return not self.code.strip() and self.explanation.strip().upper().startswith("DONE")
 
 
@@ -56,12 +56,12 @@ class ExecutionResult(BaseModel):
     stderr: str = ""
     exit_code: int = -1
     execution_time_ms: float = 0
-    # {relative_path: "<file: N bytes>"} — file mới/đổi trong iteration này
+    # {relative_path: "<file: N bytes>"} — files created/changed in this iteration
     artifacts: dict[str, str] = Field(default_factory=dict)
     timed_out: bool = False
-    # exit_code=0 nhưng stdout trông như lỗi (vd print("Error: ...")) → coi là lỗi
+    # exit_code=0 but stdout looks like an error (e.g. print("Error: ...")) → treated as a failure
     false_success: bool = False
-    # Lỗi hạ tầng (sandbox không chạy, image thiếu...) → LLM không sửa được → dừng loop
+    # Infrastructure error (sandbox not running, image missing...) → the LLM cannot fix it → stop the loop
     system_error: bool = False
 
 
@@ -74,12 +74,12 @@ class AgentState(BaseModel):
     current_iteration: int = 0
     max_iterations: int = 5
     timeout_seconds: int = 30
-    # Provider/model cố định cho cả run (mọi iteration, kể cả sửa lỗi và đánh giá DONE)
+    # Provider/model fixed for the whole run (every iteration, including fixes and the DONE review)
     provider: str = ""
     model: str = ""
     status: ExecutionStatus = ExecutionStatus.PENDING
     final_answer: str = ""
-    # Giải thích ngắn vì sao run kết thúc (hiển thị ở UI)
+    # Short explanation of why the run ended (shown in the UI)
     message: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -87,12 +87,12 @@ class AgentState(BaseModel):
 class AgentRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20_000)
     session_id: Optional[str] = None
-    # None → dùng default của server (MAX_ITERATIONS / EXECUTION_TIMEOUT).
-    # max_iterations = số lần CHẠY CODE tối đa; model được gọi tối đa max_iterations + 1 lần
-    # (lượt cuối chỉ để xem output và trả DONE). Tên field giữ nguyên để client cũ không vỡ.
+    # None → use the server default (MAX_ITERATIONS / EXECUTION_TIMEOUT).
+    # max_iterations = max number of CODE RUNS; the model is called at most max_iterations + 1 times
+    # (the last turn only reviews the output and answers DONE). The field name is kept so older clients do not break.
     max_iterations: Optional[int] = Field(default=None, ge=1, le=20)
     timeout_seconds: Optional[int] = Field(default=None, ge=1, le=300)
-    # None → default trong model_catalog.py (Claude Sonnet 4.6). Backend validate theo catalog.
+    # None → the default in model_catalog.py (Claude Sonnet 4.6). The backend validates against the catalog.
     provider: Optional[str] = Field(default=None, max_length=64)
     model: Optional[str] = Field(default=None, max_length=128)
 

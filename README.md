@@ -47,7 +47,7 @@ The loop, per iteration:
 3. **Evaluate** – stdout/stderr/exit code (and a simple "false success" check) are fed back to the model in the next iteration.
 4. **Stop** – on `DONE` after at least one successful run, on the run limit, on a timeout, on an error, or when the user presses Stop. `max_iterations` counts **code runs**; if the last run succeeds the model gets one extra *final review* turn whose code is not executed.
 
-Details (in Vietnamese): [docs/vi/ARCHITECTURE.vi.md](docs/vi/ARCHITECTURE.vi.md).
+More detail: [docs/architecture.md](docs/architecture.md).
 
 ## Prerequisites
 
@@ -82,7 +82,7 @@ Put keys in `.env` (Compose reads it); never commit that file. Only the provider
 | OpenAI | `OPENAI_API_KEY` (optional `OPENAI_BASE_URL`) |
 | Ollama (local) | no key; `OLLAMA_BASE_URL` defaults to `http://host.docker.internal:11434` in Compose |
 
-Pick the provider and model per run in the UI, or via `provider` / `model` in the API. A missing key, an unreachable Ollama or an unpulled model is reported before the run starts. More: [docs/vi/PROVIDERS.vi.md](docs/vi/PROVIDERS.vi.md).
+Pick the provider and model per run in the UI, or via `provider` / `model` in the API. A missing key, an unreachable Ollama or an unpulled model is reported before the run starts. More: [docs/providers.md](docs/providers.md).
 
 ### Local development (no Docker, not isolated)
 
@@ -117,11 +117,10 @@ A test that needs the real Docker sandbox is skipped by default; see the docstri
 - Local mode is not isolated.
 - No frontend tests; the UI was checked by building it and by manual use.
 - Prompts, generated code and stdout are stored unredacted in SQLite.
-- Documentation beyond this README is mostly in Vietnamese ([docs/vi/](docs/vi/)).
 
 ## Roadmap (planned, not implemented)
 
-These are ideas from the author's learning roadmap ([docs/vi/FEATURE_MAP.vi.md](docs/vi/FEATURE_MAP.vi.md)); none of them exist yet:
+These are ideas, not commitments; none of them exist yet:
 
 - Agent-quality evaluation (fixed task sets, pass rate) and per-run token/latency/cost summaries.
 - Run comparison and experiment profiles.
@@ -131,7 +130,11 @@ These are ideas from the author's learning roadmap ([docs/vi/FEATURE_MAP.vi.md](
 
 ## Documentation
 
-English: this README. Vietnamese (detailed learning notes): [docs/vi/](docs/vi/) — [QUICKSTART](docs/vi/QUICKSTART.vi.md), [ARCHITECTURE](docs/vi/ARCHITECTURE.vi.md), [PROVIDERS](docs/vi/PROVIDERS.vi.md), [TROUBLESHOOTING](docs/vi/TROUBLESHOOTING.vi.md), [full Vietnamese README](docs/vi/README.vi.md). `docs/vi/NEXT_STEPS.vi.md` and `docs/vi/FEATURE_MAP.vi.md` are historical planning notes.
+- [docs/architecture.md](docs/architecture.md): components, run flow, run statuses, data layout, activity log, Live Flow and Replay.
+- [docs/api.md](docs/api.md): HTTP API, CLI client, executor modes, using the agent from Python, security notes.
+- [docs/providers.md](docs/providers.md): provider and model catalog, configuration, Ollama connectivity, error codes.
+- [docs/troubleshooting.md](docs/troubleshooting.md): common problems and debugging.
+- [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md): guidance for contributors and coding agents.
 
 ## Origin and attribution
 

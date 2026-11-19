@@ -1,23 +1,20 @@
 """
-RunManager — chạy agent loop như một background task, độc lập với HTTP request.
+RunManager — runs the agent loop as a background task, independent of the HTTP request.
 
-Luồng:
+Flow:
     POST /api/runs ──► RunManager.start() ──► asyncio.Task(agent.run(..., emit))
                                                     │
-                     emit(event, data) ◄────────────┘   (mỗi bước của loop)
+                     emit(event, data) ◄────────────┘   (every step of the loop)
                         │
-                        ├─► RunStore (SQLite)      → refresh trang vẫn xem lại được
-                        └─► queue của mỗi SSE client → UI cập nhật realtime
+                        ├─► RunStore (SQLite)      → refreshing the page still shows the run
+                        └─► queue of each SSE client → the UI updates in real time
 
     POST /api/runs/{id}/stop ──► task.cancel()
-        → CancelledError đi vào executor → kill process code đang chạy
-        → agent.run() bắt CancelledError → status = stopped → emit("done")
+        → CancelledError reaches the executor → kills the running code process
+        → agent.run() catches CancelledError → status = stopped → emit("done")
 
-MVP: chỉ 1 run chạy tại một thời điểm (sandbox persistent dùng chung).
-Gọi start() khi đang có run → RunBusyError (API trả 409).
-
-Tương đương .NET: giống một IHostedService giữ 1 Task + CancellationTokenSource,
-còn emit() giống một event/IObserver mà cả repository và SSE hub cùng nghe.
+MVP: only one run at a time (the persistent sandbox is shared).
+Calling start() while a run is active → RunBusyError (the API returns 409).
 """
 
 import asyncio
@@ -75,13 +72,13 @@ class RunManager:
     # ── Start ──────────────────────────────────────
     def start(self, request: AgentRequest, subscribe: bool = False) -> tuple[str, asyncio.Queue | None]:
         """
-        Tạo run mới và chạy nền. subscribe=True → nhận cả event 'session' đầu tiên.
-        Provider/model đã resolve theo catalog được lưu ngay vào DB (đúng cái sẽ gọi).
+        Creates a new run and runs it in the background. subscribe=True → also receives the first 'session' event.
+        The provider/model resolved from the catalog is stored in the DB right away (exactly what will be called).
         """
         if self.active_run_id:
             raise RunBusyError(self.active_run_id)
 
-        state = self.agent.new_state(request)  # raise InvalidModelSelection nếu sai catalog
+        state = self.agent.new_state(request)  # raises InvalidModelSelection if not in the catalog
         workspace = RunWorkspace(self.runs_dir, state.session_id).create()
         self.store.create_run(
             state.session_id,
@@ -105,7 +102,7 @@ class RunManager:
         return state.session_id, queue
 
     def _publish(self, active: ActiveRun, event: str, data: dict) -> None:
-        """Lưu event vào SQLite (nếu cần) rồi đẩy ngay cho mọi SSE client đang nghe."""
+        """Saves the event to SQLite (if needed), then immediately pushes it to every listening SSE client."""
         try:
             self._persist(active.run_id, event, data)
         except Exception:
@@ -122,7 +119,7 @@ class RunManager:
         try:
             return await self.agent.run(request, state=state, workspace=workspace, emit=emit)
         finally:
-            # Lưới an toàn: run đã kết thúc thì không bao giờ còn 'running' trong DB
+            # Safety net: a finished run must never remain 'running' in the DB
             row = self.store.get_run(active.run_id)
             if row and row["status"] == ExecutionStatus.RUNNING.value:
                 msg = "Run ended unexpectedly."
@@ -137,13 +134,13 @@ class RunManager:
     def _persist(self, run_id: str, event: str, data: dict) -> None:
         n = data.get("iteration")
         if event == "log":
-            data["id"] = self.store.add_log(run_id, data)   # id dùng để client nối tiếp / khử trùng
+            data["id"] = self.store.add_log(run_id, data)   # id lets the client continue / de-duplicate
         elif event == "iteration" and data.get("phase") == "planning":
             self.store.start_iteration(run_id, n, data.get("intent", "write"), data.get("detail", ""))
         elif event == "activity":
             data["at"] = self.store.set_activity(run_id, n, data["phase"], data["text"])
         elif event == "code_progress":
-            # Code đang stream: lưu bản dở để UI (kể cả sau refresh) thấy ngay
+            # Code is streaming: store the partial version so the UI (even after a refresh) sees it right away
             self.store.update_iteration(run_id, n, code=data["code"], explanation=data["explanation"])
             self.store.set_activity(
                 run_id, n, "streaming", f"Model is writing code… {data['chars']:,} chars", touch=False

@@ -8,7 +8,7 @@ import { RunView } from "@/components/RunView";
 import { Sidebar } from "@/components/Sidebar";
 import { api, type AppConfig, type RunSummary } from "@/lib/api";
 
-// Routing tối giản bằng URL hash: #/ = New run, #/runs/<id> = xem 1 run.
+// Minimal routing via the URL hash: #/ = New run, #/runs/<id> = view one run.
 function readRoute(): string | null {
   const m = window.location.hash.match(/^#\/runs\/([0-9a-f-]{36})/i);
   return m ? m[1] : null;
@@ -52,7 +52,7 @@ export default function App() {
     api.config().then(setConfig).catch(() => setConfig(null));
   }, [refreshRuns]);
 
-  // Khi có run đang chạy: làm mới sidebar định kỳ (trạng thái, run kết thúc)
+  // While a run is active: refresh the sidebar periodically (status, finished runs)
   useEffect(() => {
     if (!activeRunId) return;
     const t = window.setInterval(() => void refreshRuns(), 4000);

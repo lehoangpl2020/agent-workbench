@@ -1,15 +1,15 @@
 """
 Agent Orchestrator — Component 3/3 (Feedback Loop)
-Điều phối vòng lặp: Plan → Execute → Evaluate → Retry/Done.
+Agent loop orchestration: Plan → Execute → Evaluate → Retry/Done.
 
-Đây là agent loop DUY NHẤT. Sync API, SSE API, CLI và example.py đều gọi
-CodeAgent.run(). Tiến độ được báo ra ngoài qua callback `emit(event, data)`;
-RunManager (runs.py) dùng callback đó để lưu SQLite và đẩy SSE.
+This is the ONLY agent loop. The sync API, SSE API, CLI and example.py all call
+CodeAgent.run(). Progress is reported through the `emit(event, data)` callback;
+RunManager (runs.py) uses that callback to persist to SQLite and push SSE events.
 
-Ai quyết định gì:
-  - Model (planner) quyết định: viết code gì, và khi nào trả lời DONE.
-  - Application (file này) quyết định: chạy code, khi nào dừng
-    (DONE / hết iteration / lỗi hạ tầng / Stop), trạng thái cuối là gì.
+Who decides what:
+  - The model (planner) decides: what code to write, and when to answer DONE.
+  - The application (this file) decides: when to run code, when to stop
+    (DONE / iteration limit / infrastructure error / Stop) and the final status.
 """
 
 import asyncio
@@ -31,11 +31,11 @@ from runlog import ERROR, INFO, WARN, make_entry
 
 logger = logging.getLogger(__name__)
 
-# Code chạy OK (exit_code=0) nhưng không print gì: vẫn là thành công, không phải "No result".
+# Code that exits 0 but prints nothing is still a success, not "No result".
 NO_STDOUT_NOTE = "(code ran successfully but printed nothing to stdout)"
 
 EmitFn = Callable[[str, dict], Awaitable[None]]
-# Tạo planner cho đúng provider/model của 1 run
+# Creates the planner for the exact provider/model of one run.
 PlannerFactory = Callable[[ModelSpec], LLMPlanner]
 
 
@@ -45,19 +45,19 @@ async def _no_emit(event: str, data: dict) -> None:
 
 class CodeAgent:
     """
-    Main agent loop (mỗi iteration = 1 lần gọi model; max_iterations = số lần CHẠY CODE tối đa):
+    Main agent loop (one iteration = one model call; max_iterations = max number of CODE RUNS):
 
-    1. Planner sinh code (hoặc trả lời DONE nếu output trước đã đủ)
-    2. Executor chạy code trong sandbox, có timeout thật
+    1. The planner generates code (or answers DONE if the previous output is enough)
+    2. The executor runs the code in the sandbox with a real timeout
     3. Evaluate:
-       - model báo DONE                      → SUCCESS (Completed)
-       - code lỗi / timeout                  → iteration sau, kèm error context
-       - code chạy OK                        → iteration sau, model xem output rồi quyết định DONE
-       - lỗi hạ tầng / planner               → ERROR (Failed)
-       - hết lượt chạy, lần cuối chạy OK     → thêm 1 lượt "final review" (không chạy code nữa):
-                                               DONE → SUCCESS, không DONE → MAX_RETRIES
-       - hết lượt chạy, lần cuối lỗi/timeout → MAX_RETRIES / TIMEOUT ngay, giữ kết quả tạm
-       - task bị cancel (Stop)               → STOPPED
+       - model says DONE                       → SUCCESS (Completed)
+       - code fails / times out                → next iteration, with error context
+       - code runs OK                          → next iteration; the model reviews the output and decides on DONE
+       - infrastructure / planner error        → ERROR (Failed)
+       - run limit reached, last run OK        → one extra "final review" turn (no code is run):
+                                                 DONE → SUCCESS, not DONE → MAX_RETRIES
+       - run limit reached, last run failed    → MAX_RETRIES / TIMEOUT immediately, keep the partial result
+       - task cancelled (Stop)                 → STOPPED
     """
 
     def __init__(
@@ -68,7 +68,7 @@ class CodeAgent:
         default_timeout: int = 30,
         planner_factory: PlannerFactory | None = None,
     ):
-        # planner cố định (test / example.py) hoặc factory tạo planner theo model của từng run
+        # Fixed planner (tests / example.py), or a factory that builds a planner for each run's model
         self.planner = planner
         self.planner_factory = planner_factory or (lambda spec: LLMPlanner(spec))
         self.executor = executor or LocalExecutor()
@@ -77,7 +77,7 @@ class CodeAgent:
         self.sessions: dict[str, AgentState] = {}
 
     def new_state(self, request: AgentRequest) -> AgentState:
-        """Raise InvalidModelSelection nếu provider/model không có trong catalog."""
+        """Raises InvalidModelSelection if the provider/model is not in the catalog."""
         spec = resolve(request.provider, request.model)
         return AgentState(
             user_request=request.message,
@@ -88,7 +88,7 @@ class CodeAgent:
         )
 
     def planner_for(self, state: AgentState):
-        """Planner dùng cho CẢ run — tạo 1 lần, không đổi giữa các iteration."""
+        """The planner used for the WHOLE run: created once, never changed between iterations."""
         if self.planner is not None:
             return self.planner
         return self.planner_factory(resolve(state.provider, state.model))
@@ -135,21 +135,21 @@ class CodeAgent:
             try:
                 planner = self.planner_for(state)
             except Exception as e:
-                # vd thiếu API key: dừng ngay, KHÔNG chuyển sang provider khác
+                # e.g. missing API key: stop immediately, do NOT switch to another provider
                 await log(ERROR, "runtime", f"Cannot create the model client: {e}",
                           error_kind=getattr(e, "kind", None))
                 self._finish(state, ExecutionStatus.ERROR, f"Cannot use {state.provider}/{state.model}: {e}")
             else:
                 await self._loop(state, workspace, emit, planner)
         except asyncio.CancelledError:
-            # User bấm Stop → RunManager cancel task này. Executor đã kill process.
+            # The user pressed Stop → RunManager cancelled this task. The executor already killed the process.
             task = asyncio.current_task()
             if task is not None:
                 task.uncancel()
             state.status = ExecutionStatus.STOPPED
             state.message = "Stopped by user."
             state.final_answer = self._best_answer(state) or state.message
-        except Exception as e:  # lưới an toàn: không bao giờ để run kẹt ở RUNNING
+        except Exception as e:  # safety net: never leave a run stuck in RUNNING
             logger.exception(f"[{state.session_id}] Unexpected agent error")
             state.status = ExecutionStatus.ERROR
             state.message = f"Unexpected error: {type(e).__name__}: {e}"
@@ -186,13 +186,13 @@ class CodeAgent:
     # ═══════════════════════════════════════════
     async def _loop(self, state: AgentState, workspace: RunWorkspace, emit: EmitFn, planner) -> None:
         """
-        Điều kiện dừng (application quyết định, trừ DONE là model quyết định):
-          - max_iterations = số lần CHẠY CODE tối đa (không phải số lần gọi model).
-          - Hết lượt chạy mà lần chạy cuối THÀNH CÔNG → gọi model thêm 1 lượt "final review"
-            chỉ để xem output và trả DONE; code trả về ở lượt này KHÔNG được chạy.
-          - Hết lượt chạy mà lần chạy cuối lỗi/timeout → dừng ngay, không gọi model nữa
-            (model không còn lượt nào để sửa).
-        Vì vậy số lần gọi model ≤ max_iterations + 1 (chưa tính retry do JSON sai format).
+        Stop conditions (decided by the application, except DONE which the model decides):
+          - max_iterations = max number of CODE RUNS (not the number of model calls).
+          - Run limit reached and the last run SUCCEEDED → call the model once more for a "final review"
+            to look at the output and answer DONE; the code returned in that turn is NOT run.
+          - Run limit reached and the last run failed/timed out → stop immediately, no more model calls
+            (the model would have no turn left to fix anything).
+        So the number of model calls is ≤ max_iterations + 1 (not counting retries for malformed JSON).
         """
         while True:
             runs_done = len(state.execution_results)
@@ -207,7 +207,7 @@ class CodeAgent:
             log = self._logger(emit, n)
 
             # ── Step 1: Plan — model sinh code ─────
-            # intent cho biết model được gọi để làm gì: viết mới / sửa lỗi / xem kết quả
+            # intent says what the model is called for: write new code / fix an error / review the result
             intent, detail = self._intent(state)
             if final_review:
                 detail = "final review: no code runs left"
@@ -254,7 +254,7 @@ class CodeAgent:
                 return
             state.generated_code.append(block)
 
-            # Model báo DONE: chỉ chấp nhận nếu đã có ít nhất 1 lần chạy thành công
+            # Model says DONE: only accepted if at least one run has succeeded
             if block.is_done:
                 await emit("model_done", {"iteration": n, "explanation": block.explanation})
                 await log(INFO, "model", "Model replied DONE: the output satisfies the request", flow="done_reply")
@@ -271,7 +271,7 @@ class CodeAgent:
                 return
 
             if final_review:
-                # Model chưa hài lòng nhưng đã hết lượt chạy: lưu lại code để xem, KHÔNG chạy.
+                # Model is not satisfied but the run limit is reached: keep the code for inspection, do NOT run it.
                 await emit("code", {"iteration": n, "language": block.language, "code": block.code,
                                     "code_preview": block.code[:300], "explanation": block.explanation})
                 if block.explanation:
@@ -296,7 +296,7 @@ class CodeAgent:
             else:
                 await log(INFO, "runtime", "Received code from the model", flow="code")
 
-            # ── Step 2: Execute — chạy code ────────
+            # ── Step 2: Execute — run the code ────────
             await emit("iteration", {"iteration": n, "phase": "executing"})
             await emit("activity", {"iteration": n, "phase": "executing", "text":
                 f"Running iter_{n:02d}.py in the sandbox (timeout {state.timeout_seconds}s)"})
@@ -318,7 +318,7 @@ class CodeAgent:
                 logger.exception(f"[{state.session_id}] Executor error")
                 result = ExecutionResult(stderr=f"Executor error: {e}", system_error=True)
 
-            # ── Step 3: Evaluate (runtime tự kiểm tra, CHƯA hỏi model) ──
+            # ── Step 3: Evaluate (the runtime checks on its own, the model is NOT asked yet) ──
             checking = f"Runtime checking the result (exit code {result.exit_code})"
             await emit("activity", {"iteration": n, "phase": "checking", "text": checking})
             await log(INFO, "runtime", checking, flow="checking")
@@ -360,9 +360,9 @@ class CodeAgent:
                           "(the model cannot fix infrastructure problems)")
                 self._finish(state, ExecutionStatus.ERROR, f"Sandbox error: {result.stderr[:500]}")
                 return
-            # Thành công hay lỗi đều lặp tiếp: model xem output/lỗi rồi quyết định.
+            # Success or failure, keep looping: the model reviews the output/error and decides.
 
-        # ── Hết lượt chạy code mà model chưa báo DONE ─────
+        # ── Run limit reached and the model has not said DONE ─────
         await self._logger(emit, state.current_iteration or None)(
             WARN, "runtime", f"Code run limit reached ({state.max_iterations}) without DONE from the model"
         )
@@ -389,14 +389,14 @@ class CodeAgent:
     # ─── helpers ──────────────────────────────────
     @staticmethod
     def _logger(emit: EmitFn, iteration: int | None):
-        """log(level, source, message, **data) gắn sẵn iteration → phát event "log"."""
+        """log(level, source, message, **data) with the iteration pre-bound → emits a "log" event."""
         async def log(level: str, source: str, message: str, **data) -> None:
             await emit("log", make_entry(iteration, level, source, message, **data))
         return log
 
     @staticmethod
     def _intent(state: AgentState) -> tuple[str, str]:
-        """Lần gọi model này để làm gì? ('write' | 'fix' | 'review', chi tiết ngắn)."""
+        """What is this model call for? ('write' | 'fix' | 'review', short detail)."""
         if not state.execution_results:
             return "write", ""
         last = state.execution_results[-1]
@@ -409,12 +409,12 @@ class CodeAgent:
     def _finish(self, state: AgentState, status: ExecutionStatus, message: str) -> None:
         state.status = status
         state.message = message
-        # Giữ kết quả tạm (output thành công gần nhất) kể cả khi chưa xong
+        # Keep the partial result (latest successful output) even if the run did not finish
         state.final_answer = self._best_answer(state) or message
 
     @staticmethod
     def _last_run_succeeded(state: AgentState) -> bool:
-        """Lần chạy CUỐI CÙNG (không phải bất kỳ lần nào) có exit code 0 không."""
+        """Whether the LAST run (not just any run) exited with code 0."""
         return bool(state.execution_results) and state.execution_results[-1].exit_code == 0
 
     @staticmethod
@@ -433,8 +433,8 @@ class CodeAgent:
     @staticmethod
     def _detect_false_success(stdout: str) -> bool:
         """
-        Detect khi code exit_code=0 nhưng output thực chất là error.
-        VD: LLM bọc try/except rồi print("Error: file not found").
+        Detects code that exits 0 but whose output is actually an error.
+        E.g. the LLM wraps the code in try/except and then prints("Error: file not found").
         """
         if not stdout.strip():
             return False
@@ -458,11 +458,11 @@ class CodeAgent:
 
 
 def _short_error(stderr: str, limit: int = 160) -> str:
-    """Dòng lỗi có ý nghĩa cuối cùng, vd "NameError: name 'x' is not defined"."""
+    """The last meaningful error line, e.g. "NameError: name 'x' is not defined"."""
     lines = [l.strip() for l in stderr.strip().splitlines() if l.strip()]
     if not lines:
         return "the previous execution failed"
-    # Traceback Python: dòng cuối là "XxxError: message"
+    # Python traceback: the last line is "XxxError: message"
     line = lines[-1]
     for candidate in reversed(lines):
         if "Error" in candidate or "Exception" in candidate:

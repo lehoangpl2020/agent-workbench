@@ -6,7 +6,7 @@ Agent Workbench started from **practice code of the "AI Agent Engineering" cours
 
 The starting point was a small code-execution agent skeleton, imported into my private learning repository on 2026-11-18 (commit message: "add agent code project demo"). It contained these files:
 
-`agent.py`, `client.py`, `example.py`, `executor.py`, `planner.py`, `schemas.py`, `server.py`, `run.sh`, `Dockerfile.sandbox`, `Dockerfile.server`, `docker-compose.yml`, `requirements.txt` and a Vietnamese `README.md`.
+`agent.py`, `client.py`, `example.py`, `executor.py`, `planner.py`, `schemas.py`, `server.py`, `run.sh`, `Dockerfile.sandbox`, `Dockerfile.server`, `docker-compose.yml`, `requirements.txt` and a README (in Vietnamese).
 
 - The starter files had **no license header, copyright notice or LICENSE file** in the copy I received. Nothing was removed from them when this repository was created, so there is no notice to preserve; if you know of license terms that apply to the course code, please tell me.
 - I cannot verify the exact authorship of the starter beyond its being course material from Mentora × ProtonX. I do not claim it as my own work.
@@ -21,7 +21,7 @@ Added after the starter, in my own repository:
 - `model_catalog.py`, `llm_providers.py`: Anthropic / OpenAI / Ollama provider support and per-run model selection.
 - `tests/`: the offline test suite (scripted planner).
 - `.env.example`, `.gitignore`, `.dockerignore`, `requirements-dev.txt`, `AGENTS.md`, `CLAUDE.md`.
-- Documentation: this `README.md`, `NOTICE.md` and the Vietnamese notes in `docs/vi/`.
+- Documentation: `README.md`, `NOTICE.md` and the files in `docs/`.
 - Changes to the Docker/Compose setup for localhost-only access and for running independently of other Compose projects.
 
 The extensions were written by the repository owner with the assistance of AI coding assistants (Claude Code).

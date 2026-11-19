@@ -24,7 +24,7 @@ function Waiting({ text }: { text: string }) {
   );
 }
 
-/** Code đang được model viết (stream từ backend), tự cuộn xuống cuối. */
+/** Code the model is writing (streamed from the backend), auto-scrolls to the end. */
 function LiveCode({ iteration, text }: { iteration: Iteration; text: string }) {
   return (
     <div className="space-y-3">
@@ -41,7 +41,7 @@ function LiveCode({ iteration, text }: { iteration: Iteration; text: string }) {
   );
 }
 
-/** Hành động hiện tại của iteration này (nếu run đang ở iteration đó), không thì text mặc định. */
+/** The current action of this iteration (if the run is at that iteration), otherwise a default text. */
 function currentAction(run: RunDetail, iteration: Iteration, fallback: string) {
   return run.status === "running" && run.activity_iteration === iteration.number && run.activity
     ? run.activity
@@ -65,7 +65,7 @@ export function PreviewPanel({ run, iteration }: { run: RunDetail; iteration: It
     return <Waiting text={currentAction(run, iteration, "Running the code in the sandbox…")} />;
   }
 
-  // Iteration DONE: không có code → hiện kết quả cuối + toàn bộ ảnh của run
+  // DONE iteration: no code → show the final result + every image of the run
   if (iteration.status === "done") {
     const images = run.artifacts.filter((a) => isImage(a.mime));
     return (
@@ -84,7 +84,7 @@ export function PreviewPanel({ run, iteration }: { run: RunDetail; iteration: It
   }
 
   const meta = iterationStatus(iteration.status);
-  // Iteration kết thúc mà code chưa chạy xong (Stop / lỗi hạ tầng / planner lỗi)
+  // Iteration ended before its code finished running (Stop / infrastructure error / planner error)
   if (iteration.exit_code === null) {
     return (
       <Panel className={cn("border", TONE_CLASSES[meta.tone])}>
@@ -191,7 +191,7 @@ export function CodePanel({ run, iteration }: { run: RunDetail; iteration: Itera
 }
 
 // ─── Logs ──────────────────────────────────────────
-/** stdout/stderr + exit code của 1 iteration (vùng thu gọn bên dưới activity log). */
+/** stdout/stderr + exit code of one iteration (collapsible area below the activity log). */
 export function ProcessOutputPanel({ run, iteration }: { run: RunDetail; iteration: Iteration | null }) {
   if (!iteration) return <NoIteration />;
   if (iteration.status === "planning") return <Waiting text="Nothing has run yet — waiting for the model's code." />;

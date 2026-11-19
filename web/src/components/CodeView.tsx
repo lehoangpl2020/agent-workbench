@@ -12,7 +12,7 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
         try {
           await navigator.clipboard.writeText(text);
         } catch {
-          // Fallback khi clipboard API bị chặn (http không phải localhost…)
+          // Fallback when the clipboard API is blocked (http that is not localhost…)
           const ta = document.createElement("textarea");
           ta.value = text;
           document.body.appendChild(ta);
@@ -31,7 +31,7 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
   );
 }
 
-/** Code Python có syntax highlighting, nền tối, số dòng, nút Copy. */
+/** Python code with syntax highlighting, dark background, line numbers and a Copy button. */
 export function CodeView({
   code,
   language = "python",
@@ -41,7 +41,7 @@ export function CodeView({
   code: string;
   language?: string;
   title?: string;
-  /** Tự cuộn xuống dòng cuối khi code thay đổi (dùng khi đang stream) */
+  /** Scroll to the last line automatically when the code changes (used while streaming) */
   follow?: boolean;
 }) {
   const preRef = useRef<HTMLPreElement>(null);
@@ -77,7 +77,7 @@ export function CodeView({
   );
 }
 
-/** Khối text monospace nền tối (stdout/stderr). */
+/** Monospace text block with a dark background (stdout/stderr). */
 export function TerminalBlock({
   label,
   text,

@@ -11,7 +11,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# curl cho healthcheck
+# curl for the healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -24,6 +24,6 @@ COPY --from=web /web/dist ./static
 
 EXPOSE 8000
 
-# 0.0.0.0 ở đây là BÊN TRONG container (bắt buộc để Docker chuyển port vào được).
-# Giới hạn ai truy cập được nằm ở docker-compose.yml: ports "127.0.0.1:8000:8000".
+# 0.0.0.0 here is INSIDE the container (required for Docker to forward the port).
+# Who can reach it is limited in docker-compose.yml: ports "127.0.0.1:8000:8000".
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]

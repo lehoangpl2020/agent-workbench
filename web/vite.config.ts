@@ -3,8 +3,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-// Dev: Vite chạy ở :5173 và proxy /api, /health sang FastAPI :8000.
-// Prod: `npm run build` → dist/ → FastAPI phục vụ ở cùng origin.
+// Dev: Vite runs on :5173 and proxies /api and /health to FastAPI on :8000.
+// Prod: `npm run build` → dist/ → FastAPI serves it from the same origin.
 const backend = process.env.VITE_BACKEND_URL ?? "http://localhost:8000";
 
 export default defineConfig({

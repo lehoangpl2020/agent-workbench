@@ -1,7 +1,7 @@
 """
-Test script — chạy agent trực tiếp (không qua server).
+Test script — runs the agent directly (without the server).
 Usage: ANTHROPIC_API_KEY=... python example.py
-       (model mặc định lấy từ model_catalog.py; đổi bằng LLMPlanner(resolve("ollama", "qwen3.5:4b")))
+       (the default model comes from model_catalog.py; change it with LLMPlanner(resolve("ollama", "qwen3.5:4b")))
 """
 
 import asyncio

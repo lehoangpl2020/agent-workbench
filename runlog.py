@@ -1,14 +1,14 @@
 """
-Activity log của một run: mỗi bước thật của agent → 1 entry
+Activity log of a run: every real step of the agent → one entry
 {ts, iteration, source, level, message, data}.
 
-source cho biết AI/ai làm:
-  runtime  agent loop (application) quyết định / điều phối
-  llm      lời gọi Claude API: gửi request, nhận response, thời gian, tokens, parse
-  model    nội dung model trả về (giải thích ngắn về cách làm) — KHÔNG phải hành động runtime
-  sandbox  executor: ghi file, chạy code, cài package, thu artifacts
+`source` tells who did it:
+  runtime  the agent loop (application) decides / coordinates
+  llm      a model API call: request sent, response received, timing, tokens, parsing
+  model    what the model returned (a short explanation of its approach) — NOT a runtime action
+  sandbox  the executor: writes files, runs code, installs packages, collects artifacts
 
-Mọi message/data đi qua redact() để không bao giờ ghi API key / secret vào log.
+Every message/data goes through redact() so API keys / secrets are never written to the log.
 """
 
 import os
@@ -23,14 +23,14 @@ LogFn = Callable[..., Awaitable[None]]
 
 _SECRET_PATTERNS = [
     re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}"),           # Anthropic key
-    re.compile(r"sk-[A-Za-z0-9_\-]{20,}"),              # các key kiểu sk-...
+    re.compile(r"sk-[A-Za-z0-9_\-]{20,}"),              # sk-... style keys
     re.compile(r"(?i)(x-api-key|authorization)\s*[:=]\s*\S+"),
 ]
 _SECRET_ENV = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD)", re.IGNORECASE)
 
 
 def _secret_values() -> list[str]:
-    # Giá trị thật của biến môi trường nhạy cảm (đủ dài để không che nhầm chữ thường)
+    # Real values of sensitive environment variables (long enough not to mask ordinary words by mistake)
     return [v for k, v in os.environ.items() if _SECRET_ENV.search(k) and v and len(v) >= 8]
 
 

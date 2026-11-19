@@ -1,27 +1,27 @@
-# Tên project cố định: volume/network thành agent-workbench_*, không đụng project Compose khác trên máy.
+# Fixed project name: volumes/network become agent-workbench_*, so it does not touch other Compose projects on the machine.
 name: agent-workbench
 
 services:
-  # ── Agent Server: FastAPI API + Web UI (http://localhost:8000, đổi cổng bằng HOST_PORT) ──
+  # ── Agent Server: FastAPI API + Web UI (http://localhost:8000, change the port with HOST_PORT) ──
   agent-server:
     build:
       context: .
       dockerfile: Dockerfile.server
     ports:
-      # Chỉ máy này truy cập được. Server chạy code do model sinh ra và không có auth,
-      # nên KHÔNG mở ra LAN. Cố ý demo cho máy khác: BIND_ADDRESS=0.0.0.0 trong .env (tự chịu rủi ro).
+      # Reachable from this machine only. The server runs code written by a model and has no auth,
+      # so it is NOT exposed to the LAN. To demo to another machine on purpose: BIND_ADDRESS=0.0.0.0 in .env (at your own risk).
       - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-8000}:8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - agent-db:/data/db          # SQLite history (chỉ server thấy)
-      - agent-runs:/data/runs      # code + artifacts của từng run (chung với sandbox)
+      - agent-db:/data/db          # SQLite history (only the server sees it)
+      - agent-runs:/data/runs      # code + artifacts of each run (shared with the sandbox)
     environment:
-      # Đọc từ shell hoặc file .env cạnh file này; chỉ backend có key.
-      # Thiếu key của provider nào thì chỉ provider đó không dùng được.
+      # Read from the shell or the .env file next to this file; only the backend has the keys.
+      # If a provider has no key, only that provider is unavailable.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      # Ollama chạy trên máy host (Windows): từ trong container "localhost" là chính container,
-      # nên mặc định trỏ host.docker.internal. Đổi bằng OLLAMA_BASE_URL trong .env nếu Ollama ở chỗ khác.
+      # Ollama runs on the host machine: inside the container "localhost" is the container itself,
+      # so the default points to host.docker.internal. Override it with OLLAMA_BASE_URL in .env if Ollama is elsewhere.
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - USE_DOCKER=true
       - SANDBOX_MODE=persistent
@@ -32,7 +32,7 @@ services:
       - DB_PATH=/data/db/agent.db
       - RUNS_DIR=/data/runs
     extra_hosts:
-      # Docker Desktop đã có sẵn tên này; dòng này giúp cả Docker Engine trên Linux/WSL
+      # Docker Desktop already provides this name; this line makes it work on Docker Engine under Linux/WSL too
       - "host.docker.internal:host-gateway"
     depends_on:
       sandbox:
@@ -44,17 +44,17 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # ── Sandbox (chạy sẵn, luôn bật; server chạy code bằng docker exec) ──
+  # ── Sandbox (always running; the server runs code with docker exec) ──
   sandbox:
     build:
       context: .
       dockerfile: Dockerfile.sandbox
     image: agent-workbench-sandbox:latest
     container_name: agent-workbench-sandbox
-    # Giữ container sống để debug: docker exec -it agent-workbench-sandbox bash
+    # Keep the container alive for debugging: docker exec -it agent-workbench-sandbox bash
     command: tail -f /dev/null
     volumes:
-      # Hybrid mode (server chạy bằng Python trên host): SANDBOX_RUNS_MOUNT=./data/runs
+      # Hybrid mode (server runs as Python on the host): SANDBOX_RUNS_MOUNT=./data/runs
       - ${SANDBOX_RUNS_MOUNT:-agent-runs}:/workspace/runs
     mem_limit: 512m
     cpus: 1.0
@@ -63,7 +63,7 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
-    # Network bật để auto pip install; muốn cách ly hoàn toàn: network_mode: none
+    # Network is on for auto pip install; for full isolation: network_mode: none
 
 volumes:
   agent-db:

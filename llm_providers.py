@@ -1,18 +1,15 @@
 """
-LLM providers — lớp mỏng chuẩn hóa Anthropic / OpenAI / Ollama về cùng 1 contract.
+LLM providers — a thin layer that normalizes Anthropic / OpenAI / Ollama to one contract.
 
-Planner (planner.py) chỉ biết:
+The planner (planner.py) only knows about:
     result = await chat.stream(system, messages, max_tokens, on_text)
-    result.text         toàn bộ text model trả về (JSON {thinking, code, language})
-    result.stop         "end" | "max_tokens" | "refusal" | "other"   (đã chuẩn hóa)
-    result.stop_reason  giá trị gốc của provider (để log)
-    result.usage        token provider THỰC SỰ trả về (thiếu thì để trống, không ước lượng)
+    result.text         the full text the model returned (JSON {thinking, code, language})
+    result.stop         "end" | "max_tokens" | "refusal" | "other"   (normalized)
+    result.stop_reason  the provider's original value (for logging)
+    result.usage        tokens the provider ACTUALLY returned (left empty when missing, never estimated)
 
-Mỗi adapter tự lo khác biệt API (endpoint, tham số, stream format, mã lỗi). Không có
-fallback ngầm sang provider/model khác: lỗi → ProviderError có `kind` rõ ràng.
-
-Tương đương .NET: interface IChatClient + 3 implementation, ProviderRegistry ≈ factory
-đăng ký singleton, chỉ tạo client khi thật sự cần (lazy).
+Each adapter handles its own API differences (endpoint, parameters, stream format, error codes). There is no
+silent fallback to another provider/model: an error → ProviderError with a clear `kind`.
 """
 
 import json
@@ -29,8 +26,8 @@ logger = logging.getLogger(__name__)
 
 TextFn = Callable[[str], Awaitable[None]]
 
-# Schema JSON mà planner yêu cầu. OpenAI/Ollama hỗ trợ ép output theo schema;
-# Anthropic giữ cách cũ (system prompt + parse + format retry).
+# JSON schema the planner asks for. OpenAI/Ollama can enforce output against a schema;
+# Anthropic keeps the old approach (system prompt + parsing + format retry).
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -42,17 +39,17 @@ RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
-# ─── Lỗi chuẩn hóa ─────────────────────────────────
-NOT_CONFIGURED = "not_configured"      # thiếu API key / base URL
-CONNECTION = "connection"              # không kết nối được tới provider
-TIMEOUT = "timeout"                    # kết nối được nhưng quá lâu không có dữ liệu
-MODEL_NOT_PULLED = "model_not_pulled"  # Ollama chạy nhưng chưa `ollama pull` model
-MODEL_NOT_FOUND = "model_not_found"    # provider không có model ID này (hoặc key không có quyền thấy)
-AUTH = "auth"                          # key sai / hết hạn (401)
-PERMISSION = "permission"              # provider từ chối quyền truy cập (403)
-RATE_LIMIT = "rate_limit"              # 429: rate limit / hết credit
-BAD_REQUEST = "bad_request"            # 400: tham số không hợp lệ
-PROVIDER_ERROR = "provider_error"      # 5xx / lỗi khác
+# ─── Normalized errors ─────────────────────────────
+NOT_CONFIGURED = "not_configured"      # missing API key / base URL
+CONNECTION = "connection"              # cannot connect to the provider
+TIMEOUT = "timeout"                    # connected, but no data for too long
+MODEL_NOT_PULLED = "model_not_pulled"  # Ollama is running but the model has not been `ollama pull`ed
+MODEL_NOT_FOUND = "model_not_found"    # the provider does not have this model ID (or the key cannot see it)
+AUTH = "auth"                          # wrong / expired key (401)
+PERMISSION = "permission"              # the provider denied access (403)
+RATE_LIMIT = "rate_limit"              # 429: rate limit / out of credit
+BAD_REQUEST = "bad_request"            # 400: invalid parameters
+PROVIDER_ERROR = "provider_error"      # 5xx / other errors
 
 
 class ProviderError(Exception):
@@ -68,7 +65,7 @@ class ProviderError(Exception):
 class ChatResult:
     text: str
     stop: str                      # end | max_tokens | refusal | other
-    stop_reason: str | None        # giá trị gốc
+    stop_reason: str | None        # original value
     usage: dict[str, int] = field(default_factory=dict)
 
 
@@ -78,11 +75,11 @@ class ChatClient(Protocol):
 
 
 def _usage(**values: Any) -> dict[str, int]:
-    """Chỉ giữ số token provider trả về (int > 0)."""
+    """Keeps only the token counts the provider returned (int > 0)."""
     return {k: v for k, v in values.items() if isinstance(v, int) and not isinstance(v, bool) and v > 0}
 
 
-# ─── Cấu hình (chỉ từ biến môi trường, không bao giờ trả key ra ngoài) ──
+# ─── Settings (from environment variables only; keys are never returned to callers) ──
 @dataclass
 class ProviderSettings:
     anthropic_api_key: str | None = None
@@ -102,7 +99,7 @@ class ProviderSettings:
         )
 
     def missing_config(self, provider: str) -> str | None:
-        """None nếu đủ cấu hình; ngược lại là thông báo thiếu gì (không lộ giá trị)."""
+        """None when fully configured; otherwise a message saying what is missing (without revealing values)."""
         if provider == "anthropic" and not (self.anthropic_api_key or self.anthropic_auth_token):
             return "ANTHROPIC_API_KEY is not set on the server."
         if provider == "openai" and not self.openai_api_key:
@@ -113,14 +110,14 @@ class ProviderSettings:
 
 
 # ═══════════════════════════════════════════════════
-# Anthropic — Messages API qua SDK chính thức (AsyncAnthropic)
+# Anthropic — Messages API through the official SDK (AsyncAnthropic)
 # ═══════════════════════════════════════════════════
 class AnthropicChat:
     provider = "anthropic"
 
     def __init__(self, spec: ModelSpec, client):
         self.spec = spec
-        self.client = client   # AsyncAnthropic (test truyền client giả)
+        self.client = client   # AsyncAnthropic (tests inject a fake client)
 
     async def stream(self, system, messages, max_tokens, on_text) -> ChatResult:
         import anthropic
@@ -167,7 +164,7 @@ class AnthropicChat:
 
 
 # ═══════════════════════════════════════════════════
-# HTTP helpers dùng chung cho OpenAI + Ollama (httpx, async)
+# HTTP helpers shared by OpenAI + Ollama (httpx, async)
 # ═══════════════════════════════════════════════════
 def _error_text(body: bytes) -> str:
     try:
@@ -197,11 +194,11 @@ class OpenAIChat:
             "max_output_tokens": max_tokens,
             "stream": True,
             "store": False,
-            # Structured output: model buộc trả đúng {thinking, code, language}
+            # Structured output: the model is forced to return exactly {thinking, code, language}
             "text": {"format": {"type": "json_schema", "name": "code_step",
                                 "schema": RESPONSE_SCHEMA, "strict": True}},
         }
-        # Reasoning model: không gửi temperature; chỉ chỉnh effort
+        # Reasoning models: do not send temperature; only adjust effort
         if "reasoning_effort" in self.spec.options:
             body["reasoning"] = {"effort": self.spec.options["reasoning_effort"]}
         return body
@@ -278,7 +275,7 @@ class OpenAIChat:
 
 
 async def _sse_events(resp: httpx.Response):
-    """Đọc SSE: mỗi event là 1 khối 'data: {...}' kết thúc bằng dòng trống."""
+    """Reads SSE: each event is one 'data: {...}' block terminated by a blank line."""
     data_lines: list[str] = []
     async for line in resp.aiter_lines():
         if line == "":
@@ -322,7 +319,7 @@ class OllamaChat:
             "model": self.spec.id,
             "messages": [{"role": "system", "content": system}] + messages,
             "stream": True,
-            "format": RESPONSE_SCHEMA,  # ép JSON đúng schema
+            "format": RESPONSE_SCHEMA,  # force JSON that matches the schema
             "options": {"num_predict": max_tokens},
         }
         if "num_ctx" in opts:
@@ -347,7 +344,7 @@ class OllamaChat:
                         continue
                     if chunk.get("error"):
                         raise ProviderError(PROVIDER_ERROR, self.provider, f"Ollama error: {chunk['error']}")
-                    # Chỉ lấy content; nếu model có thinking thì phần đó KHÔNG hiển thị/ghép vào
+                    # Take only the content; if the model has thinking, that part is NOT shown/appended
                     delta = (chunk.get("message") or {}).get("content") or ""
                     if delta:
                         text += delta
@@ -382,12 +379,12 @@ class OllamaChat:
 
 
 # ═══════════════════════════════════════════════════
-# Registry: cấu hình, trạng thái sẵn sàng, tạo client (lazy)
+# Registry: configuration, readiness status, client creation (lazy)
 # ═══════════════════════════════════════════════════
 class ProviderRegistry:
     """
-    Tạo ChatClient cho một ModelSpec. Client SDK/HTTP chỉ được tạo khi provider
-    đó thực sự được dùng → chạy Ollama không cần Anthropic/OpenAI key.
+    Creates a ChatClient for a ModelSpec. SDK/HTTP clients are only created when that provider
+    is actually used → running Ollama needs no Anthropic/OpenAI key.
     """
 
     PROBE_TIMEOUT = 3.0
@@ -397,7 +394,7 @@ class ProviderRegistry:
                  anthropic_client=None):
         self.settings = settings or ProviderSettings.from_env()
         self._transport = transport          # test: httpx.MockTransport
-        self._anthropic = anthropic_client   # test: client giả
+        self._anthropic = anthropic_client   # tests: fake client
         self._http: dict[str, httpx.AsyncClient] = {}
 
     def _client(self, provider: str, read_timeout: float) -> httpx.AsyncClient:
@@ -422,16 +419,16 @@ class ProviderRegistry:
                 self._anthropic = AsyncAnthropic(api_key=s.anthropic_api_key) if s.anthropic_api_key else AsyncAnthropic()
             return AnthropicChat(spec, self._anthropic)
         if spec.provider == "openai":
-            # Reasoning model có thể im lặng khá lâu trước token đầu
+            # Reasoning models can stay silent for quite a while before the first token
             return OpenAIChat(spec, self._client("openai", 300.0), s.openai_base_url, s.openai_api_key)
         if spec.provider == "ollama":
-            # Lần đầu Ollama phải load model vào RAM/VRAM → chờ lâu trước token đầu
+            # On first use Ollama must load the model into RAM/VRAM → long wait before the first token
             return OllamaChat(spec, self._client("ollama", 300.0), s.ollama_base_url)
         raise ProviderError(NOT_CONFIGURED, spec.provider, f"No adapter for provider '{spec.provider}'.")
 
-    # ── Trạng thái để UI hiện trước khi bấm Run ──
+    # ── Status shown by the UI before pressing Run ──
     async def ollama_models(self) -> tuple[set[str] | None, str | None, str | None]:
-        """(tên model đã pull, kind lỗi, message). Gọi GET /api/tags — không tải model nào."""
+        """(names of pulled models, error kind, message). Calls GET /api/tags — downloads no model."""
         base = self.settings.ollama_base_url
         try:
             client = self._client("ollama-probe", self.PROBE_TIMEOUT)
@@ -450,7 +447,7 @@ class ProviderRegistry:
         return names, None, None
 
     async def status(self) -> list[dict]:
-        """Catalog + trạng thái từng provider/model. Cloud: chỉ kiểm tra có key (không gọi API trả phí)."""
+        """Catalog + status of each provider/model. Cloud: only checks that a key exists (no paid API call)."""
         out = []
         for pid, info in PROVIDERS.items():
             models = models_for(pid)
@@ -461,7 +458,7 @@ class ProviderRegistry:
                                      "message": missing or ""}
             ready_models: set[str] | None = None
             if pid == "ollama":
-                entry["base_url"] = self.settings.ollama_base_url  # không phải secret
+                entry["base_url"] = self.settings.ollama_base_url  # not a secret
                 if missing is None:
                     ready_models, kind, msg = await self.ollama_models()
                     if kind:
@@ -484,7 +481,7 @@ class ProviderRegistry:
         return out
 
     async def preflight(self, spec: ModelSpec) -> None:
-        """Kiểm tra nhanh trước khi tạo run. Raise ProviderError nếu chắc chắn không chạy được."""
+        """Quick check before creating a run. Raises ProviderError if it certainly cannot run."""
         missing = self.settings.missing_config(spec.provider)
         if missing:
             raise ProviderError(NOT_CONFIGURED, spec.provider, missing)

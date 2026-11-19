@@ -3,8 +3,8 @@ import { Brain, ClipboardCheck, Cog, FileSearch, Package, PenLine, RotateCw, Wre
 import type { RunDetail } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-// Ai đang làm việc: model (chờ LLM) hay runtime (application tự chạy/kiểm tra).
-// Chỉ hiển thị hành động + dữ liệu quan sát được, không hiển thị suy luận của model.
+// Who is working: the model (waiting for the LLM) or the runtime (the application running/checking by itself).
+// Shows only observable actions + data, never the model's reasoning.
 const ICONS: Record<string, typeof Brain> = {
   write: Brain, fix: Wrench, review: FileSearch, streaming: PenLine,
   executing: Cog, installing: Package, install_failed: Package,
@@ -26,7 +26,7 @@ function useNow(active: boolean) {
   return now;
 }
 
-/** Thanh "đang làm gì" luôn hiện khi run đang chạy. Dữ liệu lấy từ runs.activity (backend events). */
+/** The "what is happening now" bar, always visible while a run is active. Data comes from runs.activity (backend events). */
 export function LiveActivity({ run }: { run: RunDetail }) {
   const now = useNow(true);
   const actor = ACTOR[run.activity_phase];

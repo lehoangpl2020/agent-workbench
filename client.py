@@ -23,14 +23,14 @@ def execute_sync(
     provider: str | None = None,
     model: str | None = None,
 ):
-    """Gọi /api/execute (sync), đợi kết quả cuối cùng."""
+    """Calls /api/execute (sync) and waits for the final result."""
     url = f"{base_url}/api/execute"
     payload = {
         "message": message,
         "max_iterations": max_iterations,
         "timeout_seconds": timeout_seconds,
     }
-    # Không truyền → server dùng default trong model_catalog.py (Claude Sonnet 4.6)
+    # If omitted, the server uses the default in model_catalog.py (Claude Sonnet 4.6)
     if provider:
         payload["provider"] = provider
     if model:
@@ -69,14 +69,14 @@ def execute_stream(
     provider: str | None = None,
     model: str | None = None,
 ):
-    """Gọi /api/execute/stream (SSE), in từng event realtime."""
+    """Calls /api/execute/stream (SSE) and prints each event in real time."""
     url = f"{base_url}/api/execute/stream"
     payload = {
         "message": message,
         "max_iterations": max_iterations,
         "timeout_seconds": timeout_seconds,
     }
-    # Không truyền → server dùng default trong model_catalog.py (Claude Sonnet 4.6)
+    # If omitted, the server uses the default in model_catalog.py (Claude Sonnet 4.6)
     if provider:
         payload["provider"] = provider
     if model:
@@ -102,7 +102,7 @@ def execute_stream(
 
 
 def _parse_sse(raw: str) -> dict | None:
-    """Parse một SSE event thành {event, data}."""
+    """Parses one SSE event into {event, data}."""
     event_type = ""
     data_lines = []
 
@@ -124,7 +124,7 @@ def _parse_sse(raw: str) -> dict | None:
 
 
 def _print_event(event: dict):
-    """In SSE event theo format đẹp."""
+    """Prints an SSE event in a readable format."""
     etype = event["event"]
     data = event["data"]
 
@@ -167,7 +167,7 @@ def _print_event(event: dict):
         print()
 
     elif etype == "activity":
-        # Hành động hiện tại: model đang viết/sửa/xem, hoặc runtime đang chạy/cài package/thu file
+        # Current action: the model is writing/fixing/reviewing, or the runtime is running/installing packages/collecting files
         print(f"   · {data.get('text', '')}")
 
     elif etype == "model_done":
@@ -195,7 +195,7 @@ def _raise_for_status(resp: httpx.Response):
 
 
 def health_check(base_url: str):
-    """Kiểm tra server có sống không."""
+    """Checks whether the server is alive."""
     url = f"{base_url}/health"
     try:
         resp = httpx.get(url, timeout=5)

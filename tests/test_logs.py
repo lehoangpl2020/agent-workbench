@@ -1,6 +1,6 @@
 """
-Activity log: entry thật từ backend, lưu SQLite, có trong lúc run đang chạy,
-lọc theo iteration, tải về, không lộ secret. Planner thật được test với client giả.
+Activity log: real entries from the backend, stored in SQLite, available while a run is in progress,
+filterable by iteration, downloadable, never leaking secrets. The real planner is tested with a fake client.
 """
 
 import asyncio
@@ -37,10 +37,10 @@ def test_full_run_is_logged_in_order(data_dir):
     assert msgs[0] == "Run started"
     assert logs[0]["data"]["max_iterations"] == 5 and "executor" in logs[0]["data"]
     assert msgs[-1].startswith("Run finished: success")
-    # mọi entry đều có đủ trường, id tăng dần
+    # every entry has all fields, ids increase
     assert all({"id", "ts", "iteration", "source", "level", "message", "data"} <= e.keys() for e in logs)
     assert [e["id"] for e in logs] == sorted(e["id"] for e in logs)
-    # lời giải thích của MODEL tách khỏi hành động runtime/sandbox
+    # the MODEL's explanation is separate from runtime/sandbox actions
     model_msgs = [e["message"] for e in logs if e["source"] == "model"]
     assert "Print a value" in model_msgs and "Write a file" in model_msgs
     assert any(m.startswith("Model replied DONE") for m in model_msgs)
@@ -75,12 +75,12 @@ def test_logs_arrive_while_running_and_filter_by_iteration(data_dir):
     steps = [code("import time\ntime.sleep(2)\nprint('a')"), code("print('b')"), DONE]
     with TestClient(make_app(data_dir, steps)) as client:
         run_id = client.post("/api/runs", json={"message": "slow"}).json()["id"]
-        # Log "Starting execution" phải có TRONG lúc code còn đang chạy
+        # The "Starting execution" log must exist WHILE the code is still running
         live = wait_until(lambda: (l := client.get(f"/api/runs/{run_id}/logs").json()["logs"])
                           and any(m.startswith("Starting execution") for m in messages(l)) and l)
         assert client.get(f"/api/runs/{run_id}").json()["status"] == "running"
         assert not any(m.startswith("Run finished") for m in messages(live))
-        # after=<id> chỉ trả phần mới
+        # after=<id> returns only the new part
         last_id = live[-1]["id"]
         wait_finished(client, run_id)
         newer = client.get(f"/api/runs/{run_id}/logs?after={last_id}").json()["logs"]
@@ -128,7 +128,7 @@ def test_secrets_are_redacted(data_dir, monkeypatch):
         assert secret not in text and "SUPERSECRET" not in text and "tok_live_ABCDEFGH12345" not in text
 
 
-# ── Planner thật + Anthropic client giả (không gọi API) ──────────
+# ── Real planner + fake Anthropic client (no API calls) ──────────
 class FakeStream:
     def __init__(self, text, usage):
         self.text, self.usage = text, usage
@@ -176,7 +176,7 @@ def test_llm_call_logs_with_tokens_when_provided():
     assert msgs[0] == "Calling fake-model" and msgs[1].startswith("First token after")
     received = next(d for _, _, m, d in logs if m.startswith("Response received in"))
     assert received["input_tokens"] == 120 and received["output_tokens"] == 45
-    assert "cache_read_input_tokens" not in received  # 0 → không hiển thị
+    assert "cache_read_input_tokens" not in received  # 0 → not shown
     assert msgs[-1].startswith("Parsed response: python code, 1 lines")
     assert all(src == "llm" for _, src, _, _ in logs)
 

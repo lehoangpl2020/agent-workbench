@@ -1,12 +1,12 @@
 """
-RunStore — lưu lịch sử run + iteration vào SQLite (thư viện chuẩn sqlite3, không ORM).
+RunStore — stores run + iteration history in SQLite (standard sqlite3 module, no ORM).
 
-Bảng:
-  runs        1 dòng / run: prompt, status, answer, message, thời gian...
-  iterations  1 dòng / iteration: code, stdout/stderr, exit_code, artifacts...
+Tables:
+  runs        one row per run: prompt, status, answer, message, timing...
+  iterations  one row per iteration: code, stdout/stderr, exit_code, artifacts...
 
-Mỗi lệnh SQLite ở đây chỉ mất vài ms nên gọi trực tiếp từ async code là chấp nhận
-được cho app local (không đáng để đẩy sang thread).
+Each SQLite statement here takes only a few ms, so calling it directly from async code is acceptable
+for a local app (not worth moving to a thread).
 """
 
 import json
@@ -62,29 +62,29 @@ CREATE TABLE IF NOT EXISTS run_logs (
 CREATE INDEX IF NOT EXISTS idx_run_logs_run ON run_logs(run_id, id);
 """
 
-# Cột thêm sau phiên bản đầu → ALTER TABLE cho DB cũ (đơn giản, không cần tool migration)
+# Columns added after the first version → ALTER TABLE for old DBs (simple, no migration tool needed)
 MIGRATIONS = {
     "runs": {
-        "activity": "TEXT DEFAULT ''",            # đang làm gì (hiển thị realtime)
+        "activity": "TEXT DEFAULT ''",            # what is happening now (shown in real time)
         "activity_phase": "TEXT DEFAULT ''",      # writing/fixing/streaming/executing/...
         "activity_iteration": "INTEGER",
         "activity_at": "TEXT",
-        # Provider thật đã gọi. Run tạo trước khi có multi-provider để NULL (không đoán/gán default).
+        # The provider that was actually called. Runs created before multi-provider support stay NULL (never guessed/defaulted).
         "provider": "TEXT",
     },
     "iterations": {
         "intent": "TEXT DEFAULT 'write'",         # write | fix | review
-        "intent_detail": "TEXT DEFAULT ''",       # vd lỗi đang được sửa
+        "intent_detail": "TEXT DEFAULT ''",       # e.g. the error being fixed
     },
 }
 
-# Trạng thái iteration (hiển thị ở Timeline)
-ITER_PLANNING = "planning"      # đang gọi model
-ITER_EXECUTING = "executing"    # đang chạy code
+# Iteration states (shown in the Timeline)
+ITER_PLANNING = "planning"      # calling the model
+ITER_EXECUTING = "executing"    # running code
 ITER_SUCCEEDED = "succeeded"    # exit_code = 0
 ITER_FAILED = "failed"          # exit_code != 0
-ITER_TIMED_OUT = "timed_out"    # bị kill vì timeout
-ITER_DONE = "done"              # model báo DONE (không có code)
+ITER_TIMED_OUT = "timed_out"    # killed because of the timeout
+ITER_DONE = "done"              # the model said DONE (no code)
 ITER_ACTIVE = (ITER_PLANNING, ITER_EXECUTING)
 
 
@@ -131,14 +131,14 @@ class RunStore:
         )
 
     def finish_run(self, run_id, status, answer, message, iteration_count) -> None:
-        """Ghi trạng thái cuối + đóng mọi iteration còn dở (planning/executing)."""
+        """Writes the final state + closes every unfinished iteration (planning/executing)."""
         with self._lock:
             self._conn.execute(
                 "UPDATE runs SET status=?, answer=?, message=?, iteration_count=?, finished_at=?, "
                 "activity='', activity_phase='finished', activity_at=? WHERE id=?",
                 (status, answer, message, iteration_count, now_iso(), now_iso(), run_id),
             )
-            # Iteration đang dở khi run kết thúc (Stop, lỗi) → mang trạng thái của run
+            # Iteration still in progress when the run ended (Stop, error) → takes the run's state
             self._conn.execute(
                 "UPDATE iterations SET status=?, finished_at=? WHERE run_id=? AND status IN (?, ?)",
                 (status, now_iso(), run_id, *ITER_ACTIVE),
@@ -146,7 +146,7 @@ class RunStore:
             self._conn.commit()
 
     def mark_interrupted(self) -> int:
-        """Khi server khởi động: run nào còn 'running' là do server bị tắt giữa chừng."""
+        """On server start: any run still 'running' was interrupted by the server shutting down."""
         rows = self._query("SELECT id, iteration_count FROM runs WHERE status IN ('running', 'pending')")
         for row in rows:
             msg = "Interrupted: the server restarted while this run was in progress."
@@ -175,7 +175,7 @@ class RunStore:
         run["iterations"] = [self._iteration_dict(r) for r in self._query(
             "SELECT * FROM iterations WHERE run_id=? ORDER BY number", (run_id,)
         )]
-        # iteration_count trong bảng runs chỉ ghi lúc kết thúc → lấy theo bảng iterations
+        # iteration_count in the runs table is only written at the end → take it from the iterations table
         run["iteration_count"] = max(run["iteration_count"] or 0, len(run["iterations"]))
         return run
 
@@ -220,7 +220,7 @@ class RunStore:
         )
 
     def set_activity(self, run_id, iteration, phase, text, touch: bool = True) -> str | None:
-        """Hành động hiện tại của run. touch=False: giữ activity_at (đồng hồ không reset)."""
+        """Current action of the run. touch=False: keeps activity_at (the clock does not reset)."""
         if touch:
             at = now_iso()
             self._exec(

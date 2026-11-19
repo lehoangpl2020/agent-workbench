@@ -1,6 +1,6 @@
 """
-Test helpers. Đây là kiểm tra OFFLINE/MOCK: planner là ScriptedPlanner (không gọi
-Claude API), nhưng code vẫn chạy THẬT bằng LocalExecutor (subprocess).
+Test helpers. These are OFFLINE/MOCK checks: the planner is a ScriptedPlanner (no calls to the
+Claude API), but the code still runs FOR REAL through LocalExecutor (subprocess).
 """
 
 import asyncio
@@ -23,14 +23,14 @@ def code(src: str, why: str = "test step") -> CodeBlock:
 
 
 class Hang:
-    """Bước planner treo lâu (giả lập gọi model chậm) — để test Stop khi đang planning."""
+    """A planner step that hangs for a long time (simulates a slow model call) — used to test Stop while planning."""
 
 
 class ScriptedPlanner:
     """
-    Planner giả: trả lần lượt các bước đã định sẵn cho từng run.
-    scripts: list bước (dùng cho mọi prompt) hoặc dict {prompt: list bước}.
-    Một bước có thể là CodeBlock, Exception (raise), hoặc Hang().
+    Fake planner: returns the predefined steps in order for each run.
+    scripts: a list of steps (used for every prompt) or a dict {prompt: list of steps}.
+    A step can be a CodeBlock, an Exception (raised), or Hang().
     """
 
     configured = True
@@ -50,15 +50,15 @@ class ScriptedPlanner:
             await asyncio.sleep(60)
         if isinstance(step, Exception):
             raise step
-        # Giả lập streaming: gửi nửa đầu của code trước khi trả kết quả đầy đủ
+        # Simulate streaming: send the first half of the code before returning the full result
         if on_progress and step.code:
             await on_progress(step.code[: max(1, len(step.code) // 2)], step.explanation)
-        await asyncio.sleep(0)  # nhường event loop như một lời gọi API thật
+        await asyncio.sleep(0)  # yield to the event loop like a real API call
         return step
 
 
 def ollama_transport(pulled=("qwen3.5:4b",), calls: list | None = None):
-    """httpx.MockTransport giả Ollama: /api/tags trả các model đã pull. Ghi lại mọi path được gọi."""
+    """httpx.MockTransport that fakes Ollama: /api/tags returns the pulled models. Records every path that was called."""
     import httpx
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -72,7 +72,7 @@ def ollama_transport(pulled=("qwen3.5:4b",), calls: list | None = None):
 
 
 def fake_registry(anthropic=True, openai=True, pulled=("qwen3.5:4b",), calls=None, transport=None):
-    """ProviderRegistry với key giả (không bao giờ gọi API thật) + Ollama giả."""
+    """ProviderRegistry with fake keys (never calls a real API) + a fake Ollama."""
     from llm_providers import ProviderRegistry, ProviderSettings
 
     settings = ProviderSettings(

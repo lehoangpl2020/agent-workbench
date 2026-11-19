@@ -1,13 +1,10 @@
 """
-Model catalog — NƠI DUY NHẤT khai báo provider + model mà app cho chọn.
+Model catalog — the ONLY place that declares the providers + models the app lets you choose.
 
-Muốn thêm/bớt model: sửa list CATALOG bên dưới (và PROVIDERS nếu là provider mới).
-Backend validate mọi lựa chọn theo file này; frontend lấy danh sách qua GET /api/providers,
-không giữ danh sách riêng. Không ghi API key/secret ở đây — key lấy từ biến môi trường
-(xem llm_providers.ProviderSettings).
-
-Tương đương .NET: giống một static registry/options class được bind 1 lần, mọi nơi
-khác chỉ tra cứu theo id.
+To add/remove a model: edit the CATALOG list below (and PROVIDERS for a new provider).
+The backend validates every selection against this file; the frontend gets the list through GET /api/providers
+and keeps no list of its own. Do not put API keys/secrets here — keys come from environment variables
+(see llm_providers.ProviderSettings).
 """
 
 from dataclasses import dataclass, field
@@ -17,14 +14,14 @@ from typing import Any
 @dataclass(frozen=True)
 class ModelSpec:
     provider: str                 # id provider: anthropic | openai | ollama
-    id: str                       # model ID gửi đúng nguyên văn lên API
-    name: str                     # tên hiển thị
-    provider_default: bool = False  # model chọn sẵn khi user đổi sang provider này
-    note: str = ""                # gợi ý ngắn hiện ở UI (giá, tốc độ...)
+    id: str                       # model ID sent verbatim to the API
+    name: str                     # display name
+    provider_default: bool = False  # model preselected when the user switches to this provider
+    note: str = ""                # short hint shown in the UI (price, speed...)
     max_output_tokens: int = 16000
-    # Tham số riêng của từng model/provider, adapter trong llm_providers.py đọc:
+    # Per-model/provider parameters, read by the adapters in llm_providers.py:
     #   openai:  reasoning_effort ("none" | "low" | "medium" | ...)
-    #   ollama:  num_ctx (context window), think (bật/tắt thinking)
+    #   ollama:  num_ctx (context window), think (enable/disable thinking)
     options: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -50,11 +47,11 @@ PROVIDERS: dict[str, ProviderInfo] = {
 
 CATALOG: list[ModelSpec] = [
     # ── Anthropic Claude ─────────────────────────────
-    # Sonnet 4.6: không gửi `thinking` → chạy không thinking (như trước đây).
+    # Sonnet 4.6: no `thinking` is sent → runs without thinking (as before).
     ModelSpec("anthropic", "claude-sonnet-4-6", "Claude Sonnet 4.6", provider_default=True,
               note="Default · $3 / $15 per 1M tokens"),
-    # Các model 5.5 luôn bật adaptive thinking; thinking tokens tính vào max_tokens
-    # → cho dư chỗ để code không bị cắt cụt.
+    # The 5.5 models always use adaptive thinking; thinking tokens count toward max_tokens
+    # → leave enough headroom so the code is not truncated.
     ModelSpec("anthropic", "claude-sonnet-5-5", "Claude Sonnet 5.5",
               note="Newer Sonnet · $2 / $10 per 1M tokens", max_output_tokens=32000),
     ModelSpec("anthropic", "claude-opus-5-5", "Claude Opus 5.5",
@@ -63,8 +60,8 @@ CATALOG: list[ModelSpec] = [
               note="Fast and cheap · $0.10 / $0.50 per 1M tokens", max_output_tokens=32000),
 
     # ── OpenAI (Responses API) ───────────────────────
-    # ID và mức reasoning effort đối chiếu với developers.openai.com/api/docs/models (2026-11).
-    # Đều là reasoning model; "low" có ở cả ba model.
+    # IDs and reasoning-effort levels checked against developers.openai.com/api/docs/models (2026-11).
+    # All are reasoning models; "low" exists on all three.
     ModelSpec("openai", "gpt-6.2-sol", "GPT-6.2 Sol", provider_default=True,
               note="Everyday coding/agents · $2 / $10 per 1M tokens",
               options={"reasoning_effort": "low"}),
@@ -75,9 +72,9 @@ CATALOG: list[ModelSpec] = [
               note="Flagship, expensive · $8 / $40 per 1M tokens",
               options={"reasoning_effort": "low"}),
 
-    # ── Ollama (chạy local, phải `ollama pull` trước) ─
-    # think=False: trả JSON ngay, không tốn token cho thinking (model 4B chạy local).
-    # num_ctx: Ollama mặc định context nhỏ; history nhiều iteration cần chỗ.
+    # ── Ollama (runs locally; `ollama pull` the model first) ─
+    # think=False: return JSON immediately, spending no tokens on thinking (a 4B model running locally).
+    # num_ctx: Ollama's default context is small; a history of many iterations needs room.
     ModelSpec("ollama", "qwen3.5:4b", "Qwen 3.5 4B", provider_default=True,
               note="Local · free · needs `ollama pull qwen3.5:4b`",
               max_output_tokens=8192, options={"num_ctx": 32768, "think": False}),
@@ -88,7 +85,7 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 
 
 class InvalidModelSelection(ValueError):
-    """provider/model không có trong catalog (API trả 422)."""
+    """The provider/model is not in the catalog (the API returns 422)."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -100,7 +97,7 @@ def models_for(provider: str) -> list[ModelSpec]:
 
 
 def find(provider: str | None, model: str | None) -> ModelSpec | None:
-    """Tra cứu đúng cặp provider/model đã lưu (không suy đoán). None nếu không còn trong catalog."""
+    """Looks up exactly the stored provider/model pair (no guessing). None if it is no longer in the catalog."""
     return next((m for m in CATALOG if m.provider == provider and m.id == model), None)
 
 
@@ -112,12 +109,12 @@ def default_spec() -> ModelSpec:
 
 def resolve(provider: str | None, model: str | None) -> ModelSpec:
     """
-    Chuẩn hóa lựa chọn từ request:
-      cả hai None        → default (Claude Sonnet 4.6) — client/CLI cũ không gửi gì
-      chỉ provider       → model provider_default của provider đó
-      chỉ model          → provider có model đó (nếu duy nhất)
-      cả hai             → phải khớp đúng 1 dòng trong CATALOG
-    Không có fallback ngầm: sai là raise InvalidModelSelection.
+    Normalizes the selection from a request:
+      both None        → default (Claude Sonnet 4.6) — old clients/CLI send nothing
+      provider only    → that provider's provider_default model
+      model only       → the provider that has that model (if unique)
+      both             → must match exactly one row in CATALOG
+    No silent fallback: a bad selection raises InvalidModelSelection.
     """
     provider = (provider or "").strip() or None
     model = (model or "").strip() or None
@@ -153,7 +150,7 @@ def resolve(provider: str | None, model: str | None) -> ModelSpec:
 
 
 def describe(provider: str | None, model: str | None) -> dict:
-    """Tên hiển thị cho run đã lưu. Run cũ (provider NULL) giữ nguyên model đã lưu, không gán default."""
+    """Display name for a stored run. Old runs (provider NULL) keep the stored model and get no default."""
     spec = find(provider, model)
     info = PROVIDERS.get(provider or "")
     return {

@@ -67,12 +67,12 @@ export function isImage(mime: string): boolean {
   return /^image\/(png|jpe?g|gif|webp|svg\+xml)$/.test(mime);
 }
 
-/** Tên model của một run: tên trong catalog, hoặc model ID đã lưu (không đoán). */
+/** Name of a run's model: the name from the catalog, or the stored model ID (never guessed). */
 export function modelLabel(run: { model: string; model_name: string | null }): string {
   return run.model_name ?? (run.model || "—");
 }
 
-/** Provider của một run. Run cũ không ghi provider → nói rõ, không gán default. */
+/** Provider of a run. Old runs recorded no provider → say so clearly, do not assign a default. */
 export function providerLabel(run: { provider: string | null; provider_name: string | null }): string {
   return run.provider_name ?? run.provider ?? "provider not recorded";
 }

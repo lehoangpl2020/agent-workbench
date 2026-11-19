@@ -1,12 +1,12 @@
 """
-RunWorkspace — thư mục riêng cho từng run trên disk.
+RunWorkspace — a private directory for each run on disk.
 
     <RUNS_DIR>/<run_id>/
-        code/iter_01.py        code của từng iteration (server ghi)
-        output/                thư mục code ghi file vào (= /workspace/output trong sandbox)
-        snapshots/01/...       bản sao file mới/đổi sau iteration 1 → xem lại đúng iteration
+        code/iter_01.py        code of each iteration (written by the server)
+        output/                where the code writes files (= /workspace/output in the sandbox)
+        snapshots/01/...       copies of files created/changed after iteration 1 → lets you view that exact iteration later
 
-Mọi đường dẫn artifact từ client đều đi qua resolve_artifact() để chặn path traversal.
+Every artifact path from a client goes through resolve_artifact() to block path traversal.
 """
 
 import mimetypes
@@ -15,7 +15,7 @@ import shutil
 import uuid
 from pathlib import Path
 
-# File lớn hơn ngưỡng này không chụp snapshot (vẫn xem được ở output/)
+# Files larger than this are not snapshotted (they can still be viewed in output/)
 MAX_SNAPSHOT_BYTES = 20 * 1024 * 1024
 
 
@@ -24,7 +24,7 @@ class ArtifactNotFound(Exception):
 
 
 def _validate_run_id(run_id: str) -> str:
-    # run_id luôn là UUID → không thể chứa "/" hay ".." khi ghép vào path
+    # run_id is always a UUID → it cannot contain "/" or ".." when joined into a path
     return str(uuid.UUID(run_id))
 
 
@@ -36,12 +36,12 @@ class RunWorkspace:
         self.output_dir = self.root / "output"
         self.snapshots_dir = self.root / "snapshots"
 
-    # ── Tạo thư mục ────────────────────────────────
+    # ── Create directories ─────────────────────────
     def create(self) -> "RunWorkspace":
         self.code_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.snapshots_dir.mkdir(parents=True, exist_ok=True)
-        # Sandbox chạy bằng user khác (uid 1000) → cần quyền ghi vào output/
+        # The sandbox runs as another user (uid 1000) → it needs write permission on output/
         for d in (self.root, self.code_dir, self.output_dir):
             try:
                 os.chmod(d, 0o777)
@@ -58,9 +58,9 @@ class RunWorkspace:
             pass
         return path
 
-    # ── Liệt kê / so sánh file ─────────────────────
+    # ── List / compare files ───────────────────────
     def scan(self) -> dict[str, tuple[int, int]]:
-        """{relative_path: (size, mtime_ns)} của mọi file thường trong output/ (bỏ qua symlink)."""
+        """{relative_path: (size, mtime_ns)} for every regular file in output/ (symlinks skipped)."""
         files: dict[str, tuple[int, int]] = {}
         if not self.output_dir.exists():
             return files
@@ -79,7 +79,7 @@ class RunWorkspace:
         return sorted(p for p, meta in after.items() if before.get(p) != meta)
 
     def snapshot(self, iteration: int, paths: list[str]) -> None:
-        """Copy file mới/đổi của iteration này sang snapshots/NN/."""
+        """Copies the files created/changed in this iteration to snapshots/NN/."""
         dest_root = self.snapshots_dir / f"{iteration:02d}"
         for rel in paths:
             src = self.output_dir / rel
@@ -97,11 +97,11 @@ class RunWorkspace:
             for rel, (size, _) in sorted(self.scan().items())
         ]
 
-    # ── Đọc file an toàn ───────────────────────────
+    # ── Safe file reads ────────────────────────────
     def resolve_artifact(self, rel_path: str, iteration: int | None = None) -> Path:
         """
-        Trả về path tuyệt đối của artifact, CHỈ khi nó nằm trong output/ (hoặc snapshot)
-        của đúng run này. Chặn: "../", đường dẫn tuyệt đối, symlink trỏ ra ngoài.
+        Returns the absolute path of the artifact, ONLY if it is inside output/ (or a snapshot)
+        of this run. Blocks: "../", absolute paths, symlinks pointing outside.
         """
         if not rel_path or "\x00" in rel_path:
             raise ArtifactNotFound(rel_path)

@@ -1,6 +1,6 @@
 """
-HTTP API: sync vs SSE, Stop, 409, artifacts, persistence qua restart.
-Mock planner + LocalExecutor (subprocess thật) + SQLite thật trong tmp_path.
+HTTP API: sync vs SSE, Stop, 409, artifacts, persistence across restarts.
+Mock planner + LocalExecutor (real subprocess) + a real SQLite DB in tmp_path.
 """
 
 import json
@@ -59,7 +59,7 @@ def test_sync_and_sse_have_same_business_result(data_dir):
     assert types[0] == "session" and types[-1] == "done"
     core = [t for t in types if t not in ("activity", "code_progress", "log")]
     assert core == ["session", "iteration", "code", "iteration", "result", "iteration", "model_done", "done"]
-    # Quan sát realtime: hành động hiện tại + code stream trước khi có event "code"
+    # Real-time observation: current action + streamed code before the "code" event arrives
     phases = [d["phase"] for e, d in events if e == "activity"]
     assert phases == ["write", "executing", "collecting", "checking", "review"]
     assert types.index("code_progress") < types.index("code")
@@ -92,13 +92,13 @@ def test_stop_kills_code_and_server_stays_responsive(data_dir):
         wait_until(lambda: client.get(f"/api/runs/{run_id}").json()["iterations"][-1:]
                    and client.get(f"/api/runs/{run_id}").json()["iterations"][-1]["status"] == "executing")
 
-        # Event loop không bị chặn: health trả về ngay khi code đang chạy
+        # The event loop is not blocked: health responds immediately while code is running
         t0 = time.monotonic()
         health = client.get("/health").json()
         assert time.monotonic() - t0 < 1.0
         assert health["active_run_id"] == run_id
 
-        # Chỉ 1 run tại một thời điểm
+        # Only one run at a time
         busy = client.post("/api/runs", json={"message": "another"})
         assert busy.status_code == 409
         assert busy.json()["detail"]["active_run_id"] == run_id
@@ -112,7 +112,7 @@ def test_stop_kills_code_and_server_stays_responsive(data_dir):
 
         time.sleep(4.5)
         assert not list((data_dir / "runs").glob(f"{run_id}/output/after.txt")), "code kept running"
-        # Stop lần nữa → 409 (run không còn chạy)
+        # Stop again → 409 (the run is no longer running)
         assert client.post(f"/api/runs/{run_id}/stop").status_code == 409
 
 
@@ -156,7 +156,7 @@ def test_artifacts_are_isolated_per_run(data_dir):
         assert client.get(f"/api/runs/{a}/artifacts/a.txt").text == "A"
         dl = client.get(f"/api/runs/{a}/artifacts/a.txt?download=1")
         assert "attachment" in dl.headers["content-disposition"]
-        # File của run khác / ngoài phạm vi → 404
+        # Files of another run / outside the allowed scope → 404
         assert client.get(f"/api/runs/{a}/artifacts/b.txt").status_code == 404
         assert client.get(f"/api/runs/{a}/artifacts/..%2F{b}%2Foutput%2Fb.txt").status_code == 404
         assert client.get(f"/api/runs/{a}/artifacts/%2E%2E/%2E%2E/agent.db").status_code == 404
@@ -197,12 +197,12 @@ def test_history_survives_restart(data_dir):
     with TestClient(make_app(data_dir, [WRITE_A, DONE])) as client:
         run_id = client.post("/api/execute", json={"message": "persist me"}).json()["session_id"]
 
-    # Giả lập 1 run đang chạy dở khi server bị tắt đột ngột
+    # Simulate a run left half-finished when the server was shut down abruptly
     store = RunStore(data_dir / "agent.db")
     store.create_run("11111111-1111-1111-1111-111111111111", "crashed", 3, 30, "m", "local")
     store.close()
 
-    with TestClient(make_app(data_dir, [DONE])) as client:  # app mới = server restart
+    with TestClient(make_app(data_dir, [DONE])) as client:  # new app = server restart
         runs = client.get("/api/runs").json()["runs"]
         assert run_id in [r["id"] for r in runs]
         detail = client.get(f"/api/runs/{run_id}").json()
@@ -213,7 +213,7 @@ def test_history_survives_restart(data_dir):
         crashed = client.get("/api/runs/11111111-1111-1111-1111-111111111111").json()
         assert crashed["status"] == "error" and "restarted" in crashed["message"]
 
-        # SSE của run đã xong → trả done ngay
+        # SSE of a finished run → returns done immediately
         with client.stream("GET", f"/api/runs/{run_id}/events") as resp:
             events = parse_sse(resp.read().decode())
         assert events == [("done", {"session_id": run_id, "status": "success",
@@ -241,7 +241,7 @@ def test_fix_intent_shows_error_being_fixed(data_dir):
     assert intents[0] == ("write", "")
     assert intents[1][0] == "fix" and "NameError: name 'y' is not defined" in intents[1][1]
     assert intents[2] == ("review", "")
-    # Run xong → không còn "current action"
+    # Run finished → no more "current action"
     assert detail["activity"] == "" and detail["activity_phase"] == "finished"
 
 
@@ -252,7 +252,7 @@ def test_activity_visible_while_running(data_dir):
         detail = wait_until(lambda: (r := client.get(f"/api/runs/{run_id}").json())["activity_phase"] == "executing" and r)
         assert detail["activity_iteration"] == 1
         assert "iter_01.py" in detail["activity"]
-        # Code đã có trong DB ngay khi bắt đầu chạy
+        # The code is in the DB as soon as it starts running
         assert "time.sleep(2)" in detail["iterations"][0]["code"]
         wait_finished(client, run_id)
 
@@ -276,7 +276,7 @@ def test_old_database_is_migrated(data_dir):
         assert client.post("/api/execute", json={"message": "new"}).json()["status"] == "success"
 
 
-# ─── Chỉ cho máy mình gọi API (server chạy code, không có auth) ─────────
+# ─── Only this machine may call the API (the server runs code, no auth) ─────────
 def test_cors_rejects_unknown_origin(data_dir):
     preflight = {"Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type"}
     with TestClient(make_app(data_dir, SCRIPT)) as client:

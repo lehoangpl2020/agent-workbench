@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError, type AppConfig, type ProvidersResponse, type RunDetail } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-// Click chỉ điền prompt, user tự bấm Run.
+// Clicking only fills in the prompt; the user presses Run themselves.
 const EXAMPLES = [
   {
     label: "Draw a cute bee",
@@ -45,11 +45,11 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
   const [timeoutSeconds, setTimeoutSeconds] = useState<number | "">(draft?.timeoutSeconds ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<{ message: string; activeRunId?: string } | null>(null);
-  // Catalog lấy từ backend (model_catalog.py); frontend không giữ danh sách riêng.
+  // The catalog comes from the backend (model_catalog.py); the frontend keeps no list of its own.
   const [catalog, setCatalog] = useState<ProvidersResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  // "Edit & re-run" mang theo đúng provider/model của run cũ; run mới để trống → default của backend
+  // "Edit & re-run" carries over the exact provider/model of the old run; a new run leaves it empty → the backend default
   const [provider, setProvider] = useState<string>(draft?.provider ?? "");
   const [model, setModel] = useState<string>(draft?.provider ? (draft.model ?? "") : "");
 
@@ -66,7 +66,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
       setCatalog(data);
       setCatalogError(null);
       if (!provider) {
-        // Run mới: default của backend (Claude Sonnet 4.6)
+        // New run: the backend default (Claude Sonnet 4.6)
         setProvider(data.default.provider);
         setModel(data.default.model);
       }
@@ -83,7 +83,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
 
   const providerInfo = catalog?.providers.find((p) => p.id === provider) ?? null;
   const modelInfo = providerInfo?.models.find((m) => m.id === model) ?? null;
-  // Draft của run cũ có thể trỏ tới model đã bị xóa khỏi catalog → báo rõ, không tự đổi
+  // A draft from an old run may point to a model that was removed from the catalog → say so clearly, do not switch silently
   const unknownSelection = !catalog
     ? null
     : provider && !providerInfo
@@ -300,7 +300,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
 const SELECT =
   "h-9 w-full min-w-0 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 
-/** Model sẽ dùng cho run (hiện TRƯỚC khi bấm Run) + trạng thái sẵn sàng thật từ backend. */
+/** The model that will be used for the run (shown BEFORE pressing Run) + the real readiness status from the backend. */
 function ModelStatus({
   loading,
   checking,

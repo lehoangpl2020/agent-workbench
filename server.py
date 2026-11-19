@@ -1,24 +1,24 @@
 """
 FastAPI Server for Code Execution Agent (Agent Workbench).
 
-Run API (web UI dùng):
-  POST /api/runs                         — tạo run, chạy nền → {run_id}   (409 nếu đang có run)
-  GET  /api/runs                         — lịch sử run (SQLite)
-  GET  /api/runs/{id}                    — chi tiết run + iterations + artifacts
-  GET  /api/runs/{id}/events             — SSE tiến độ của run đang chạy
-  POST /api/runs/{id}/stop               — dừng run (kill cả process code đang chạy)
-  GET  /api/runs/{id}/artifacts          — danh sách file trong output của run
-  GET  /api/runs/{id}/artifacts/{path}   — xem/tải 1 file (?iteration=N, ?download=1)
-  GET  /api/config                       — default + giới hạn cho form
-  GET  /api/providers                    — catalog provider/model + trạng thái sẵn sàng (model_catalog.py)
+Run API (used by the web UI):
+  POST /api/runs                         — create a run, executes in the background → {run_id}   (409 if a run is active)
+  GET  /api/runs                         — run history (SQLite)
+  GET  /api/runs/{id}                    — run details + iterations + artifacts
+  GET  /api/runs/{id}/events             — SSE progress of the running run
+  POST /api/runs/{id}/stop               — stop the run (also kills the running code process)
+  GET  /api/runs/{id}/artifacts          — files in the run's output
+  GET  /api/runs/{id}/artifacts/{path}   — view/download one file (?iteration=N, ?download=1)
+  GET  /api/config                       — defaults + limits for the form
+  GET  /api/providers                    — provider/model catalog + readiness (model_catalog.py)
 
-API cũ (CLI client.py dùng, giữ tương thích):
-  POST /api/execute                      — chạy agent, đợi kết quả (sync)
-  POST /api/execute/stream               — chạy agent, SSE streaming
-  GET  /api/sessions/{id}                — xem session
+Legacy API (used by the CLI client.py, kept compatible):
+  POST /api/execute                      — run the agent and wait for the result (sync)
+  POST /api/execute/stream               — run the agent with SSE streaming
+  GET  /api/sessions/{id}                — view a session
   GET  /health                           — health check
 
-Cả sync lẫn SSE đều đi qua RunManager → CodeAgent.run() → cùng 1 agent loop.
+Both sync and SSE go through RunManager → CodeAgent.run() → the same single agent loop.
 """
 
 import asyncio
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# ─── Config (đọc từ env hoặc default) ──────────
+# ─── Config (read from env or defaults) ────────
 USE_DOCKER = os.getenv("USE_DOCKER", "false").lower() in ("true", "1", "yes")
 SANDBOX_MODE = os.getenv("SANDBOX_MODE", "ephemeral")  # ephemeral | persistent
 SANDBOX_CONTAINER_NAME = os.getenv("SANDBOX_CONTAINER_NAME", "agent-workbench-sandbox")
@@ -64,19 +64,19 @@ DB_PATH = Path(os.getenv("DB_PATH", DATA_DIR / "agent.db"))
 RUNS_DIR = Path(os.getenv("RUNS_DIR", DATA_DIR / "runs"))
 STATIC_DIR = Path(os.getenv("STATIC_DIR", BASE_DIR / "static"))
 
-# Mặc định chỉ nghe trên máy này. Server chạy code do model sinh ra và không có auth:
-# mở ra LAN (0.0.0.0) nghĩa là máy khác chạy được code + tiêu API key của bạn.
+# By default listen on this machine only. The server runs code written by a model and has no auth:
+# exposing it to the LAN (0.0.0.0) lets other machines run code and spend your API keys.
 HOST = os.getenv("HOST", "127.0.0.1")
-# Origin được gọi API từ trình duyệt. UI build sẵn chạy cùng origin với API nên không cần CORS;
-# chỉ Vite dev server (:5173) cần. Vite proxy gọi từ phía server nên cũng không cần, nhưng giữ cho chắc.
+# Origins allowed to call the API from a browser. The built UI is served from the same origin as the API, so it needs no CORS;
+# only the Vite dev server (:5173) does. The Vite proxy calls server-side so it would not need it either, but it is kept to be safe.
 CORS_ORIGINS = [
     o.strip()
     for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
     if o.strip()
 ]
 
-# max_iterations = số lần CHẠY CODE tối đa. Số lần gọi model tối đa = max_iterations + 1
-# (lượt cuối chỉ để model xem output và trả DONE), không tính lần retry vì sai format JSON.
+# max_iterations = max number of CODE RUNS. Max model calls = max_iterations + 1
+# (the last turn only lets the model review the output and answer DONE), not counting retries for malformed JSON.
 LIMITS = {"max_iterations": [1, 20], "timeout_seconds": [1, 300]}
 SSE_PING_SECONDS = 15
 
@@ -115,9 +115,9 @@ def create_app(
     default_timeout: int = EXECUTION_TIMEOUT,
 ) -> FastAPI:
     """
-    App factory: production dùng default từ env; test truyền planner/executor/registry giả.
-    planner cố định (test) → mọi run dùng planner đó; ngược lại mỗi run tạo planner
-    theo provider/model của run qua ProviderRegistry.
+    App factory: production uses defaults from env; tests inject a fake planner/executor/registry.
+    With a fixed planner (tests) → every run uses that planner; otherwise each run creates a planner
+    from the run's provider/model through ProviderRegistry.
     """
     runs_dir = Path(runs_dir or RUNS_DIR)
     db_path = Path(db_path or DB_PATH)
@@ -177,8 +177,8 @@ def create_app(
 
     async def start_run(request: AgentRequest, subscribe: bool = False):
         """
-        Validate provider/model theo catalog (422) → 1 run 1 lúc (409) → kiểm tra provider
-        sẵn sàng (400: thiếu key, Ollama không kết nối được, model chưa pull). Không fallback.
+        Validates provider/model against the catalog (422) → one run at a time (409) → checks provider
+        readiness (400: missing key, Ollama unreachable, model not pulled). No fallback.
         """
         try:
             spec = resolve(request.provider, request.model)
@@ -235,16 +235,16 @@ def create_app(
                          "provider": DEFAULT_PROVIDER, "model": DEFAULT_MODEL},
             "limits": LIMITS,
             "executor": agent.executor.describe(),
-            # False = LocalExecutor: code của model chạy thẳng trên máy chạy server, không cách ly
+            # False = LocalExecutor: model code runs directly on the machine running the server, not isolated
             "sandboxed": not isinstance(agent.executor, LocalExecutor),
-            "model": DEFAULT_MODEL,   # giữ cho client cũ: model mặc định
+            "model": DEFAULT_MODEL,   # kept for older clients: the default model
             "llm_configured": app.state.providers.configured(DEFAULT_PROVIDER),
             "active_run_id": manager().active_run_id,
         }
 
     @app.get("/api/providers")
     async def list_providers():
-        """Catalog (model_catalog.py) + trạng thái. Ollama được probe /api/tags; cloud chỉ kiểm tra có key."""
+        """Catalog (model_catalog.py) + status. Ollama is probed via /api/tags; cloud providers only check that a key exists."""
         return {"default": {"provider": DEFAULT_PROVIDER, "model": DEFAULT_MODEL},
                 "providers": await app.state.providers.status()}
 
@@ -280,7 +280,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Run not found")
         queue = manager().subscribe(run_id)
         if queue is None:
-            # Run đã kết thúc → gửi trạng thái cuối rồi đóng stream
+            # The run already finished → send the final state, then close the stream
             async def finished():
                 yield _sse("done", {"session_id": run_id, "status": run["status"],
                                     "answer": run["answer"], "message": run["message"],
@@ -295,7 +295,7 @@ def create_app(
 
     @app.get("/api/runs/{run_id}/logs")
     async def get_logs(run_id: str, after: int = 0, iteration: int | None = None):
-        """Activity log đã lưu. after=<id cuối client có> để chỉ lấy phần mới."""
+        """The stored activity log. after=<last id the client has> returns only the new part."""
         if not store().get_run(run_id):
             raise HTTPException(status_code=404, detail="Run not found")
         return {"logs": store().list_logs(run_id, after_id=after, iteration=iteration)}
@@ -333,14 +333,14 @@ def create_app(
             media_type=guess_mime(file.name),
             filename=file.name if download else None,
             content_disposition_type="attachment" if download else "inline",
-            # File do code LLM sinh ra: không cho chạy script trong origin của app
+            # Files produced by LLM-generated code: do not let scripts run in the app's origin
             headers={"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox"},
         )
 
-    # ─── API cũ (giữ tương thích) ──────────────
+    # ─── Legacy API (kept compatible) ──────────
     @app.post("/api/execute", response_model=AgentResponse)
     async def execute(request: AgentRequest):
-        """Chạy agent, đợi kết quả cuối cùng. Cùng loop với SSE."""
+        """Runs the agent and waits for the final result. Same loop as SSE."""
         run_id, _ = await start_run(request)
         response = await manager().wait(run_id)
         if response is None:
@@ -349,7 +349,7 @@ def create_app(
 
     @app.post("/api/execute/stream")
     async def execute_stream(request: AgentRequest):
-        """Chạy agent với SSE: session → iteration/code/result... → done."""
+        """Runs the agent with SSE: session → iteration/code/result... → done."""
         run_id, queue = await start_run(request, subscribe=True)
         return _sse_response(_drain(queue), on_close=lambda: manager().unsubscribe(run_id, queue))
 
@@ -370,7 +370,7 @@ def create_app(
             "active_run_id": manager().active_run_id,
         }
 
-    # ─── Web UI (bản build của web/) ───────────
+    # ─── Web UI (build output of web/) ─────────
     if (static_dir / "index.html").exists():
         if (static_dir / "assets").exists():
             app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
@@ -389,7 +389,7 @@ def create_app(
 
 
 def format_log_line(e: dict) -> str:
-    """1 dòng log dạng text: thời gian, iteration, mức, nguồn, nội dung, data."""
+    """One log line as text: time, iteration, level, source, message, data."""
     it = f"iter {e['iteration']}" if e.get("iteration") else "run"
     data = " ".join(f"{k}={v}" for k, v in (e.get("data") or {}).items())
     return f"{e['ts']}  {it:<7} {e['level']:<5} {e['source']:<7} {e['message']}" + (f"  [{data}]" if data else "")
@@ -402,7 +402,7 @@ def _sse(event: str, data: dict) -> str:
 
 
 async def _drain(queue: asyncio.Queue):
-    """Đọc event từ queue tới khi gặp 'done'; gửi ping để kết nối không bị đóng."""
+    """Reads events from the queue until 'done'; sends pings so the connection is not closed."""
     while True:
         try:
             event, data = await asyncio.wait_for(queue.get(), timeout=SSE_PING_SECONDS)
@@ -420,7 +420,7 @@ def _sse_response(gen, on_close=None) -> StreamingResponse:
             async for chunk in gen:
                 yield chunk
         finally:
-            # Client đóng stream: chỉ hủy đăng ký nghe, run vẫn chạy tiếp (Stop mới dừng run)
+            # The client closed the stream: only unsubscribe, the run keeps going (only Stop stops the run)
             if on_close:
                 on_close()
 

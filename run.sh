@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Chạy Code Execution Agent / Agent Workbench
-#   ./run.sh local    - chạy server bằng Python, code chạy bằng subprocess KHÔNG cách ly (chỉ để dev, mặc định)
-#   ./run.sh docker   - build + chạy server (API + Web UI) + sandbox bằng docker compose
-#   ./run.sh hybrid   - sandbox bằng Docker, server bằng Python
-#   ./run.sh web      - chạy Vite dev server cho UI (http://localhost:5173, proxy tới :8000)
-#   ./run.sh check    - chạy test offline (mock planner, không gọi Claude API)
-#   ./run.sh test     - gửi thử 1 task tới server đang chạy (gọi Claude API thật)
+# Runs the Code Execution Agent / Agent Workbench
+#   ./run.sh local    - run the server with Python; code runs in a NON-isolated subprocess (dev only, default)
+#   ./run.sh docker   - build + run the server (API + Web UI) and the sandbox with docker compose
+#   ./run.sh hybrid   - sandbox in Docker, server in Python
+#   ./run.sh web      - run the Vite dev server for the UI (http://localhost:5173, proxies to :8000)
+#   ./run.sh check    - run the offline tests (mock planner, no Claude API calls)
+#   ./run.sh test     - send one task to the running server (makes a REAL, billed Claude API call)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -15,10 +15,10 @@ load_env() {
   if [ -f .env ]; then
     set -a; source .env; set +a
   fi
-  # Không bắt buộc key nào: thiếu key của provider nào thì chỉ provider đó báo "not configured"
-  # (Ollama local không cần key). Xem PROVIDERS.vi.md.
+  # No key is mandatory: a provider without a key just reports "not configured"
+  # (local Ollama needs no key). See docs/providers.md.
   if [ -z "${ANTHROPIC_API_KEY:-}${OPENAI_API_KEY:-}" ]; then
-    echo "Lưu ý: chưa có ANTHROPIC_API_KEY/OPENAI_API_KEY trong .env — chỉ dùng được Ollama local." >&2
+    echo "Note: no ANTHROPIC_API_KEY/OPENAI_API_KEY in .env — only local Ollama can be used." >&2
   fi
 }
 
@@ -46,7 +46,7 @@ case "$MODE" in
     load_env
     setup_venv
     mkdir -p data/runs
-    # Sandbox bind-mount ./data/runs để thấy code/output do server trên host ghi ra
+    # The sandbox bind-mounts ./data/runs to see the code/output the host server writes
     SANDBOX_RUNS_MOUNT=./data/runs docker compose up sandbox -d --build
     USE_DOCKER=true SANDBOX_MODE=persistent SANDBOX_CONTAINER_NAME=agent-workbench-sandbox \
       RUNS_DIR=./data/runs python server.py
@@ -64,7 +64,7 @@ case "$MODE" in
     python client.py --stream "${2:-Calculate 2 + 2 and print the result}"
     ;;
   *)
-    echo "Cách dùng: ./run.sh [docker|local|hybrid|web|check|test]" >&2
+    echo "Usage: ./run.sh [docker|local|hybrid|web|check|test]" >&2
     exit 1
     ;;
 esac

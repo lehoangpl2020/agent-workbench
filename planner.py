@@ -1,8 +1,8 @@
 """
 LLM Planner — Component 1/3
-Nhận yêu cầu từ user + error context, sinh ra Python code.
-Model trả JSON {thinking, code, language}; provider (Anthropic / OpenAI / Ollama) được
-chọn theo ModelSpec của run và gọi qua llm_providers.ChatClient — cùng 1 contract.
+Takes the user request + error context and generates Python code.
+The model returns JSON {thinking, code, language}; the provider (Anthropic / OpenAI / Ollama) is
+chosen from the run's ModelSpec and called through llm_providers.ChatClient — one shared contract.
 """
 
 import json
@@ -19,21 +19,21 @@ from runlog import ERROR, INFO, WARN, LogFn, no_log
 
 logger = logging.getLogger(__name__)
 
-# Code vẽ hình dài (~9k ký tự) + JSON-escape vượt 4096 token → bị cắt cụt → JSON hỏng.
-# Env ghi đè cho mọi model; không đặt thì dùng max_output_tokens của model trong catalog.
+# Long plotting code (~9k characters) + JSON escaping can exceed 4096 tokens → truncated → broken JSON.
+# Env override for every model; when unset, the model's max_output_tokens from the catalog is used.
 _MAX_OUTPUT_ENV = os.getenv("MAX_OUTPUT_TOKENS")
-# Số lần cho LLM sửa lại khi trả JSON sai format (không tính trường hợp bị cắt cụt).
+# How many times the LLM may retry after returning badly formatted JSON (a truncated response is not retried).
 MAX_FORMAT_RETRIES = 1
 
 
-# Gọi lại khi model đang stream: (code_đến_giờ, explanation_đến_giờ)
+# Callback while the model is streaming: (code_so_far, explanation_so_far)
 ProgressFn = Callable[[str, str], Awaitable[None]]
-# Không gửi tiến độ dày hơn mức này (giây) để UI/SQLite không bị dội event
+# Do not report progress more often than this (seconds), so the UI/SQLite are not flooded with events
 PROGRESS_INTERVAL = 0.4
 
 
 class PlannerOutputError(Exception):
-    """LLM trả output không dùng được (bị cắt cụt hoặc sai format JSON)."""
+    """The LLM returned unusable output (truncated or malformed JSON)."""
 
 SYSTEM_PROMPT = """\
 You are a code execution agent. Your job is to solve the user's request 
@@ -70,9 +70,9 @@ Respond ONLY with valid JSON (no markdown fences):
 
 class LLMPlanner:
     """
-    1 planner = 1 provider/model cố định. RunManager tạo planner mới cho mỗi run
-    (theo lựa chọn của user), nên mọi iteration — viết, sửa lỗi, đánh giá DONE —
-    đều dùng đúng model đó.
+    One planner = one fixed provider/model. RunManager creates a new planner for every run
+    (from the user's choice), so every iteration — writing, fixing, the DONE review —
+    uses exactly that model.
     """
 
     def __init__(
@@ -82,7 +82,7 @@ class LLMPlanner:
         registry: ProviderRegistry | None = None,
     ):
         self.spec = spec or default_spec()
-        # Chỉ tạo client của provider được chọn (Ollama không cần Anthropic key...)
+        # Only create the client of the selected provider (Ollama does not need an Anthropic key...)
         self.chat = chat or (registry or ProviderRegistry()).create(self.spec)
         self.model = self.spec.id
         self.provider = self.spec.provider
@@ -95,12 +95,12 @@ class LLMPlanner:
         on_log: LogFn | None = None,
     ) -> CodeBlock:
         """
-        Sinh code dựa trên user request + lịch sử execution.
-        Nếu lần trước lỗi, error context được đưa vào messages
-        để LLM tự sửa (feedback loop).
+        Generates code from the user request + execution history.
+        If the previous attempt failed, the error context is added to the messages
+        so the LLM can fix it itself (feedback loop).
 
-        Dùng streaming: khi model đang viết, on_progress nhận phần code đã có
-        (bóc từ JSON chưa hoàn chỉnh) để UI hiện code ngay, không phải chờ hết.
+        Uses streaming: while the model is writing, on_progress receives the code so far
+        (extracted from the incomplete JSON) so the UI can show code right away instead of waiting.
         """
         log = on_log or no_log
         messages = self._build_messages(state)
@@ -137,8 +137,8 @@ class LLMPlanner:
                 raise PlannerOutputError(
                     f"The model declined this request (stop_reason={response.stop_reason}).")
 
-            # Bị cắt cụt thì JSON chắc chắn hỏng, và retry sẽ ra cùng kết quả
-            # → dừng ngay để khỏi đốt thêm token.
+            # A truncated response means the JSON is certainly broken, and a retry would give the same result
+            # → stop immediately so more tokens are not burned.
             if response.stop == "max_tokens":
                 await log(ERROR, "llm", f"Response truncated at max_tokens={self.max_tokens}")
                 raise PlannerOutputError(
@@ -166,7 +166,7 @@ class LLMPlanner:
                         f"LLM returned an invalid response after "
                         f"{attempt + 1} attempt(s): {e}"
                     ) from e
-                # Cho LLM một cơ hội sửa lại đúng format
+                # Give the LLM one chance to fix the format
                 messages = messages + [
                     {"role": "assistant", "content": content or "(empty)"},
                     {
@@ -184,7 +184,7 @@ class LLMPlanner:
 
     async def _stream(self, messages: list[dict], on_progress: ProgressFn | None,
                       log: LogFn = no_log, started: float | None = None):
-        """Gọi provider ở chế độ stream; on_progress nhận code đang viết dở (bóc từ JSON chưa đóng)."""
+        """Calls the provider in streaming mode; on_progress receives code that is still being written (extracted from unclosed JSON)."""
         text = ""
         last_sent = 0.0
         started = started or time.monotonic()
@@ -206,16 +206,16 @@ class LLMPlanner:
 
     def _build_messages(self, state: AgentState) -> list[dict]:
         """
-        Xây dựng conversation history cho LLM.
+        Builds the conversation history for the LLM.
         Pattern: user_request → [code → error_feedback]* → ...
-        Mỗi iteration thêm 1 cặp (assistant_code, user_feedback).
+        Each iteration adds one (assistant_code, user_feedback) pair.
         """
         messages = [{"role": "user", "content": state.user_request}]
 
         for i, (code, result) in enumerate(
             zip(state.generated_code, state.execution_results)
         ):
-            # LLM đã sinh code này
+            # The LLM generated this code
             messages.append(
                 {
                     "role": "assistant",
@@ -234,7 +234,7 @@ class LLMPlanner:
                 files = ", ".join(f"{p} {s}" for p, s in result.artifacts.items())
                 files_note = f"Files created/updated in /workspace/output: {files}\n"
 
-            # Feedback từ execution
+            # Feedback from the execution
             if result.timed_out:
                 messages.append(
                     {
@@ -263,7 +263,7 @@ class LLMPlanner:
                     }
                 )
             else:
-                # Code chạy OK nhưng có thể cần thêm bước
+                # The code ran OK but may need more steps
                 no_runs_left = i + 1 >= state.max_iterations
                 next_step = (
                     "This was the last allowed code run: any code you send now will NOT be executed. "
@@ -291,11 +291,11 @@ class LLMPlanner:
 
     def _parse_response(self, content: str) -> CodeBlock:
         """
-        Parse JSON response từ LLM.
-        Raise ValueError nếu không dùng được — KHÔNG trả raw text làm code,
-        vì chạy chuỗi JSON hỏng như Python chỉ sinh SyntaxError.
+        Parses the JSON response from the LLM.
+        Raises ValueError if it is unusable — does NOT return the raw text as code,
+        because running broken JSON as Python only produces a SyntaxError.
         """
-        # Strip markdown fences nếu LLM vẫn thêm
+        # Strip markdown fences if the LLM still added them
         cleaned = content.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[1]
@@ -316,7 +316,7 @@ class LLMPlanner:
         if not isinstance(code, str) or not isinstance(thinking, str):
             raise ValueError('"code" and "thinking" must be strings')
 
-        # code rỗng chỉ hợp lệ khi LLM báo DONE
+        # empty code is only valid when the LLM says DONE
         if not code.strip() and not thinking.strip().upper().startswith("DONE"):
             raise ValueError('"code" is empty but thinking is not "DONE"')
 
@@ -332,9 +332,9 @@ _ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", '"': '"', "\\
 
 def extract_partial_json_string(text: str, key: str) -> str | None:
     """
-    Lấy giá trị (có thể chưa đóng) của "key": "..." trong JSON đang stream dở.
+    Gets the value (possibly unclosed) of "key": "..." in JSON that is still streaming.
     Vd text = '{"thinking": "Plot", "code": "import ma'  → key "code" → 'import ma'.
-    Dừng ở dấu " đóng chuỗi hoặc ở escape chưa đủ ký tự. Trả None nếu chưa thấy key.
+    Stops at the closing quote of the string or at an incomplete escape. Returns None if the key is not found yet.
     """
     m = re.search(r'"%s"\s*:\s*"' % re.escape(key), text)
     if not m:
@@ -349,7 +349,7 @@ def extract_partial_json_string(text: str, key: str) -> str | None:
             i += 1
             continue
         if i + 1 >= len(s):
-            break  # escape bị cắt giữa chừng
+            break  # escape cut off in the middle
         n = s[i + 1]
         if n == "u":
             if i + 6 > len(s):
@@ -362,8 +362,8 @@ def extract_partial_json_string(text: str, key: str) -> str | None:
             continue
         out.append(_ESCAPES.get(n, n))
         i += 2
-    # Ghép cặp surrogate (emoji 🐝) và bỏ surrogate lẻ đang dở
-    # để lưu SQLite / gửi JSON không lỗi
+    # Join surrogate pairs (emoji 🐝) and drop lone surrogates
+    # so that saving to SQLite / sending JSON does not fail
     joined = "".join(out)
     return joined.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
 

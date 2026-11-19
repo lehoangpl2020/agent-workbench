@@ -42,7 +42,7 @@ export function RunView({ runId, onChanged, onEdit }: Props) {
   }
   if (!run) return <RunSkeleton />;
 
-  // Mặc định theo iteration mới nhất; user click thì giữ lựa chọn của user
+  // Defaults to the latest iteration; once the user clicks, the user's choice is kept
   const last = run.iterations[run.iterations.length - 1];
   const selectedNumber = manual ?? last?.number ?? null;
   const iteration = run.iterations.find((i) => i.number === selectedNumber) ?? null;
