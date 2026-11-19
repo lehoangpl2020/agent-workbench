@@ -54,6 +54,7 @@ Run everything from the repository root.
 | Real-sandbox tests | see the docstring of `tests/test_docker_executor.py` (needs `DOCKER_SANDBOX_TESTS=1`, runs inside the server container) |
 | UI development server | `cd web && npm run dev` → http://localhost:5173 (proxies to :8668) |
 | UI type-check + production build | `cd web && npm run build` |
+| UI unit tests (pure logic in `web/src/lib`) | `cd web && npm test` |
 
 If Docker reports `additional privileges requested: pass "--allow=fs.read=..."`, build the images directly; see [docs/troubleshooting.md](docs/troubleshooting.md).
 
@@ -120,7 +121,7 @@ Run statuses: `success` (Completed), `max_retries` (Code run limit reached), `ti
 - Streaming: code being written is shown live via `code_progress`; a refresh or reconnect rebuilds the view from `GET /api/runs/{id}` and `GET /logs?after=<id>`, it does not replay history as if live.
 - Replay only reads stored history and per-iteration snapshots. It never calls a model and never runs code. Old runs without detailed logs are labeled *Partial history*; files without a snapshot are labeled *Snapshot unavailable*.
 - Honor `prefers-reduced-motion`.
-- Live Flow classifies some steps by matching backend log text (`web/src/lib/studio.ts`). If you change a backend log message, check the UI. There are no frontend tests yet, so say so when you change `web/`.
+- Live Flow classifies some steps by matching backend log text (`web/src/lib/studio.ts`). If you change a backend log message, check the UI. `web/src/lib/studio.test.ts` tests that logic against runs recorded from the backend (`web/src/lib/__fixtures__/`); `tests/test_ui_fixtures.py` fails when the backend's output no longer matches those fixtures (regenerate with `UPDATE_SNAPSHOTS=1`, then run `npm test`). Components and hooks have no automated tests, so say so when you change them.
 - Never put secrets in the frontend.
 
 ## 7. Security and secret handling
@@ -136,7 +137,7 @@ Run statuses: `success` (Completed), `max_retries` (Code run limit reached), `ti
 ## 8. Verification and contribution workflow
 
 - Say precisely what was verified. Distinguish four levels and name the one you ran: **offline tests** (`pytest`, scripted planner and mock transports, but the code still runs for real in `LocalExecutor`); **real Ollama checks** (a local model is actually called); **real Docker sandbox checks** (code runs in the sandbox container); and **full end-to-end** (UI → server → real model → real sandbox → displayed result). Claim the full flow only if you ran all of it.
-- After changing Python code run `pytest tests -q`. After changing `web/` run `npm run build` (it includes `tsc -b`).
+- After changing Python code run `pytest tests -q`. After changing `web/` run `npm run build` (it includes `tsc -b`) and `npm test`.
 - Verify commands and relative links in documentation against the repository.
 
 ### Real-model verification policy (Claude Code, Codex and any other assistant)
@@ -159,4 +160,4 @@ The project started from practice code of the Mentora × ProtonX AI Agent Engine
 
 ## 10. Known limitations
 
-Only one run at a time; the persistent sandbox is shared by all runs and has network access; the server container mounts the Docker socket; local mode is not isolated; no authentication, cost limits, agent-quality evaluation or observability beyond the log and UI; no frontend tests. See [docs/architecture.md](docs/architecture.md) and [docs/api.md](docs/api.md#security-notes).
+Only one run at a time; the persistent sandbox is shared by all runs and has network access; the server container mounts the Docker socket; local mode is not isolated; no authentication, cost limits, agent-quality evaluation or observability beyond the log and UI; no automated tests for React components and hooks. See [docs/architecture.md](docs/architecture.md) and [docs/api.md](docs/api.md#security-notes).

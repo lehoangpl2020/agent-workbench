@@ -124,8 +124,9 @@ In this mode model-written code runs on your machine with your user's permission
 # Backend: offline, scripted planner, no model API calls (code still runs for real via LocalExecutor)
 .venv/Scripts/python -m pytest tests -q               # Linux/macOS: .venv/bin/python
 
-# Frontend: type-check + production build (there are no frontend tests yet)
+# Frontend: type-check + production build, and unit tests of the Live Flow / Replay logic
 cd web && npm run build
+cd web && npm test
 ```
 
 The offline tests never contact Ollama, Anthropic or OpenAI (they use mock transports and a scripted planner), so they pass whether or not Ollama is running. A test that needs the real Docker sandbox is skipped by default; see the docstring of `tests/test_docker_executor.py` to enable it. When a real model is needed to check a change, use local Ollama with `qwen3.5:4b`; see [AGENTS.md](AGENTS.md#8-verification-and-contribution-workflow).
@@ -137,7 +138,7 @@ The offline tests never contact Ollama, Anthropic or OpenAI (they use mock trans
 - The persistent sandbox is shared by all runs; code from one run could in theory read another run's directory. The sandbox has network access (needed for auto-install).
 - The server container mounts `/var/run/docker.sock`, which is very powerful on the host.
 - Local mode is not isolated.
-- No frontend tests; the UI was checked by building it and by manual use.
+- Frontend tests cover only the pure Live Flow / Replay logic (`web/src/lib`); React components and hooks were checked by building them and by manual use.
 - Prompts, generated code and stdout are stored unredacted in SQLite.
 
 ## Roadmap (planned, not implemented)
