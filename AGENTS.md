@@ -16,7 +16,11 @@ Out of scope unless a maintainer asks: new frameworks, queues, databases, authen
 ## 2. Architecture and repository structure
 
 ```text
-schemas.py        data models + ExecutionStatus      planner.py        calls the run's model (streaming) → CodeBlock
+schemas.py        data models + ExecutionStatus      planner.py        one model call (streaming, format retry) → CodeBlock
+prompts.py        system prompt + context builder    parsing.py        validates the model's JSON reply (pure functions)
+events.py         event names, `flow` tags, payloads  (the contract with runs.py, SSE and web/src/lib/api.ts)
+config.py         Settings.from_env(): every environment variable except provider keys
+run_detail.py     JSON of one run for GET /api/runs/{id}   sse.py   SSE formatting, queue draining, response wrapper
 model_catalog.py  providers/models + default         llm_providers.py  Anthropic / OpenAI / Ollama adapters
 agent.py          the agent loop                     executor.py       Local / Sandbox / PersistentSandbox executors
 runs.py           RunManager (background, Stop, SSE) store.py          SQLite (runs, iterations, run_logs)
@@ -32,7 +36,7 @@ Who decides what, which matters when explaining or changing the loop:
 
 | Concern | Decided by | Where |
 |---|---|---|
-| What code to write, how to fix errors, when to answer `DONE` | the **model** | `planner.py` (system prompt + parsing) |
+| What code to write, how to fix errors, when to answer `DONE` | the **model** | `prompts.py` (system prompt, context) and `parsing.py` (reply validation), called by `planner.py` |
 | Running code, timeouts, kill, installing packages, collecting artifacts | the **application** | `executor.py` |
 | Continue/stop conditions, final status, false-success check | the **application** | `agent.py` |
 | Background execution, one run at a time, Stop, events → SQLite + SSE | the **application** | `runs.py` |
@@ -51,10 +55,11 @@ Run everything from the repository root.
 | Real-sandbox tests | see the docstring of `tests/test_docker_executor.py` (needs `DOCKER_SANDBOX_TESTS=1`, runs inside the server container) |
 | UI development server | `cd web && npm run dev` → http://localhost:5173 (proxies to :8668) |
 | UI type-check + production build | `cd web && npm run build` |
+| UI unit tests (pure logic in `web/src/lib`) | `cd web && npm test` |
 
 If Docker reports `additional privileges requested: pass "--allow=fs.read=..."`, build the images directly; see [docs/troubleshooting.md](docs/troubleshooting.md).
 
-Environment variables (read in `server.py` unless noted). Never read or print the contents of `.env`; only the names matter.
+Environment variables (all read once in `config.py` by `Settings.from_env()`, except provider keys and URLs, which `llm_providers.ProviderSettings.from_env()` reads). Never read or print the contents of `.env`; only the names matter.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -63,7 +68,7 @@ Environment variables (read in `server.py` unless noted). Never read or print th
 | `OLLAMA_BASE_URL` | `http://localhost:11434` (code), `http://host.docker.internal:11434` (Compose) | Ollama, as seen from where the backend runs |
 | `MAX_ITERATIONS` | `5` | Maximum number of **code runs** (a request may override it, 1–20); the model may be called once more |
 | `EXECUTION_TIMEOUT` | `30` | Seconds per code run (a request may override it, 1–300) |
-| `MAX_OUTPUT_TOKENS` | per model in the catalog | Overrides the output-token limit for every model (`planner.py`) |
+| `MAX_OUTPUT_TOKENS` | per model in the catalog | Overrides the output-token limit for every model (passed to `LLMPlanner`) |
 | `USE_DOCKER` | `false` | `true` uses a Docker sandbox |
 | `SANDBOX_MODE` | `ephemeral` (code), `persistent` (Compose) | `ephemeral` or `persistent` |
 | `SANDBOX_CONTAINER_NAME` | `agent-workbench-sandbox` | Name of the persistent sandbox container |
@@ -86,7 +91,9 @@ The code default for `SANDBOX_MODE` is `ephemeral`, but `docker-compose.yml` set
 - **Docker:** `Dockerfile.server` copies only `*.py` from the repository root (`COPY *.py .`). Put new Python modules in the root, or update the Dockerfile if you add a subdirectory.
 - Keep changes small and focused. Do not refactor beyond the task. Do not add dependencies to `requirements.txt` or `web/package.json` without a clear need and a note in the PR.
 - Do not edit generated or installed files: `web/dist/`, `static/`, `data/`, `.venv/`, `node_modules/`, `__pycache__/`, `*.tsbuildinfo`.
+- Adding a setting: add it to `Settings` in `config.py` and the table above; do not read `os.environ` anywhere else (redaction in `runlog.py` is the one deliberate exception).
 - Adding an API field: update `schemas.py`/`server.py`, `web/src/lib/api.ts`, the related tests, and `docs/api.md` for a new endpoint.
+- Adding an event, a `flow` tag or a payload key: declare it in `events.py` and mirror it in `web/src/lib/api.ts` (`SSE_EVENTS`, `FLOWS`); `tests/test_event_contract.py` fails if the two sides differ. Only add; never change the meaning of an old one.
 - Adding a log or event: emit it where the action really happens (`emit("log", entry)`), with the right `source` (`runtime`, `llm`, `model`, `sandbox`), and pass it through `redact()`.
 - Tests use `ScriptedPlanner` (`tests/conftest.py`): a script is a list of `CodeBlock`, `Exception` (planner error) or `Hang()` (a slow model, to test Stop while planning). Do not add tests that need a real model API or Docker unless they are gated by a skip flag such as `DOCKER_SANDBOX_TESTS`.
 
@@ -115,7 +122,7 @@ Run statuses: `success` (Completed), `max_retries` (Code run limit reached), `ti
 - Streaming: code being written is shown live via `code_progress`; a refresh or reconnect rebuilds the view from `GET /api/runs/{id}` and `GET /logs?after=<id>`, it does not replay history as if live.
 - Replay only reads stored history and per-iteration snapshots. It never calls a model and never runs code. Old runs without detailed logs are labeled *Partial history*; files without a snapshot are labeled *Snapshot unavailable*.
 - Honor `prefers-reduced-motion`.
-- Live Flow classifies some steps by matching backend log text (`web/src/lib/studio.ts`). If you change a backend log message, check the UI. There are no frontend tests yet, so say so when you change `web/`.
+- Live Flow places each step by the `flow` tag of its log entry (`events.py`, `web/src/lib/studio.ts`). Only runs stored before a tag existed are recognized by their message text, in `legacyFlow()`: do not rely on that for new log entries, and give a new kind of step its own tag. Changing the text of a message no longer changes the UI for new runs. `web/src/lib/studio.test.ts` tests that logic against runs recorded from the backend (`web/src/lib/__fixtures__/`); `tests/test_ui_fixtures.py` fails when the backend's output no longer matches those fixtures (regenerate with `UPDATE_SNAPSHOTS=1`, then run `npm test`). Components and hooks have no automated tests, so say so when you change them.
 - Never put secrets in the frontend.
 
 ## 7. Security and secret handling
@@ -131,7 +138,7 @@ Run statuses: `success` (Completed), `max_retries` (Code run limit reached), `ti
 ## 8. Verification and contribution workflow
 
 - Say precisely what was verified. Distinguish four levels and name the one you ran: **offline tests** (`pytest`, scripted planner and mock transports, but the code still runs for real in `LocalExecutor`); **real Ollama checks** (a local model is actually called); **real Docker sandbox checks** (code runs in the sandbox container); and **full end-to-end** (UI → server → real model → real sandbox → displayed result). Claim the full flow only if you ran all of it.
-- After changing Python code run `pytest tests -q`. After changing `web/` run `npm run build` (it includes `tsc -b`).
+- After changing Python code run `pytest tests -q`. After changing `web/` run `npm run build` (it includes `tsc -b`) and `npm test`.
 - Verify commands and relative links in documentation against the repository.
 
 ### Real-model verification policy (Claude Code, Codex and any other assistant)
@@ -154,4 +161,4 @@ The project started from practice code of the Mentora × ProtonX AI Agent Engine
 
 ## 10. Known limitations
 
-Only one run at a time; the persistent sandbox is shared by all runs and has network access; the server container mounts the Docker socket; local mode is not isolated; no authentication, cost limits, agent-quality evaluation or observability beyond the log and UI; no frontend tests. See [docs/architecture.md](docs/architecture.md) and [docs/api.md](docs/api.md#security-notes).
+Only one run at a time; the persistent sandbox is shared by all runs and has network access; the server container mounts the Docker socket; local mode is not isolated; no authentication, cost limits, agent-quality evaluation or observability beyond the log and UI; no automated tests for React components and hooks. See [docs/architecture.md](docs/architecture.md) and [docs/api.md](docs/api.md#security-notes).

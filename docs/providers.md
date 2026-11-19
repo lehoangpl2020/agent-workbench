@@ -100,8 +100,8 @@ There is no fallback: an error is reported for the provider/model that failed, a
 | API | Messages API through the `anthropic` SDK (`AsyncAnthropic`) | Responses API `POST /v1/responses` (httpx, SSE) | `POST /api/chat` (httpx, NDJSON) |
 | System prompt | `system` | `instructions` | a message with `role: system` |
 | Output limit | `max_tokens` | `max_output_tokens` (includes reasoning tokens) | `options.num_predict` |
-| Forcing JSON | No (system prompt + parsing + one format retry) | `text.format` json_schema `strict` | `format` = JSON schema |
-| Specifics | Does not send `thinking` / `temperature` | `reasoning.effort`, `store: false`, no `temperature` | `think: false`, `options.num_ctx` |
+| Forcing JSON | `output_config.format` json_schema (catalog option `structured_output`; sent as `extra_body`), plus system prompt + parsing + one format retry as a safety net. Not yet checked against the real API | `text.format` json_schema `strict` | `format` = JSON schema |
+| Specifics | Does not send `thinking` / `temperature`; the SDK client is created with explicit `max_retries=2` and a 600 s timeout (the SDK defaults), so a transient error may be retried inside one model call without a log entry | `reasoning.effort`, `store: false`, no `temperature` | `think: false`, `options.num_ctx` |
 | Tokens logged | `usage` of the response | `usage` in `response.completed` | `prompt_eval_count`, `eval_count` |
 
 Tokens are logged only when the provider actually returns them. The model's thinking content (if any) is not shown.

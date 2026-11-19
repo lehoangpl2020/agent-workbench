@@ -62,9 +62,9 @@ def test_full_run_is_logged_in_order(data_dir):
     # Replay uses these ordered, compact milestones without parsing log prose.
     steps = [e for e in logs if "flow" in e["data"]]
     assert [e["data"]["flow"] for e in steps] == [
-        "started", "write", "code", "executing", "checking", "result",
-        "fix", "code", "executing", "artifacts", "checking", "result",
-        "review", "done_reply", "finished",
+        "started", "write", "code", "handoff", "executing", "exited", "no_files", "checking", "result",
+        "iteration", "fix", "code", "handoff", "executing", "exited", "artifacts", "checking", "result",
+        "iteration", "review", "done_reply", "finished",
     ]
     results = [e["data"] for e in steps if e["data"]["flow"] == "result"]
     assert "NameError" in results[0]["error"] and "error" not in results[1]

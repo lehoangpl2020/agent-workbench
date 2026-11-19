@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 from agent import CodeAgent
+from config import Settings
 from model_catalog import default_spec
 from planner import LLMPlanner
 from executor import LocalExecutor
@@ -22,9 +23,10 @@ logging.basicConfig(
 
 async def main():
     # ── Setup ──────────────────────────────────
+    settings = Settings.from_env()
     agent = CodeAgent(
-        planner=LLMPlanner(default_spec()),
-        executor=LocalExecutor(timeout=30),
+        planner=LLMPlanner(default_spec(), max_output_tokens=settings.max_output_tokens),
+        executor=LocalExecutor(timeout=30, python=settings.local_python),
         max_iterations=3,
     )
 

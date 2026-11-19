@@ -168,7 +168,7 @@ The sandbox runs in Docker and the server runs as Python so you can set breakpoi
    ```
 
 4. Useful breakpoints:
-   - `planner.py` `LLMPlanner.generate_code`: the `messages` sent to the model;
+   - `planner.py` `LLMPlanner.generate_code`: the `messages` sent to the model (built by `prompts.build_messages`);
    - `agent.py` `CodeAgent._loop`: the stop conditions;
    - `executor.py` `_run_with_auto_install`: auto-install.
 5. Press F5, then open http://127.0.0.1:8668. The UI needs a build in `static/`; if there is none, run `cd web && npm run dev` and open http://localhost:5173. Or call the server with `python client.py --stream "..."`.

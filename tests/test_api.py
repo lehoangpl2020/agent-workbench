@@ -290,9 +290,10 @@ def test_cors_rejects_unknown_origin(data_dir):
 
 
 def test_server_defaults_to_localhost_only():
-    import server
-    assert server.HOST == "127.0.0.1" or os.getenv("HOST"), "HOST must default to 127.0.0.1"
-    assert "*" not in server.CORS_ORIGINS
+    from config import Settings
+    settings = Settings.from_env({})
+    assert settings.host == "127.0.0.1", "HOST must default to 127.0.0.1"
+    assert "*" not in settings.cors_origins
 
 
 def test_config_reports_local_executor_as_not_sandboxed(data_dir):

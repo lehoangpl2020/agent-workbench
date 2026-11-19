@@ -8,7 +8,7 @@ import time
 
 from agent import CodeAgent
 from executor import BaseExecutor, LocalExecutor
-from planner import LLMPlanner
+from prompts import build_messages
 from schemas import AgentRequest, ExecutionResult, ExecutionStatus
 from tests.conftest import DONE, Hang, ScriptedPlanner, code
 
@@ -54,7 +54,7 @@ def test_single_code_run_can_still_succeed(tmp_path):
     assert resp.answer.strip() == "4"
     assert len(resp.execution_results) == 1 and resp.iterations == 2
     # The final review turn is reported as having no run turns left
-    review = LLMPlanner._build_messages(None, planner.seen_states[1])[-1]["content"]
+    review = build_messages(planner.seen_states[1])[-1]["content"]
     assert "last allowed code run" in review
 
 
@@ -83,7 +83,7 @@ def test_review_before_limit_still_allows_next_step(tmp_path):
     resp = run(agent)
     assert resp.status == ExecutionStatus.SUCCESS
     assert resp.answer.strip() == "step 2"
-    first_review = LLMPlanner._build_messages(None, planner.seen_states[1])[-1]["content"]
+    first_review = build_messages(planner.seen_states[1])[-1]["content"]
     assert "generate code for the next step" in first_review
     assert "last allowed code run" not in first_review
 
@@ -96,7 +96,7 @@ def test_error_is_fed_back_then_fixed(tmp_path):
     assert resp.status == ExecutionStatus.SUCCESS
     assert resp.answer.strip() == "fixed"
     # The 2nd model call must see the 1st run's stderr in its messages
-    messages = LLMPlanner._build_messages(None, planner.seen_states[1])
+    messages = build_messages(planner.seen_states[1])
     assert "boom" in messages[-1]["content"] and "FAILED" in messages[-1]["content"]
 
 
@@ -125,7 +125,7 @@ def test_timeout_is_fed_back_and_model_can_recover(tmp_path):
     )
     resp = run(agent, timeout_seconds=1)
     assert resp.status == ExecutionStatus.SUCCESS
-    messages = LLMPlanner._build_messages(None, planner.seen_states[1])
+    messages = build_messages(planner.seen_states[1])
     assert "TIMED OUT" in messages[-1]["content"]
 
 
@@ -208,3 +208,34 @@ def test_sandbox_system_error_stops_loop(tmp_path):
     assert resp.status == ExecutionStatus.ERROR
     assert resp.iterations == 1
     assert "not found" in resp.message
+
+
+def test_file_scanning_and_snapshots_do_not_block_the_event_loop(tmp_path, monkeypatch):
+    """Invariant 2: directory walks and snapshot copies run in a worker thread, not on the event loop."""
+    import threading
+    from workspace import RunWorkspace
+
+    seen: dict[str, set[int]] = {"scan": set(), "snapshot": set()}
+    scan, snapshot = RunWorkspace.scan, RunWorkspace.snapshot
+
+    def spy_scan(self):
+        seen["scan"].add(threading.get_ident())
+        return scan(self)
+
+    def spy_snapshot(self, iteration, paths):
+        seen["snapshot"].add(threading.get_ident())
+        return snapshot(self, iteration, paths)
+
+    monkeypatch.setattr(RunWorkspace, "scan", spy_scan)
+    monkeypatch.setattr(RunWorkspace, "snapshot", spy_snapshot)
+
+    async def scenario():
+        loop_thread = threading.get_ident()
+        agent, _ = make_agent(tmp_path, [code("open('/workspace/output/a.txt','w').write('A')\nprint(1)"), DONE])
+        resp = await agent.run(AgentRequest(message="t"))
+        return loop_thread, resp
+
+    loop_thread, resp = asyncio.run(scenario())
+    assert resp.status == ExecutionStatus.SUCCESS
+    assert seen["scan"] and seen["snapshot"]
+    assert loop_thread not in seen["scan"] | seen["snapshot"]

@@ -76,3 +76,10 @@ def fmt_bytes(n: int) -> str:
     if n < 1024 * 1024:
         return f"{n / 1024:.1f} KB"
     return f"{n / 1024 / 1024:.1f} MB"
+
+
+def format_log_line(e: dict) -> str:
+    """One stored log entry as a line of text: time, iteration, level, source, message, data."""
+    it = f"iter {e['iteration']}" if e.get("iteration") else "run"
+    data = " ".join(f"{k}={v}" for k, v in (e.get("data") or {}).items())
+    return f"{e['ts']}  {it:<7} {e['level']:<5} {e['source']:<7} {e['message']}" + (f"  [{data}]" if data else "")

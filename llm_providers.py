@@ -16,7 +16,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Awaitable, Callable, Mapping, Protocol
 
 import httpx
 
@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 
 TextFn = Callable[[str], Awaitable[None]]
 
-# JSON schema the planner asks for. OpenAI/Ollama can enforce output against a schema;
-# Anthropic keeps the old approach (system prompt + parsing + format retry).
+# JSON schema the planner asks for. OpenAI and Ollama enforce it; Anthropic does too when the model's catalog
+# options say `structured_output` (otherwise: system prompt + parsing + format retry, which stay as a safety net).
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -38,6 +38,10 @@ RESPONSE_SCHEMA = {
     "required": ["thinking", "code", "language"],
     "additionalProperties": False,
 }
+
+# Anthropic SDK behavior, same as its defaults (checked in anthropic 2.10: DEFAULT_MAX_RETRIES = 2, 10 min timeout)
+ANTHROPIC_MAX_RETRIES = 2
+ANTHROPIC_TIMEOUT_SECONDS = 600.0
 
 # ─── Normalized errors ─────────────────────────────
 NOT_CONFIGURED = "not_configured"      # missing API key / base URL
@@ -89,13 +93,14 @@ class ProviderSettings:
     ollama_base_url: str = "http://localhost:11434"
 
     @classmethod
-    def from_env(cls) -> "ProviderSettings":
+    def from_env(cls, env: Mapping[str, str] | None = None) -> "ProviderSettings":
+        env = os.environ if env is None else env
         return cls(
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or None,
-            anthropic_auth_token=os.getenv("ANTHROPIC_AUTH_TOKEN") or None,
-            openai_api_key=os.getenv("OPENAI_API_KEY") or None,
-            openai_base_url=(os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/"),
-            ollama_base_url=(os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/"),
+            anthropic_api_key=env.get("ANTHROPIC_API_KEY") or None,
+            anthropic_auth_token=env.get("ANTHROPIC_AUTH_TOKEN") or None,
+            openai_api_key=env.get("OPENAI_API_KEY") or None,
+            openai_base_url=(env.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/"),
+            ollama_base_url=(env.get("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/"),
         )
 
     def missing_config(self, provider: str) -> str | None:
@@ -124,8 +129,15 @@ class AnthropicChat:
 
         params: dict[str, Any] = dict(model=self.spec.id, max_tokens=max_tokens,
                                       system=system, messages=messages)
+        output_config: dict[str, Any] = {}
         if "effort" in self.spec.options:
-            params["output_config"] = {"effort": self.spec.options["effort"]}
+            output_config["effort"] = self.spec.options["effort"]
+        if self.spec.options.get("structured_output"):
+            # Constrains the reply to the same {thinking, code, language} object OpenAI and Ollama already get.
+            # Sent as extra_body so it also works with SDK versions that predate the output_config argument.
+            output_config["format"] = {"type": "json_schema", "schema": RESPONSE_SCHEMA}
+        if output_config:
+            params["extra_body"] = {"output_config": output_config}
         try:
             async with self.client.messages.stream(**params) as stream:
                 async for chunk in stream.text_stream:
@@ -416,7 +428,11 @@ class ProviderRegistry:
         if spec.provider == "anthropic":
             if self._anthropic is None:
                 from anthropic import AsyncAnthropic
-                self._anthropic = AsyncAnthropic(api_key=s.anthropic_api_key) if s.anthropic_api_key else AsyncAnthropic()
+                # Retries and timeout are the SDK's own defaults, written out so they are visible and tested:
+                # a transient error (429/5xx/connection) is retried inside ONE model call and is not logged.
+                limits = dict(max_retries=ANTHROPIC_MAX_RETRIES, timeout=ANTHROPIC_TIMEOUT_SECONDS)
+                self._anthropic = (AsyncAnthropic(api_key=s.anthropic_api_key, **limits) if s.anthropic_api_key
+                                   else AsyncAnthropic(**limits))
             return AnthropicChat(spec, self._anthropic)
         if spec.provider == "openai":
             # Reasoning models can stay silent for quite a while before the first token

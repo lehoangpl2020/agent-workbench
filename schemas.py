@@ -68,7 +68,6 @@ class ExecutionResult(BaseModel):
 class AgentState(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_request: str = ""
-    messages: list[dict] = Field(default_factory=list)
     generated_code: list[CodeBlock] = Field(default_factory=list)
     execution_results: list[ExecutionResult] = Field(default_factory=list)
     current_iteration: int = 0

@@ -1,6 +1,6 @@
 // Agent Studio: turns the recorded activity log of ONE agent run into ordered steps.
 // Live and Replay both read these steps; nothing here invents events, durations or model reasoning.
-import type { Intent, IterationArtifact, LogEntry, RunDetail } from "./api";
+import type { Flow, Intent, IterationArtifact, LogEntry, RunDetail } from "./api";
 import { RUN_STATUS } from "./format";
 
 export type Actor = "model" | "runtime" | "sandbox";
@@ -59,31 +59,67 @@ function exitFrom(text: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
-/** Classify one log entry. Uses the backend's `flow` tag first, then its stable source/data shape. */
+/**
+ * The `flow` tag of an entry. Entries written before a tag existed have none, so they are recognized by their
+ * source, data shape or message text: runs stored in older databases must keep rendering the same way.
+ * New backend log entries carry their tag (events.py), so this is only a fallback.
+ */
+function legacyFlow(log: LogEntry): Flow | undefined {
+  const d = log.data;
+  if (log.source === "llm") {
+    if ("messages" in d) return "calling";
+    if (startsWith(log, "First token")) return "first_token";
+    if ("stop_reason" in d) return "response";
+    if (startsWith(log, "Parsed response")) return "parsed";
+  } else if (log.source === "sandbox") {
+    if (startsWith(log, "Wrote code")) return "handoff";
+    if ("exit_code" in d) return "exited";
+    if (startsWith(log, "Execution cancelled") || startsWith(log, "Process killed")) return "killed";
+    if (startsWith(log, "No new or changed files")) return "no_files";
+  } else if (log.source === "runtime") {
+    if ("intent" in d) return "iteration";
+    if (startsWith(log, "Stop requested")) return "stop";
+  }
+  return undefined;
+}
+
+/** Classify one log entry by its `flow` tag. */
 function classify(log: LogEntry, run: RunDetail): Omit<StudioStep, "key" | "index" | "ts" | "iteration" | "level" | "log"> {
   const n = log.iteration;
-  const flow = log.data.flow;
+  const flow = (log.data.flow as Flow | undefined) ?? legacyFlow(log);
   switch (flow) {
     case "started": return { beat: "start", actor: "runtime", title: "Run started" };
+    case "iteration": return { beat: "iteration", actor: "runtime", intent: log.data.intent as Intent, title: log.message };
     case "write": case "fix": case "review": {
       const intent = flow as Intent;
       const s = SEND[intent];
       return { beat: "send", actor: "runtime", intent, title: s.title,
         transfer: { from: "runtime", to: "model", label: s.label, tone: s.tone } };
     }
+    case "calling": return { beat: "calling", actor: "model", title: `Calling ${run.model || "the model"}` };
+    case "first_token": return { beat: "first_token", actor: "model", title: "Model is generating" };
+    case "response": return { beat: "response", actor: "model", title: log.message };
+    case "parsed": return { beat: "parsed", actor: "model", title: log.message.replace(/^Parsed response: /, "Parsed: ") };
     case "code": return { beat: "accepted", actor: "model", title: `Code accepted · ${iterFile(n)}`,
       transfer: { from: "model", to: "runtime", label: iterFile(n), tone: "code" } };
     case "done_reply": return { beat: "done_reply", actor: "model", title: "Model replied DONE",
       transfer: { from: "model", to: "runtime", label: "DONE", tone: "done" } };
+    case "handoff": return { beat: "handoff", actor: "sandbox", title: `${iterFile(n)} handed to the sandbox`,
+      transfer: { from: "runtime", to: "sandbox", label: iterFile(n), tone: "code" } };
     case "executing": return { beat: "executing", actor: "sandbox", title: `Running ${iterFile(n)}` };
     case "installing": case "rerunning": case "install_failed":
       return { beat: "install", actor: "sandbox", title: log.message };
+    case "exited": return { beat: "exited", actor: "sandbox", title: log.message };
+    case "killed": return { beat: "killed", actor: "sandbox", title: log.message };
     case "artifacts": {
       const count = Object.keys(filesOf(log)).length;
       return { beat: "artifact", actor: "sandbox", title: `${count} file${count === 1 ? "" : "s"} saved` };
     }
+    case "no_files": return { beat: "no_files", actor: "sandbox", title: "No new files" };
     case "checking": {
-      const code = exitFrom(log.message) ?? run.iterations.find(it => it.number === n)?.exit_code ?? null;
+      const exit = log.data.exit_code;
+      const code = (typeof exit === "number" ? exit : exitFrom(log.message))
+        ?? run.iterations.find(it => it.number === n)?.exit_code ?? null;
       const timedOut = code === 124;
       return { beat: "checking", actor: "runtime", title: "Runtime checking the result",
         transfer: { from: "sandbox", to: "runtime", label: timedOut ? "Timed out" : `exit ${code ?? "?"}`,
@@ -94,28 +130,9 @@ function classify(log: LogEntry, run: RunDetail): Omit<StudioStep, "key" | "inde
       return { beat: "result", actor: "runtime",
         title: code === 0 ? "Result recorded · exit 0" : `Error recorded${log.data.error ? ` · ${String(log.data.error)}` : ` · exit ${String(code)}`}` };
     }
+    case "stop": return { beat: "stop", actor: "runtime", title: "Stop requested by user" };
     case "finished": return { beat: "finished", actor: "runtime",
       title: `Run finished · ${RUN_STATUS[run.status]?.label ?? run.status}` };
-  }
-  const d = log.data;
-  if (log.source === "llm") {
-    if ("messages" in d) return { beat: "calling", actor: "model", title: `Calling ${run.model || "the model"}` };
-    if (startsWith(log, "First token")) return { beat: "first_token", actor: "model", title: "Model is generating" };
-    if ("stop_reason" in d) return { beat: "response", actor: "model", title: log.message };
-    if (startsWith(log, "Parsed response")) return { beat: "parsed", actor: "model", title: log.message.replace(/^Parsed response: /, "Parsed: ") };
-    return { beat: "note", actor: "model", title: log.message };
-  }
-  if (log.source === "sandbox") {
-    if (startsWith(log, "Wrote code")) return { beat: "handoff", actor: "sandbox", title: `${iterFile(n)} handed to the sandbox`,
-      transfer: { from: "runtime", to: "sandbox", label: iterFile(n), tone: "code" } };
-    if ("exit_code" in d) return { beat: "exited", actor: "sandbox", title: log.message };
-    if (startsWith(log, "Execution cancelled") || startsWith(log, "Process killed")) return { beat: "killed", actor: "sandbox", title: log.message };
-    if (startsWith(log, "No new or changed files")) return { beat: "no_files", actor: "sandbox", title: "No new files" };
-    return { beat: "note", actor: "sandbox", title: log.message };
-  }
-  if (log.source === "runtime") {
-    if ("intent" in d) return { beat: "iteration", actor: "runtime", intent: d.intent as Intent, title: log.message };
-    if (startsWith(log, "Stop requested")) return { beat: "stop", actor: "runtime", title: "Stop requested by user" };
   }
   return { beat: "note", actor: log.source === "model" ? "model" : log.source === "sandbox" ? "sandbox" : "runtime", title: log.message };
 }

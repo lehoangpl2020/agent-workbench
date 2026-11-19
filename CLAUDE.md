@@ -23,5 +23,6 @@ The shared project guidance is in [AGENTS.md](AGENTS.md); read it first. This fi
 
 ```bash
 .venv/Scripts/python -m pytest tests -q     # offline; .venv/bin/python on Linux/macOS
-cd web && npm run build                     # type-check + build; there are no frontend tests
+cd web && npm run build                     # type-check + build
+cd web && npm test                          # unit tests of web/src/lib (no component tests)
 ```

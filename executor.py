@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
+from events import Flow, artifact_label
 from runlog import ERROR, INFO, WARN, LogFn, fmt_bytes, no_log
 from schemas import ExecutionResult
 from workspace import RunWorkspace
@@ -101,16 +102,17 @@ class BaseExecutor:
         async def report(phase: str, text: str) -> None:
             # Progress from a subclass (package install, re-run...) → both the "current action" and a log entry
             await _notify(progress, phase, text)
-            if phase in ("installing", "rerunning", "install_failed"):
-                await log(WARN if phase == "install_failed" else INFO, "sandbox", text, flow=phase)
+            if phase in (Flow.INSTALLING, Flow.RERUNNING, Flow.INSTALL_FAILED):
+                await log(WARN if phase == Flow.INSTALL_FAILED else INFO, "sandbox", text, flow=phase)
 
         code_path = workspace.write_code(
             iteration, self.prepare_code(code, workspace), _extension(language)
         )
         await log(INFO, "sandbox", f"Wrote code to code/{code_path.name}",
-                  lines=len(code.splitlines()), chars=len(code))
-        before = workspace.scan()
-        await log(INFO, "sandbox", f"Starting execution ({self.describe()}, timeout {timeout}s)", flow="executing")
+                  lines=len(code.splitlines()), chars=len(code), flow=Flow.HANDOFF)
+        # Directory walks and snapshot copies (files up to 20 MB) are blocking I/O: keep them off the event loop
+        before = await asyncio.to_thread(workspace.scan)
+        await log(INFO, "sandbox", f"Starting execution ({self.describe()}, timeout {timeout}s)", flow=Flow.EXECUTING)
         start = time.monotonic()
 
         try:
@@ -121,9 +123,9 @@ class BaseExecutor:
         except asyncio.CancelledError:
             # The user pressed Stop → the real process must be stopped, not just abandoned
             logger.info(f"[{workspace.run_id}] Execution cancelled → killing process")
-            await log(WARN, "sandbox", "Execution cancelled — killing the running process")
+            await log(WARN, "sandbox", "Execution cancelled — killing the running process", flow=Flow.KILLED)
             await self._kill_safely(workspace)
-            await log(WARN, "sandbox", f"Process killed after {time.monotonic() - start:.1f}s")
+            await log(WARN, "sandbox", f"Process killed after {time.monotonic() - start:.1f}s", flow=Flow.KILLED)
             raise
         except asyncio.TimeoutError:
             logger.warning(f"[{workspace.run_id}] Timeout guard fired → killing process")
@@ -164,24 +166,22 @@ class BaseExecutor:
 
         if timed_out:
             await log(WARN, "sandbox", f"Execution timed out after {timeout}s — process killed",
-                      exit_code=exit_code, time_ms=round(elapsed_ms))
+                      exit_code=exit_code, time_ms=round(elapsed_ms), flow=Flow.EXITED)
         else:
             await log(INFO if exit_code == 0 else WARN, "sandbox",
                       f"Execution finished: exit code {exit_code} in {elapsed_ms / 1000:.2f}s",
                       exit_code=exit_code, time_ms=round(elapsed_ms),
-                      stdout_bytes=len(raw.stdout), stderr_bytes=len(stderr))
+                      stdout_bytes=len(raw.stdout), stderr_bytes=len(stderr), flow=Flow.EXITED)
 
         await _notify(progress, "collecting", "Collecting files from /workspace/output")
-        changed = workspace.changed_files(before, workspace.scan())
-        workspace.snapshot(iteration, changed)
-        sizes = workspace.scan()
-        artifacts = {p: f"<file: {sizes[p][0]} bytes>" for p in changed if p in sizes}
+        changed, sizes = await asyncio.to_thread(self._collect, workspace, before, iteration)
+        artifacts = {p: artifact_label(sizes[p][0]) for p in changed if p in sizes}
         if artifacts:
             listing = ", ".join(f"{p} ({fmt_bytes(sizes[p][0])})" for p in artifacts)
             await log(INFO, "sandbox", f"Collected {len(artifacts)} new/changed file(s): {listing}",
-                      flow="artifacts", files={p: sizes[p][0] for p in artifacts})
+                      flow=Flow.ARTIFACTS, files={p: sizes[p][0] for p in artifacts})
         else:
-            await log(INFO, "sandbox", "No new or changed files in /workspace/output")
+            await log(INFO, "sandbox", "No new or changed files in /workspace/output", flow=Flow.NO_FILES)
 
         logger.info(
             f"[{workspace.run_id}] iter {iteration}: exit_code={exit_code}, "
@@ -195,6 +195,14 @@ class BaseExecutor:
             artifacts=artifacts,
             timed_out=timed_out,
         )
+
+    @staticmethod
+    def _collect(workspace: RunWorkspace, before: dict, iteration: int):
+        """Files created/changed by this run (snapshotted per iteration) and the current size of every file."""
+        after = workspace.scan()
+        changed = workspace.changed_files(before, after)
+        workspace.snapshot(iteration, changed)
+        return changed, after
 
     def describe(self) -> str:
         return self.name
@@ -240,7 +248,7 @@ class LocalExecutor(BaseExecutor):
 
     def __init__(self, timeout: int = 30, runs_dir=None, python: str | None = None):
         super().__init__(timeout=timeout, runs_dir=runs_dir)
-        self.python = python or os.getenv("LOCAL_PYTHON") or sys.executable
+        self.python = python or sys.executable
         self._procs: dict[str, subprocess.Popen] = {}
 
     def prepare_code(self, code: str, workspace: RunWorkspace) -> str:

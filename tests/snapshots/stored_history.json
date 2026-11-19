@@ -1,0 +1,340 @@
+{
+  "iterations": [
+    {
+      "artifacts": [
+        {
+          "path": "a.txt",
+          "size": 1
+        }
+      ],
+      "code": "open('<path>','w').write('A')\nprint(undefined_name)",
+      "execution_time_ms": "<n>",
+      "exit_code": 1,
+      "explanation": "Write then fail",
+      "false_success": 0,
+      "intent": "write",
+      "intent_detail": "",
+      "language": "python",
+      "number": 1,
+      "run_id": "<uuid>",
+      "status": "failed",
+      "stderr": "NameError: name 'undefined_name' is not defined",
+      "stdout": "",
+      "timed_out": 0
+    },
+    {
+      "artifacts": [
+        {
+          "path": "a.txt",
+          "size": 1
+        }
+      ],
+      "code": "open('<path>','w').write('B')\nprint('ok')",
+      "execution_time_ms": "<n>",
+      "exit_code": 0,
+      "explanation": "Fix",
+      "false_success": 0,
+      "intent": "fix",
+      "intent_detail": "NameError: name 'undefined_name' is not defined",
+      "language": "python",
+      "number": 2,
+      "run_id": "<uuid>",
+      "status": "succeeded",
+      "stderr": "",
+      "stdout": "ok\r\n",
+      "timed_out": 0
+    },
+    {
+      "artifacts": [],
+      "code": "",
+      "execution_time_ms": null,
+      "exit_code": null,
+      "explanation": "DONE",
+      "false_success": 0,
+      "intent": "review",
+      "intent_detail": "",
+      "language": "python",
+      "number": 3,
+      "run_id": "<uuid>",
+      "status": "done",
+      "stderr": "",
+      "stdout": "",
+      "timed_out": 0
+    }
+  ],
+  "run_logs": [
+    {
+      "data": {
+        "executor": "local",
+        "flow": "started",
+        "max_iterations": 4,
+        "model": "qwen3.5:4b",
+        "provider": "ollama",
+        "timeout_seconds": 30
+      },
+      "iteration": null,
+      "level": "INFO",
+      "message": "Run started",
+      "run_id": "<uuid>",
+      "source": "runtime"
+    },
+    {
+      "data": {
+        "flow": "write",
+        "intent": "write"
+      },
+      "iteration": 1,
+      "level": "INFO",
+      "message": "Iteration 1 started (code run 1/4)",
+      "run_id": "<uuid>",
+      "source": "runtime"
+    },
+    {
+      "data": {
+        "flow": "code"
+      },
+      "iteration": 1,
+      "level": "INFO",
+      "message": "Write then fail",
+      "run_id": "<uuid>",
+      "source": "model"
+    },
+    {
+      "data": {
+        "chars": 68,
+        "flow": "handoff",
+        "lines": 2
+      },
+      "iteration": 1,
+      "level": "INFO",
+      "message": "Wrote code to code/iter_01.py",
+      "run_id": "<uuid>",
+      "source": "sandbox"
+    },
+    {
+      "data": {
+        "flow": "executing"
+      },
+      "iteration": 1,
+      "level": "INFO",
+      "message": "Starting execution (local, timeout 30s)",
+      "run_id": "<uuid>",
+      "source": "sandbox"
+    },
+    {
+      "data": {
+        "exit_code": 1,
+        "flow": "exited",
+        "stderr_bytes": 319,
+        "stdout_bytes": 0,
+        "time_ms": "<n>"
+      },
+      "iteration": 1,
+      "level": "WARN",
+      "message": "Execution finished: exit code 1 in <t>s",
+      "run_id": "<uuid>",
+      "source": "sandbox"
+    },
+    {
+      "data": {
+        "files": {
+          "a.txt": 1
+        },
+        "flow": "artifacts"
+      },
+      "iteration": 1,
+      "level": "INFO",
+      "message": "Collected 1 new/changed file(s): a.txt (1 B)",
+      "run_id": "<uuid>",
+      "source": "sandbox"
+    },
+    {
+      "data": {
+        "exit_code": 1,
+        "flow": "checking"
+      },
+      "iteration": 1,
+      "level": "INFO",
+      "message": "Runtime checking the result (exit code 1)",
+      "run_id": "<uuid>",
+      "source": "runtime"
+    },
+    {
+      "data": {
+        "error": "NameError: name 'undefined_name' is not defined",
+        "exit_code": 1,
+        "flow": "result"
+      },
+      "iteration": 1,
+      "level": "WARN",
+      "message": "Execution result recorded",
+      "run_id": "<uuid>",
+      "source": "runtime"
+    },
+    {
+      "data": {
+        "flow": "iteration",
+        "intent": "fix"
+      },
+      "iteration": 2,
+      "level": "INFO",
+      "message": "Iteration 2 started (code run 2/4)",
+      "run_id": "<uuid>",
+      "source": "runtime"
+    },
+    {
+      "data": {
+        "flow": "fix"
+      },
+      "iteration": 2,
+      "level": "WARN",
+      "message": "Sending the error back to the model to fix: NameError: name 'undefined_name' is not defined",
+      "run_id": "<uuid>",
+      "source": "runtime"
+    },
+    {
+      "data": {
+        "flow": "code"
+      },
+      "iteration": 2,
+      "level": "INFO",
+      "message": "Fix",
+      "run_id": "<uuid>",
+      "source": "model"
+    },
+    {
+      "data": {
+        "chars": 58,
+        "flow": "handoff",
+        "lines": 2
+      },
+      "iteration": 2,
+      "level": "INFO",
+      "message": "Wrote code to code/iter_02.py",
+      "run_id": "<uuid>",
+      "source": "sandbox"
+    },
+    {
+      "data": {
+        "flow": "executing"
+      },
+      "iteration": 2,
+      "level": "INFO",
+      "message": "Starting execution (local, timeout 30s)",
+      "run_id": "<uuid>",
+      "source": "sandbox"
+    },
+    {
+      "data": {
+        "exit_code": 0,
+        "flow": "exited",
+        "stderr_bytes": 0,
+        "stdout_bytes": 4,
+        "time_ms": "<n>"
+      },
+      "iteration": 2,
+      "level": "INFO",
+      "message": "Execution finished: exit code 0 in <t>s",
+      "run_id": "<uuid>",
+      "source": "sandbox"
+    },
+    {
+      "data": {
+        "files": {
+          "a.txt": 1
+        },
+        "flow": "artifacts"
+      },
+      "iteration": 2,
+      "level": "INFO",
+      "message": "Collected 1 new/changed file(s): a.txt (1 B)",
+      "run_id": "<uuid>",
+      "source": "sandbox"
+    },
+    {
+      "data": {
+        "exit_code": 0,
+        "flow": "checking"
+      },
+      "iteration": 2,
+      "level": "INFO",
+      "message": "Runtime checking the result (exit code 0)",
+      "run_id": "<uuid>",
+      "source": "runtime"
+    },
+    {
+      "data": {
+        "exit_code": 0,
+        "flow": "result"
+      },
+      "iteration": 2,
+      "level": "INFO",
+      "message": "Execution result recorded",
+      "run_id": "<uuid>",
+      "source": "runtime"
+    },
+    {
+      "data": {
+        "flow": "iteration",
+        "intent": "review"
+      },
+      "iteration": 3,
+      "level": "INFO",
+      "message": "Iteration 3 started (code run 3/4)",
+      "run_id": "<uuid>",
+      "source": "runtime"
+    },
+    {
+      "data": {
+        "files": [
+          "a.txt"
+        ],
+        "flow": "review",
+        "stdout_chars": 4
+      },
+      "iteration": 3,
+      "level": "INFO",
+      "message": "Sending the execution output back to the model to decide: DONE or another step",
+      "run_id": "<uuid>",
+      "source": "runtime"
+    },
+    {
+      "data": {
+        "flow": "done_reply"
+      },
+      "iteration": 3,
+      "level": "INFO",
+      "message": "Model replied DONE: the output satisfies the request",
+      "run_id": "<uuid>",
+      "source": "model"
+    },
+    {
+      "data": {
+        "flow": "finished",
+        "iterations": 3
+      },
+      "iteration": 3,
+      "level": "INFO",
+      "message": "Run finished: success — The model confirmed the task is complete.",
+      "run_id": "<uuid>",
+      "source": "runtime"
+    }
+  ],
+  "runs": [
+    {
+      "activity": "",
+      "activity_iteration": 3,
+      "activity_phase": "finished",
+      "answer": "ok\r\n",
+      "executor": "local",
+      "iteration_count": 3,
+      "max_iterations": 4,
+      "message": "The model confirmed the task is complete.",
+      "model": "qwen3.5:4b",
+      "prompt": "persist me",
+      "provider": "ollama",
+      "status": "success",
+      "timeout_seconds": 30
+    }
+  ]
+}

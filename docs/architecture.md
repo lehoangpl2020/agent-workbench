@@ -8,7 +8,8 @@ Agent Workbench is a code-execution agent. The mechanism is a single loop: **Pla
 |---|---|---|
 | `planner.py` | Calls the run's model (Claude / OpenAI / Ollama through `llm_providers.py`, catalog in `model_catalog.py`) in streaming mode and returns JSON `{thinking, code, language}`. One fixed planner per run. Streams the code that is being written through `on_progress`. | **Model**: what code to write, and when to answer `DONE` |
 | `executor.py` | Runs the code: `LocalExecutor` / `SandboxExecutor` (a new container per run) / `PersistentSandboxExecutor` (`docker exec`). Real timeout, kill on Stop, auto `pip install`, artifact collection. | Application |
-| `agent.py` | **The single agent loop**, `CodeAgent.run()`. Emits events through `emit(event, data)`. Decides the final status. | Application |
+| `prompts.py` / `parsing.py` | Pure functions: the system prompt and the conversation built from a run's history (`build_messages`), and validation of the model's JSON reply (`parse_response`). No model calls, no I/O; `tests/test_characterization.py` pins their output. | **Model** sees what `prompts.py` builds; changing it changes model behavior |
+| `agent.py` | **The single agent loop**, `CodeAgent.run()`. Emits events through `emit(event, data)`. Decides the final status. The stop rules are pure functions at the top of the file (`next_turn`, `done_outcome`, `limit_outcome`), covered by `tests/test_stop_conditions.py` without a model or a subprocess. | Application |
 | `runs.py` | `RunManager`: runs the loop as a background task, one run at a time, Stop = `task.cancel()`, events → SQLite + SSE. | Application |
 | `store.py` | SQLite (`runs`, `iterations`, `run_logs`): history and activity log that survive restarts. | n/a |
 | `runlog.py` | Builds log entries `{ts, iteration, source, level, message, data}` and redacts secrets. | n/a |
@@ -89,7 +90,7 @@ Every real step calls `emit("log", entry)` exactly where it happens. `RunManager
 | source | Emitted by | Examples |
 |---|---|---|
 | `runtime` | `agent.py`, `runs.py` | Run started (model, executor, limits), sending the error/result back to the model, Stop, Run finished |
-| `llm` | `planner.py` | Calling model, First token, Response received (timing, stop_reason, tokens when available), parse OK/error |
+| `llm` | `planner.py` | Calling model, First token, Response received (timing, stop_reason, tokens when available), parse OK/error, and a WARN when the prompt uses 90% or more of an Ollama model's `num_ctx` |
 | `model` | `agent.py` | The short explanation the model returned (the model's own words, not a runtime action) |
 | `sandbox` | `executor.py` | Writing `code/iter_NN.py`, start of execution, package install, re-run, exit code/time/timeout, artifacts + sizes |
 
@@ -99,11 +100,13 @@ Messages and data go through `redact()`, which masks `sk-ant-…` keys, auth hea
 
 `session`, `iteration`, `code`, `result`, `model_done`, `error` and `done` are the legacy events and old clients keep working. The newer events are `activity` (the current action), `code_progress` (code being streamed), `log` (an activity-log entry) and `status`.
 
+The names, the `flow` tags of log entries and the payload of each event are declared in `events.py` (TypedDicts); `web/src/lib/api.ts` mirrors the names, and `tests/test_event_contract.py` checks both sides and the payloads the agent actually emits. `RunManager._persist` is a table from event to the SQLite update it causes.
+
 ## Live Flow and Replay (UI)
 
 - **Live Flow** shows the model, the agent runtime and the Python sandbox as three actors. A data card moves only when a real log entry arrives; the code file only reaches the sandbox after the backend has parsed the response and written `code/iter_NN.py`. After a refresh or reconnect the view is rebuilt from the stored snapshot and logs; history is not replayed as if it were live.
 - **Replay** of a finished run only reads the SQLite history and the per-iteration file snapshots. It never calls a model and never runs code. Partially streamed code is not stored per step, so Replay shows code from the moment the response was parsed. Old runs without detailed logs are labeled **Partial history**; files without a per-iteration snapshot are labeled **Snapshot unavailable**. `prefers-reduced-motion` is honored.
-- Both views are derived from stored events and logs (`web/src/lib/studio.ts`). They classify some steps by matching backend log messages, so changing a log message can change what these views show; there is no frontend test for this yet.
+- Both views are derived from stored events and logs (`web/src/lib/studio.ts`). Each step is placed by the `flow` tag of its log entry (`events.py`); only runs stored before a tag existed are recognized by their message text (`legacyFlow` in `studio.ts`), so a changed message can still alter how an old run is shown; `web/src/lib/studio.test.ts` tests these views against runs recorded from the backend, and `tests/test_ui_fixtures.py` keeps those recordings in sync with what the backend emits. Components and hooks are not tested automatically.
 
 ## Current limitations
 
