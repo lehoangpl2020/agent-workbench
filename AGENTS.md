@@ -16,7 +16,8 @@ Out of scope unless a maintainer asks: new frameworks, queues, databases, authen
 ## 2. Architecture and repository structure
 
 ```text
-schemas.py        data models + ExecutionStatus      planner.py        calls the run's model (streaming) → CodeBlock
+schemas.py        data models + ExecutionStatus      planner.py        one model call (streaming, format retry) → CodeBlock
+prompts.py        system prompt + context builder    parsing.py        validates the model's JSON reply (pure functions)
 model_catalog.py  providers/models + default         llm_providers.py  Anthropic / OpenAI / Ollama adapters
 agent.py          the agent loop                     executor.py       Local / Sandbox / PersistentSandbox executors
 runs.py           RunManager (background, Stop, SSE) store.py          SQLite (runs, iterations, run_logs)
@@ -32,7 +33,7 @@ Who decides what, which matters when explaining or changing the loop:
 
 | Concern | Decided by | Where |
 |---|---|---|
-| What code to write, how to fix errors, when to answer `DONE` | the **model** | `planner.py` (system prompt + parsing) |
+| What code to write, how to fix errors, when to answer `DONE` | the **model** | `prompts.py` (system prompt, context) and `parsing.py` (reply validation), called by `planner.py` |
 | Running code, timeouts, kill, installing packages, collecting artifacts | the **application** | `executor.py` |
 | Continue/stop conditions, final status, false-success check | the **application** | `agent.py` |
 | Background execution, one run at a time, Stop, events → SQLite + SSE | the **application** | `runs.py` |

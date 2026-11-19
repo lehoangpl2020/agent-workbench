@@ -8,6 +8,7 @@ Agent Workbench is a code-execution agent. The mechanism is a single loop: **Pla
 |---|---|---|
 | `planner.py` | Calls the run's model (Claude / OpenAI / Ollama through `llm_providers.py`, catalog in `model_catalog.py`) in streaming mode and returns JSON `{thinking, code, language}`. One fixed planner per run. Streams the code that is being written through `on_progress`. | **Model**: what code to write, and when to answer `DONE` |
 | `executor.py` | Runs the code: `LocalExecutor` / `SandboxExecutor` (a new container per run) / `PersistentSandboxExecutor` (`docker exec`). Real timeout, kill on Stop, auto `pip install`, artifact collection. | Application |
+| `prompts.py` / `parsing.py` | Pure functions: the system prompt and the conversation built from a run's history (`build_messages`), and validation of the model's JSON reply (`parse_response`). No model calls, no I/O; `tests/test_characterization.py` pins their output. | **Model** sees what `prompts.py` builds; changing it changes model behavior |
 | `agent.py` | **The single agent loop**, `CodeAgent.run()`. Emits events through `emit(event, data)`. Decides the final status. | Application |
 | `runs.py` | `RunManager`: runs the loop as a background task, one run at a time, Stop = `task.cancel()`, events → SQLite + SSE. | Application |
 | `store.py` | SQLite (`runs`, `iterations`, `run_logs`): history and activity log that survive restarts. | n/a |

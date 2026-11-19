@@ -23,6 +23,7 @@ from executor import LocalExecutor
 from llm_providers import ChatResult
 from model_catalog import ModelSpec
 from planner import LLMPlanner
+from prompts import SYSTEM_PROMPT, build_messages
 from schemas import AgentRequest, AgentState, CodeBlock, ExecutionResult
 from tests.conftest import DONE, ScriptedPlanner, code
 from tests.test_api import make_app, wait_finished
@@ -100,13 +101,7 @@ def prompt_cases() -> dict[str, AgentState]:
     }
 
 
-def build_messages(state: AgentState) -> list[dict]:
-    return LLMPlanner._build_messages(None, state)
-
-
 def test_context_sent_to_the_model_is_unchanged():
-    from planner import SYSTEM_PROMPT
-
     actual = {"system_prompt": SYSTEM_PROMPT,
               "messages": {name: build_messages(s) for name, s in prompt_cases().items()}}
     assert_snapshot("prompt_messages", actual)
