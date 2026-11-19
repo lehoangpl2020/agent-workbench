@@ -1,27 +1,15 @@
-import { useEffect, useState } from "react";
-import { AlertCircle, ArrowRight, BrainCircuit, CheckCircle2, Loader2, Play, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { AlertCircle, ArrowRight, BrainCircuit, CheckCircle2, ListChecks, Loader2, Play, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError, type AppConfig, type ProvidersResponse, type RunDetail } from "@/lib/api";
+import { EXAMPLES, QUICK_EXAMPLES, type PromptExample } from "@/lib/examples";
 import { cn } from "@/lib/utils";
-
-// Clicking only fills in the prompt; the user presses Run themselves.
-const EXAMPLES = [
-  {
-    label: "Draw a cute bee",
-    prompt:
-      "Draw a cute cartoon bee with matplotlib: yellow oval body with black stripes, two light-blue translucent wings, a round head with big eyes and a smile, two antennae and a small stinger. Save it as /workspace/output/bee.png (dpi=150) and print the file path.",
-  },
-  { label: "Calculate pi", prompt: "Calculate pi to 50 decimal places and print the result." },
-  {
-    label: "Plot sin(x)",
-    prompt:
-      "Plot sin(x) for x from 0 to 4π with matplotlib, with labeled axes, a grid and a title. Save it as /workspace/output/sin.png and print the file path.",
-  },
-];
+import { ExamplesSheet } from "./ExamplesSheet";
 
 export interface ComposerDraft {
   prompt: string;
@@ -52,6 +40,15 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
   // "Edit & re-run" carries over the exact provider/model of the old run; a new run leaves it empty → the backend default
   const [provider, setProvider] = useState<string>(draft?.provider ?? "");
   const [model, setModel] = useState<string>(draft?.provider ? (draft.model ?? "") : "");
+
+  // Examples only ever write to `prompt`. Provider, model and limits are separate state, and Composer is never
+  // remounted to load an example, so they are left exactly as the user set them.
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const [examplesOpen, setExamplesOpen] = useState(false);
+  const focusPromptOnClose = useRef(false);
+  // The latest example load. `previous` is the prompt it replaced (null if that was empty); it powers Undo.
+  // Any manual edit clears this, so Undo can never silently throw those edits away.
+  const [loaded, setLoaded] = useState<{ title: string; prompt: string; previous: string | null } | null>(null);
 
   useEffect(() => {
     if (!config) return;
@@ -100,6 +97,44 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
     setModel(def?.id ?? "");
   }
 
+  // Call after the new value has been committed (see flushSync below), so the caret lands after the loaded text
+  function focusPrompt() {
+    const el = promptRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }
+
+  function loadExample(example: PromptExample) {
+    if (prompt === example.prompt) return; // nothing is replaced, so there is nothing to announce or undo
+    const previous = prompt.trim() === "" ? null : prompt;
+    flushSync(() => {
+      setPrompt(example.prompt);
+      setLoaded({ title: example.title, prompt: example.prompt, previous });
+    });
+  }
+
+  function pickQuick(example: PromptExample) {
+    loadExample(example);
+    focusPrompt();
+  }
+
+  function pickFromSheet(example: PromptExample) {
+    loadExample(example);
+    focusPromptOnClose.current = true;
+    setExamplesOpen(false);
+  }
+
+  function undoExample() {
+    if (!loaded || loaded.previous === null) return;
+    const previous = loaded.previous;
+    flushSync(() => {
+      setPrompt(previous);
+      setLoaded(null);
+    });
+    focusPrompt();
+  }
+
   const [minIter, maxIter] = config?.limits.max_iterations ?? [1, 20];
   const [minTimeout, maxTimeout] = config?.limits.timeout_seconds ?? [1, 300];
   const busy = Boolean(activeRunId);
@@ -140,8 +175,12 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
         </Label>
         <Textarea
           id="prompt"
+          ref={promptRef}
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={(e) => {
+            setPrompt(e.target.value);
+            if (loaded && e.target.value !== loaded.prompt) setLoaded(null);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
@@ -155,16 +194,56 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Sparkles className="size-3.5" /> Try:
           </span>
-          {EXAMPLES.map((ex) => (
+          {QUICK_EXAMPLES.map((ex) => (
             <button
-              key={ex.label}
+              key={ex.id}
               type="button"
-              onClick={() => setPrompt(ex.prompt)}
-              className="rounded-full border bg-background px-3 py-1 text-xs font-medium text-foreground/80 transition hover:border-primary/40 hover:bg-accent hover:text-accent-foreground"
+              onClick={() => pickQuick(ex)}
+              className={PILL}
             >
-              {ex.label}
+              {ex.title}
             </button>
           ))}
+          <ExamplesSheet
+            trigger={
+              <button type="button" className={cn(PILL, "inline-flex items-center gap-1")}>
+                <ListChecks className="size-3.5" /> All examples ({EXAMPLES.length})
+              </button>
+            }
+            open={examplesOpen}
+            onOpenChange={(open) => {
+              if (open) focusPromptOnClose.current = false;
+              setExamplesOpen(open);
+            }}
+            onUse={pickFromSheet}
+            onCloseAutoFocus={(event) => {
+              // After choosing an example the prompt box gets focus; any other close returns focus to the trigger
+              if (!focusPromptOnClose.current) return;
+              focusPromptOnClose.current = false;
+              event.preventDefault();
+              focusPrompt();
+            }}
+          />
+        </div>
+        {/* Always rendered so assistive tech announces changes to it */}
+        <div role="status" aria-live="polite" className="empty:hidden">
+          {loaded && (
+            <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+              <CheckCircle2 className="size-3.5 text-success" />
+              <span>
+                Loaded “{loaded.title}”.{loaded.previous !== null && " Replaced the previous prompt."}
+              </span>
+              {loaded.previous !== null && (
+                <button
+                  type="button"
+                  onClick={undoExample}
+                  className="rounded-sm font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                  Undo
+                </button>
+              )}
+            </p>
+          )}
         </div>
       </div>
 
@@ -296,6 +375,9 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
     </div>
   );
 }
+
+const PILL =
+  "rounded-full border bg-background px-3 py-1 text-xs font-medium text-foreground/80 transition outline-none hover:border-primary/40 hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 const SELECT =
   "h-9 w-full min-w-0 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";

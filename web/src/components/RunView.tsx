@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle, BrainCircuit, Clock, Loader2, Pencil, RefreshCw, Repeat, Square } from "lucide-react";
+import { AlertCircle, BrainCircuit, Clock, ListChecks, Loader2, Pencil, RefreshCw, Repeat, Square } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,6 +8,7 @@ import { api, type RunDetail } from "@/lib/api";
 import { RUN_STATUS, TONE_CLASSES, modelLabel, providerLabel, relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ComposerDraft } from "./Composer";
+import { ExamplesSheet } from "./ExamplesSheet";
 import { LiveActivity } from "./LiveActivity";
 import { AgentStudio } from "./studio/AgentStudio";
 import { ResultTabs } from "./ResultTabs";
@@ -108,6 +109,8 @@ export function RunView({ runId, onChanged, onEdit }: Props) {
 function RunHeader({ run, stopping, onStop, onEdit }: { run: RunDetail; stopping: boolean; onStop: () => void; onEdit: () => void }) {
   const running = run.status === "running";
   const tone = RUN_STATUS[run.status]?.tone ?? "neutral";
+  // Read-only reference: it does not know whether this run came from an example, and does not guess
+  const [examplesOpen, setExamplesOpen] = useState(false);
   return (
     <div className="rounded-xl border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:p-5">
@@ -129,7 +132,16 @@ function RunHeader({ run, stopping, onStop, onEdit }: { run: RunDetail; stopping
           </div>
           <p className="text-[15px] leading-relaxed font-medium break-words whitespace-pre-wrap">{run.prompt}</p>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <ExamplesSheet
+            trigger={
+              <Button variant="ghost">
+                <ListChecks /> Examples
+              </Button>
+            }
+            open={examplesOpen}
+            onOpenChange={setExamplesOpen}
+          />
           {running ? (
             <Button variant="destructive" onClick={onStop} disabled={stopping}>
               {stopping ? <Loader2 className="animate-spin" /> : <Square className="fill-current" />}

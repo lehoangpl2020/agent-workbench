@@ -258,4 +258,6 @@
   .studio-stage *, .studio-caption, .studio-tick, .studio-check-mark { animation: none !important; transition: none !important; }
   .studio-wait { opacity: .3; }
   .animate-spin, .animate-pulse, [class*="animate-[progress"] { animation: none !important; }
+  /* Sheets (menu, examples) appear and disappear without sliding or fading */
+  [data-slot="sheet-content"], [data-slot="sheet-overlay"] { animation: none !important; transition: none !important; }
 }
