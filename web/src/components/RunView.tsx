@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle, BrainCircuit, Clock, ListChecks, Loader2, Pencil, RefreshCw, Repeat, Square } from "lucide-react";
+import { AlertCircle, BrainCircuit, Clock, ImagePlus, ListChecks, Loader2, Pencil, RefreshCw, Repeat, Square } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -71,7 +71,7 @@ export function RunView({ runId, onChanged, onEdit }: Props) {
         stopping={stopping}
         onStop={stop}
         onEdit={() => onEdit({ prompt: run.prompt, maxIterations: run.max_iterations, timeoutSeconds: run.timeout_seconds,
-          provider: run.provider, model: run.model })}
+          provider: run.provider, model: run.model, imageTool: run.image_tool })}
       />
       {stopError && (
         <Alert variant="destructive" className="bg-danger-soft">
@@ -131,6 +131,12 @@ function RunHeader({ run, stopping, onStop, onEdit }: { run: RunDetail; stopping
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="size-3.5" /> {run.timeout_seconds}s timeout
             </span>
+            {run.image_tool && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                title="The agent could ask the OpenAI image model for images in this run">
+                <ImagePlus className="size-3.5" /> Image tool
+              </span>
+            )}
             <span className="text-xs text-muted-foreground">· {relativeTime(run.created_at)}</span>
           </div>
           <p className="text-[15px] leading-relaxed font-medium break-words whitespace-pre-wrap">{run.prompt}</p>

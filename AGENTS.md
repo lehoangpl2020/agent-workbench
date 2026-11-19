@@ -66,6 +66,9 @@ Environment variables (all read once in `config.py` by `Settings.from_env()`, ex
 |---|---|---|
 | `ANTHROPIC_API_KEY` | none | Anthropic provider (`ANTHROPIC_AUTH_TOKEN` is also accepted); read in `llm_providers.py` |
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL` | none, `https://api.openai.com/v1` | OpenAI provider |
+| `IMAGE_TOOL` | `false` | `true` makes the OpenAI image tool (`image_tool.py`) available; each run still opts in with the UI checkbox (`image_tool` on the request, stored in `runs.image_tool`). Also needs `OPENAI_API_KEY`; unavailable with ephemeral sandbox containers |
+| `IMAGE_MODEL`, `IMAGE_MAX_PER_RUN` | `gpt-image-1-mini`, `4` | Image model (OpenAI retires them fast: this one is listed for shutdown on 2026-12-01, see `image_tool.py`) and the maximum image requests per run (failed ones count) |
+| `IMAGE_TOOL_URL` | `http://127.0.0.1:<PORT>` (code), `http://agent-server:8000` (Compose) | The server as the **sandbox** reaches it; passed to the code as `IMAGE_TOOL_URL` plus the run's path |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` (code), `http://host.docker.internal:11434` (Compose) | Ollama, as seen from where the backend runs |
 | `MAX_ITERATIONS` | `5` | Maximum number of **code runs** (a request may override it, 1–20); the model may be called once more |
 | `EXECUTION_TIMEOUT` | `30` | Seconds per code run (a request may override it, 1–300) |

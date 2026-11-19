@@ -11,6 +11,7 @@ Run API (used by the web UI):
   GET  /api/runs/{id}/artifacts/{path}   — view/download one file (?iteration=N, ?download=1)
   GET  /api/config                       — defaults + limits for the form
   GET  /api/providers                    — provider/model catalog + readiness (model_catalog.py)
+  POST /api/runs/{id}/tools/generate_image — called by the run's own code (IMAGE_TOOL=true): OpenAI image model → output/*.png
 
 Legacy API (used by the CLI client.py, kept compatible):
   POST /api/execute                      — run the agent and wait for the result (sync)
@@ -22,6 +23,7 @@ Both sync and SSE go through RunManager → CodeAgent.run() → the same single 
 """
 
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -34,11 +36,12 @@ from agent import CodeAgent
 from config import Settings
 from events import Event
 from executor import BaseExecutor, LocalExecutor, PersistentSandboxExecutor, SandboxExecutor
+from image_tool import ImageRequest, ImageTool, ImageToolError
 from llm_providers import ProviderError, ProviderRegistry
 from model_catalog import DEFAULT_MODEL, DEFAULT_PROVIDER, InvalidModelSelection, describe, resolve
 from planner import LLMPlanner
 from run_detail import build_run_detail
-from runlog import format_log_line
+from runlog import INFO, WARN, fmt_bytes, format_log_line
 from runs import RunBusyError, RunManager
 from sse import drain, sse_event, sse_response
 from schemas import AgentRequest, AgentResponse
@@ -78,12 +81,37 @@ def build_executor(settings: Settings, runs_dir: Path) -> BaseExecutor:
     return LocalExecutor(timeout=settings.execution_timeout, runs_dir=runs_dir, python=settings.local_python)
 
 
+def image_tool_problem(settings: Settings, executor: BaseExecutor) -> str | None:
+    """Why the server cannot offer the image tool (shown to the user), or None when it can."""
+    if not settings.image_tool.enabled:
+        return "The image tool is not enabled on this server. Set IMAGE_TOOL=true and OPENAI_API_KEY, then restart."
+    if not settings.providers.openai_api_key:
+        return "OPENAI_API_KEY is not set on the server."
+    if isinstance(executor, SandboxExecutor):
+        return ("Ephemeral sandbox containers have no network. "
+                "Use SANDBOX_MODE=persistent or USE_DOCKER=false.")
+    return None
+
+
+def build_image_tool(settings: Settings, executor: BaseExecutor) -> ImageTool | None:
+    """The image tool when the server can offer it. A reason is logged when the operator asked for it but it cannot work."""
+    problem = image_tool_problem(settings, executor)
+    if problem:
+        if settings.image_tool.enabled:
+            logger.warning(f"IMAGE_TOOL=true but the image tool is off: {problem}")
+        return None
+    logger.info(f"🖼️  Image tool on: {settings.image_tool.model}, at most {settings.image_tool.max_per_run} "
+                f"requests per run (billed by OpenAI)")
+    return ImageTool(settings.image_tool, settings.providers.openai_api_key, settings.providers.openai_base_url)
+
+
 def create_app(
     settings: Settings | None = None,
     *,
     planner=None,
     providers: ProviderRegistry | None = None,
     executor: BaseExecutor | None = None,
+    image_tool: ImageTool | None = None,
     db_path: str | Path | None = None,
     runs_dir: str | Path | None = None,
     static_dir: str | Path | None = None,
@@ -112,22 +140,31 @@ def create_app(
         if interrupted:
             logger.warning(f"Marked {interrupted} interrupted run(s) as error")
         registry = providers or ProviderRegistry(settings.providers)
+        run_executor = executor or build_executor(settings, runs_dir)
+        tool = image_tool or build_image_tool(settings, run_executor)
+        if tool is not None:
+            run_executor.image_tool_url = settings.image_tool.url   # the code gets IMAGE_TOOL_URL for its own run
         agent = CodeAgent(
             planner=planner,
             planner_factory=lambda spec: LLMPlanner(spec, registry=registry,
-                                                    max_output_tokens=settings.max_output_tokens),
-            executor=executor or build_executor(settings, runs_dir),
+                                                    max_output_tokens=settings.max_output_tokens,
+                                                    image_tool_max=tool.max_per_run if tool else None),
+            executor=run_executor,
             max_iterations=max_iterations,
             default_timeout=default_timeout,
         )
         app.state.store = store
         app.state.agent = agent
+        app.state.image_tool = tool
+        app.state.image_tool_problem = None if tool else image_tool_problem(settings, run_executor)
         app.state.providers = registry
         app.state.manager = RunManager(agent, store, runs_dir)
         app.state.runs_dir = runs_dir
         logger.info(f"✅ Agent Workbench initialized (db={db_path}, runs={runs_dir})")
         yield
         await app.state.manager.shutdown()
+        if tool is not None:
+            await tool.aclose()
         await registry.aclose()
         store.close()
 
@@ -166,6 +203,10 @@ def create_app(
             spec = resolve(request.provider, request.model)
         except InvalidModelSelection as e:
             raise HTTPException(status_code=422, detail={"code": e.code, "message": str(e)})
+        if request.image_tool and app.state.image_tool is None:
+            # Never start a run that expects a tool the server cannot provide
+            raise HTTPException(status_code=400, detail={"code": "image_tool_unavailable",
+                                                         "message": app.state.image_tool_problem})
         if manager().active_run_id:
             raise busy_409(manager().active_run_id)
         try:
@@ -199,6 +240,15 @@ def create_app(
             "model": DEFAULT_MODEL,   # kept for older clients: the default model
             "llm_configured": app.state.providers.configured(DEFAULT_PROVIDER),
             "active_run_id": manager().active_run_id,
+            # What the "Image tool" checkbox needs: can the server offer it, and if not, why (no secrets here)
+            "image_tool": {
+                "available": app.state.image_tool is not None,
+                "reason": app.state.image_tool_problem,
+                # The numbers of the tool that will actually run, not of the settings it may differ from
+                "model": (app.state.image_tool.settings if app.state.image_tool else settings.image_tool).model,
+                "max_per_run": (app.state.image_tool.settings if app.state.image_tool
+                                else settings.image_tool).max_per_run,
+            },
         }
 
     @app.get("/api/providers")
@@ -295,6 +345,31 @@ def create_app(
             # Files produced by LLM-generated code: do not let scripts run in the app's origin
             headers={"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox"},
         )
+
+    @app.post("/api/runs/{run_id}/tools/generate_image")
+    async def generate_image(run_id: str, request: ImageRequest):
+        """Called by the code of the run itself (URL in IMAGE_TOOL_URL), never by the UI. The key stays on the server."""
+        tool: ImageTool | None = app.state.image_tool
+        if tool is None:
+            raise HTTPException(status_code=404, detail="The image tool is not enabled on this server.")
+        if run_id != manager().active_run_id:
+            raise HTTPException(status_code=409, detail="Images can only be generated for the run that is running now.")
+        if not manager().image_tool_enabled(run_id):
+            # The server may offer the tool, but only a run whose user ticked "Image tool" may spend money on it
+            raise HTTPException(status_code=403, detail="The image tool was not enabled for this run.")
+        log = lambda level, message, **data: manager().log(run_id, level, "runtime", message, **data)  # noqa: E731
+        log(INFO, f"Image tool: asking {tool.settings.model} for an image ({request.size}, {request.quality})",
+            prompt=request.prompt[:300])
+        started = time.monotonic()
+        try:
+            result = await tool.generate(RunWorkspace(app.state.runs_dir, run_id), request,
+                                         still_active=lambda: manager().active_run_id == run_id)
+        except ImageToolError as e:
+            log(WARN, f"Image tool failed: {e.message}", http_status=e.status)
+            raise HTTPException(status_code=e.status, detail=e.message)
+        log(INFO, f"Image tool: saved {result['filename']} ({fmt_bytes(result['bytes'])}) "
+                  f"in {time.monotonic() - started:.0f}s", requests_left=result["requests_left"])
+        return result
 
     # ─── Legacy API (kept compatible) ──────────
     @app.post("/api/execute", response_model=AgentResponse)

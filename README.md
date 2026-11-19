@@ -21,6 +21,7 @@ The core of most coding agents is a short loop, but it is easy to hide behind a 
 - **Three executors**: persistent Docker sandbox (default in Compose), ephemeral Docker container per run, and a local subprocess (development only, not isolated; the UI shows a warning).
 - **Real timeouts and Stop**: timeout inside the sandbox plus a Python safety net; *Stop* kills the running process, not just the task.
 - **Auto `pip install`** for missing modules (persistent sandbox) and **artifact collection** (files and images produced by the code).
+- **Image tool (opt-in per run)**: with `IMAGE_TOOL=true` on the server, an *Image tool* checkbox (unticked by default) lets a run ask an OpenAI image model (`IMAGE_MODEL`, default `gpt-image-1-mini`) for photos and illustrations that code cannot draw. Billed per image, capped per run, and the key stays on the server. See [docs/api.md](docs/api.md#image-tool).
 - **Run API**: background runs (one at a time), Server-Sent Events, SQLite history that survives restarts, per-run workspace with path-traversal protection.
 - **Activity log**: runtime / LLM / model / sandbox entries with secrets redacted before they are stored or sent.
 - **Web UI** (React, TypeScript, Vite, Tailwind, shadcn/ui): composer with presets, Live Flow (Agent Studio), Replay of finished runs, Logs, Files/preview, and History.

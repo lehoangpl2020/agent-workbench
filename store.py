@@ -71,6 +71,8 @@ MIGRATIONS = {
         "activity_at": "TEXT",
         # The provider that was actually called. Runs created before multi-provider support stay NULL (never guessed/defaulted).
         "provider": "TEXT",
+        # 1 = the user enabled the image tool for this run. Older runs get 0, which is true: they could not use it.
+        "image_tool": "INTEGER DEFAULT 0",
     },
     "iterations": {
         "intent": "TEXT DEFAULT 'write'",         # write | fix | review
@@ -123,11 +125,11 @@ class RunStore:
 
     # ── Runs ───────────────────────────────────────
     def create_run(self, run_id, prompt, max_iterations, timeout_seconds, model, executor,
-                   provider: str | None = None) -> None:
+                   provider: str | None = None, image_tool: bool = False) -> None:
         self._exec(
             "INSERT INTO runs (id, prompt, status, max_iterations, timeout_seconds, model, "
-            "executor, provider, created_at) VALUES (?, ?, 'running', ?, ?, ?, ?, ?, ?)",
-            (run_id, prompt, max_iterations, timeout_seconds, model, executor, provider, now_iso()),
+            "executor, provider, image_tool, created_at) VALUES (?, ?, 'running', ?, ?, ?, ?, ?, ?, ?)",
+            (run_id, prompt, max_iterations, timeout_seconds, model, executor, provider, int(image_tool), now_iso()),
         )
 
     def finish_run(self, run_id, status, answer, message, iteration_count) -> None:
@@ -162,16 +164,17 @@ class RunStore:
     def list_runs(self, limit: int = 100) -> list[dict]:
         rows = self._query(
             "SELECT id, prompt, status, max_iterations, timeout_seconds, message, iteration_count, "
-            "provider, model, created_at, finished_at FROM runs ORDER BY created_at DESC LIMIT ?",
+            "provider, model, image_tool, created_at, finished_at FROM runs ORDER BY created_at DESC LIMIT ?",
             (limit,),
         )
-        return [dict(r) for r in rows]
+        return [{**dict(r), "image_tool": bool(r["image_tool"])} for r in rows]
 
     def get_run(self, run_id) -> dict | None:
         rows = self._query("SELECT * FROM runs WHERE id=?", (run_id,))
         if not rows:
             return None
         run = dict(rows[0])
+        run["image_tool"] = bool(run["image_tool"])
         run["iterations"] = [self._iteration_dict(r) for r in self._query(
             "SELECT * FROM iterations WHERE run_id=? ORDER BY number", (run_id,)
         )]

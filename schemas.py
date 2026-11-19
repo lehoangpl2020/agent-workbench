@@ -76,6 +76,8 @@ class AgentState(BaseModel):
     # Provider/model fixed for the whole run (every iteration, including fixes and the DONE review)
     provider: str = ""
     model: str = ""
+    # The user ticked "Image tool" for this run: the prompt mentions it and its endpoint accepts this run's calls
+    image_tool: bool = False
     status: ExecutionStatus = ExecutionStatus.PENDING
     final_answer: str = ""
     # Short explanation of why the run ended (shown in the UI)
@@ -94,6 +96,8 @@ class AgentRequest(BaseModel):
     # None → the default in model_catalog.py (Ollama qwen3.5:4b). The backend validates against the catalog.
     provider: Optional[str] = Field(default=None, max_length=64)
     model: Optional[str] = Field(default=None, max_length=128)
+    # Opt-in per run (default off): lets the code of this run ask the OpenAI image model for pictures. Billed by OpenAI.
+    image_tool: Optional[bool] = None
 
 
 class AgentResponse(BaseModel):

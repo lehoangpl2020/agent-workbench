@@ -72,6 +72,8 @@ export interface RunSummary {
   /** Display name looked up from the backend catalog; null if the model is no longer in the catalog */
   provider_name: string | null;
   model_name: string | null;
+  /** The user ticked "Image tool" for this run (OpenAI image model, billed by OpenAI). Runs from before the option are false. */
+  image_tool: boolean;
   created_at: string;
   finished_at: string | null;
 }
@@ -148,6 +150,8 @@ export interface AppConfig {
   model: string;
   llm_configured: boolean;
   active_run_id: string | null;
+  /** Whether the server can offer the image tool; `reason` says why not (never a secret). */
+  image_tool: { available: boolean; reason: string | null; model: string; max_per_run: number };
 }
 
 /** One model in the backend catalog (model_catalog.py) + readiness status */
@@ -227,7 +231,14 @@ export const api = {
   listRuns: () => request<{ runs: RunSummary[]; active_run_id: string | null }>("/api/runs"),
   getRun: (id: string) => request<RunDetail>(`/api/runs/${id}`),
   providers: () => request<ProvidersResponse>("/api/providers"),
-  createRun: (body: { message: string; max_iterations: number; timeout_seconds: number; provider: string; model: string }) =>
+  createRun: (body: {
+    message: string;
+    max_iterations: number;
+    timeout_seconds: number;
+    provider: string;
+    model: string;
+    image_tool: boolean;
+  }) =>
     request<RunDetail>("/api/runs", { method: "POST", body: JSON.stringify(body) }),
   stopRun: (id: string) => request<RunDetail>(`/api/runs/${id}/stop`, { method: "POST" }),
   eventsUrl: (id: string) => `/api/runs/${id}/events`,

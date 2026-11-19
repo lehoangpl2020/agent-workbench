@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Awaitable, Callable
 
 from events import Flow, artifact_label
+from image_tool import tool_url
 from runlog import ERROR, INFO, WARN, LogFn, fmt_bytes, no_log
 from schemas import ExecutionResult
 from workspace import RunWorkspace
@@ -80,6 +81,14 @@ class BaseExecutor:
         self.timeout = timeout
         self.runs_dir = Path(runs_dir or Path(tempfile.gettempdir()) / "agent-workbench-runs")
         self._counter = itertools.count(1)
+        # The server as the SANDBOX reaches it. Set by server.py only when the image tool is on; None = not offered.
+        self.image_tool_url: str | None = None
+
+    def tool_env(self, workspace: RunWorkspace) -> dict[str, str]:
+        """Environment variables that tell the code which tools it may call. Never secrets: only a URL for this run."""
+        if not self.image_tool_url:
+            return {}
+        return {"IMAGE_TOOL_URL": tool_url(self.image_tool_url, workspace.run_id)}
 
     # ── Public API ─────────────────────────────────
     async def execute(
@@ -261,6 +270,7 @@ class LocalExecutor(BaseExecutor):
             OUTPUT_DIR=str(workspace.output_dir.resolve()),
             MPLBACKEND="Agg",
             PYTHONIOENCODING="utf-8",
+            **self.tool_env(workspace),
         )
         proc = subprocess.Popen(
             [self.python, str(code_path.resolve())],
@@ -521,10 +531,10 @@ class PersistentSandboxExecutor(BaseExecutor):
             f"exec timeout -k 2 {timeout} {_interpreter(language)} {code_in_sandbox}"
         )
         return await self._run_with_auto_install(
-            container, ["sh", "-c", script], workspace.run_id, progress
+            container, ["sh", "-c", script], workspace.run_id, progress, extra_env=self.tool_env(workspace)
         )
 
-    def _exec(self, container, cmd) -> RawRun:
+    def _exec(self, container, cmd, extra_env: dict[str, str] | None = None) -> RawRun:
         exit_code, output = container.exec_run(
             cmd=cmd,
             stdout=True,
@@ -532,17 +542,18 @@ class PersistentSandboxExecutor(BaseExecutor):
             demux=True,
             user="sandbox",
             workdir="/workspace",
-            environment={"OUTPUT_DIR": "/workspace/output", "MPLBACKEND": "Agg"},
+            environment={"OUTPUT_DIR": "/workspace/output", "MPLBACKEND": "Agg", **(extra_env or {})},
         )
         stdout, stderr = output if output else (b"", b"")
         return RawRun(exit_code, _decode(stdout), _decode(stderr))
 
     async def _run_with_auto_install(
-        self, container, cmd, run_id: str, progress: ProgressFn | None = None
+        self, container, cmd, run_id: str, progress: ProgressFn | None = None,
+        extra_env: dict[str, str] | None = None,
     ) -> RawRun:
         """Runs the code; on ModuleNotFoundError, pip-installs the module and re-runs (reporting each step)."""
         installed: set[str] = set()
-        raw = await asyncio.to_thread(self._exec, container, cmd)
+        raw = await asyncio.to_thread(self._exec, container, cmd, extra_env)
         for _ in range(self.max_install_retries):
             if raw.exit_code == 0 or not self.auto_install:
                 break
@@ -557,7 +568,7 @@ class PersistentSandboxExecutor(BaseExecutor):
             installed.add(missing)
             logger.info(f"[{run_id}] Retrying after installing '{missing}'")
             await _notify(progress, "rerunning", f"Re-running the code after installing '{pip_name}'")
-            raw = await asyncio.to_thread(self._exec, container, cmd)
+            raw = await asyncio.to_thread(self._exec, container, cmd, extra_env)
         return raw
 
     @staticmethod
