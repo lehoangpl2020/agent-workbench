@@ -25,6 +25,7 @@ model_catalog.py  providers/models + default         llm_providers.py  Anthropic
 agent.py          the agent loop                     executor.py       Local / Sandbox / PersistentSandbox executors
 runs.py           RunManager (background, Stop, SSE) store.py          SQLite (runs, iterations, run_logs)
 runlog.py         log entries + redact()             workspace.py      per-run directory + path-traversal guard
+metrics.py        totals of one run: tokens, time, cost (summarize_run; recomputed from run_logs + iterations)
 server.py         FastAPI + serves the UI            client.py         CLI client
 example.py        run the agent without the server   run.sh            shortcuts for Git Bash/WSL
 web/src/          React + TypeScript + Vite + Tailwind + shadcn/ui
@@ -69,6 +70,7 @@ Environment variables (all read once in `config.py` by `Settings.from_env()`, ex
 | `MAX_ITERATIONS` | `5` | Maximum number of **code runs** (a request may override it, 1–20); the model may be called once more |
 | `EXECUTION_TIMEOUT` | `30` | Seconds per code run (a request may override it, 1–300) |
 | `MAX_OUTPUT_TOKENS` | per model in the catalog | Overrides the output-token limit for every model (passed to `LLMPlanner`) |
+| `MODEL_PRICING` | none | Price table for the cost estimate: JSON `{"provider/model": {"input", "output", "cache_read"?, "cache_write"?}}` in USD per 1M tokens, or a path to such a file. The code has no prices; without one the UI shows tokens and time only (`metrics.py`) |
 | `USE_DOCKER` | `false` | `true` uses a Docker sandbox |
 | `SANDBOX_MODE` | `ephemeral` (code), `persistent` (Compose) | `ephemeral` or `persistent` |
 | `SANDBOX_CONTAINER_NAME` | `agent-workbench-sandbox` | Name of the persistent sandbox container |

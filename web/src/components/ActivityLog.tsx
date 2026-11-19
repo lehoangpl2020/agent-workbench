@@ -28,7 +28,8 @@ function time(ts: string) {
 function formatData(data: Record<string, unknown>) {
   return Object.entries(data)
     // "files": a file name that appears in the message · "flow": internal key for the Live Flow tab
-    .filter(([k]) => k !== "files" && k !== "flow")
+    // "metric": internal tag that metrics.py counts by (duration_ms, tokens... stay visible)
+    .filter(([k]) => k !== "files" && k !== "flow" && k !== "metric")
     .map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
     .join("  ");
 }

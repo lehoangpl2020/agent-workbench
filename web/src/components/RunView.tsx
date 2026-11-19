@@ -12,6 +12,7 @@ import { ExamplesSheet } from "./ExamplesSheet";
 import { LiveActivity } from "./LiveActivity";
 import { AgentStudio } from "./studio/AgentStudio";
 import { ResultTabs } from "./ResultTabs";
+import { RunUsage } from "./RunUsage";
 import { StatusBadge } from "./StatusBadge";
 import { Timeline } from "./Timeline";
 
@@ -84,6 +85,8 @@ export function RunView({ runId, onChanged, onEdit }: Props) {
           <button className="underline" onClick={() => void refetch()}>Refresh</button>
         </p>
       )}
+
+      <RunUsage run={run} />
 
       <ResultTabs run={run} iteration={iteration} logs={activity.logs} logError={activity.logError}
         retryLogs={() => void activity.retryLogs()} tab={tab} onTabChange={value => {

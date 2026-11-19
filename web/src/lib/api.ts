@@ -76,7 +76,45 @@ export interface RunSummary {
   finished_at: string | null;
 }
 
+/** Totals of one run (backend metrics.py). null means "no data", never 0. */
+export interface RunMetrics {
+  llm: {
+    calls: number;
+    failed_calls: number;
+    format_retries: number;
+    calls_with_usage: number;
+    /** false = some call reported no usage, so tokens and cost are a floor */
+    usage_complete: boolean;
+    duration_ms: number | null;
+    first_token_ms_avg: number | null;
+    first_token_ms_max: number | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
+    cache_read_input_tokens: number | null;
+    cache_creation_input_tokens: number | null;
+    reasoning_tokens: number | null;
+  } | null;
+  sandbox: { runs: number; duration_ms: number | null } | null;
+  /** null while the run is still running */
+  wall_ms: number | null;
+  cost: {
+    status: "ok" | "partial" | "no_pricing" | "no_usage" | "no_data";
+    amount?: number;
+    currency?: string;
+    pricing_key?: string | null;
+  };
+  per_iteration: {
+    iteration: number;
+    llm_calls: number;
+    llm_ms: number | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
+    sandbox_ms: number | null;
+  }[];
+}
+
 export interface RunDetail extends RunSummary {
+  summary: RunMetrics;
   answer: string;
   /** Current action (real time, from backend events) */
   activity: string;

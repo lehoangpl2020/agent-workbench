@@ -145,7 +145,7 @@ The offline tests never contact Ollama, Anthropic or OpenAI (they use mock trans
 
 These are ideas, not commitments; none of them exist yet:
 
-- Agent-quality evaluation (fixed task sets, pass rate) and per-run token/latency/cost summaries.
+- Agent-quality evaluation (fixed task sets, pass rate). Per-run token/latency/cost totals already exist, see [docs/api.md](docs/api.md#usage-and-cost-of-a-run).
 - Run comparison and experiment profiles.
 - Native tool calling and other loop strategies, memory and context management.
 - Human approval steps and stricter sandbox isolation.

@@ -80,6 +80,14 @@ FLOWS = (
 )
 
 
+# ─── Log data that metrics.py aggregates ──────────────────────────
+# planner.py writes exactly ONE `source="llm"` log per model call (successful or failed) with this value under the
+# `metric` key of its data, plus ok, attempt (> 0 = resent after invalid JSON), duration_ms, first_token_ms and the
+# token counts the provider reported. metrics.summarize_run() counts by this tag, not by message text, so rewording
+# a message cannot change a run's totals. Only ADD keys; a run stored before the tag existed has no measured calls.
+METRIC_LLM_CALL = "llm_call"
+
+
 # ─── Payloads (what `emit(event, data)` receives) ─────────────────
 class SessionEvent(TypedDict):
     session_id: str

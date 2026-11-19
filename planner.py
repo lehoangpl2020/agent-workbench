@@ -9,7 +9,7 @@ import logging
 import time
 from typing import Awaitable, Callable
 
-from events import Flow
+from events import METRIC_LLM_CALL, Flow
 from llm_providers import ChatClient, ProviderError, ProviderRegistry
 from model_catalog import ModelSpec, default_spec
 from parsing import extract_partial_json_string, parse_response
@@ -29,6 +29,11 @@ CONTEXT_WARN_RATIO = 0.9
 ProgressFn = Callable[[str, str], Awaitable[None]]
 # Do not report progress more often than this (seconds), so the UI/SQLite are not flooded with events
 PROGRESS_INTERVAL = 0.4
+
+
+def _call_timing(started: float, timing: dict[str, int]) -> dict[str, int]:
+    """Timing of one model call in ms. first_token_ms is absent when no token arrived."""
+    return {"duration_ms": round((time.monotonic() - started) * 1000), **timing}
 
 
 class PlannerOutputError(Exception):
@@ -88,19 +93,25 @@ class LLMPlanner:
             )
 
             started = time.monotonic()
+            timing: dict[str, int] = {}   # _stream fills first_token_ms when the first token arrives
+            # `metric` marks this entry as the measurement of ONE model call (events.METRIC_LLM_CALL)
             try:
-                response = await self._stream(messages, on_progress, log, started)
+                response = await self._stream(messages, on_progress, log, started, timing)
             except ProviderError as e:
                 await log(ERROR, "llm", f"Model call failed after {time.monotonic() - started:.1f}s: {e}",
-                          provider=self.provider, model=self.model, error_kind=e.kind, http_status=e.status)
+                          provider=self.provider, model=self.model, error_kind=e.kind, http_status=e.status,
+                          metric=METRIC_LLM_CALL, ok=False, attempt=attempt, **_call_timing(started, timing))
                 raise
             except Exception as e:
                 await log(ERROR, "llm", f"Model call failed after {time.monotonic() - started:.1f}s: "
-                          f"{type(e).__name__}: {e}", provider=self.provider, model=self.model)
+                          f"{type(e).__name__}: {e}", provider=self.provider, model=self.model,
+                          metric=METRIC_LLM_CALL, ok=False, attempt=attempt, **_call_timing(started, timing))
                 raise
             content = response.text
             await log(INFO, "llm", f"Response received in {time.monotonic() - started:.1f}s",
-                      stop_reason=response.stop_reason, chars=len(content), flow=Flow.RESPONSE, **response.usage)
+                      stop_reason=response.stop_reason, chars=len(content), flow=Flow.RESPONSE,
+                      metric=METRIC_LLM_CALL, ok=True, attempt=attempt, **_call_timing(started, timing),
+                      **response.usage)
             await self._warn_if_context_nearly_full(response.usage, log)
 
             if response.stop == "refusal":
@@ -166,15 +177,18 @@ class LLMPlanner:
                       "the start of the conversation may have been cut off", input_tokens=used, num_ctx=window)
 
     async def _stream(self, messages: list[dict], on_progress: ProgressFn | None,
-                      log: LogFn = no_log, started: float | None = None):
+                      log: LogFn = no_log, started: float | None = None,
+                      timing: dict[str, int] | None = None):
         """Calls the provider in streaming mode; on_progress receives code that is still being written (extracted from unclosed JSON)."""
         text = ""
         last_sent = 0.0
         started = started or time.monotonic()
+        timing = timing if timing is not None else {}
 
         async def on_text(chunk: str) -> None:
             nonlocal text, last_sent
             if not text:
+                timing["first_token_ms"] = round((time.monotonic() - started) * 1000)
                 await log(INFO, "llm", f"First token after {time.monotonic() - started:.1f}s", flow=Flow.FIRST_TOKEN)
             text += chunk
             now = time.monotonic()

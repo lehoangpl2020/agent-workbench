@@ -13,6 +13,7 @@ Agent Workbench is a code-execution agent. The mechanism is a single loop: **Pla
 | `runs.py` | `RunManager`: runs the loop as a background task, one run at a time, Stop = `task.cancel()`, events → SQLite + SSE. | Application |
 | `store.py` | SQLite (`runs`, `iterations`, `run_logs`): history and activity log that survive restarts. | n/a |
 | `runlog.py` | Builds log entries `{ts, iteration, source, level, message, data}` and redacts secrets. | n/a |
+| `metrics.py` | Totals of one run (model calls, tokens, model and sandbox time, estimated cost): `summarize_run()`, and `load_pricing()` for `MODEL_PRICING`. No state of its own; see [Run totals](#run-totals-tokens-time-cost). | n/a |
 | `workspace.py` | A private directory per run, plus path-traversal protection when reading artifacts. | n/a |
 | `server.py` | FastAPI: Run API, legacy API (`/api/execute`, `/stream`), serves the web UI. | n/a |
 | `web/` | React + TypeScript + Vite + Tailwind + shadcn/ui. Reads state from the API; SSE is only a signal to refetch. | n/a |
@@ -95,6 +96,26 @@ Every real step calls `emit("log", entry)` exactly where it happens. `RunManager
 | `sandbox` | `executor.py` | Writing `code/iter_NN.py`, start of execution, package install, re-run, exit code/time/timeout, artifacts + sizes |
 
 Messages and data go through `redact()`, which masks `sk-ant-…` keys, auth headers, and the values of environment variables whose names contain KEY/TOKEN/SECRET/PASSWORD.
+
+## Run totals (tokens, time, cost)
+
+There is no table and no counter for these. `GET /api/runs/{id}` calls `metrics.summarize_run()`, which recomputes the totals on every read from two things that are already stored:
+
+| Number | Source |
+|---|---|
+| Model calls, tokens, model time, first token | `llm` log entries whose `data.metric` is `llm_call` (`events.METRIC_LLM_CALL`). `planner.py` writes **one** per model call, successful or failed, with `ok`, `attempt` (> 0 = resent after invalid JSON), `duration_ms`, `first_token_ms` and the token counts the provider reported |
+| Sandbox time | `iterations.execution_time_ms`, measured by `executor.py` (it includes an automatic `pip install` in persistent mode) |
+| Whole run | `runs.finished_at - runs.created_at` (null while the run is running) |
+| Cost | tokens × `MODEL_PRICING["provider/model"]` |
+
+How to read them:
+
+- **A missing value is `null`, never 0.** A run stored before the `metric` tag existed gets `llm: null` and the UI says "No data". A provider that reports no usage gives `null` tokens and `cost.status = "no_usage"`.
+- `usage_complete: false` means some call reported no usage (the provider left it out, or the call failed), so tokens are a floor and the cost is `partial` (the UI shows `≥`).
+- Totals count by the `metric` tag, not by message text, so rewording a log message cannot change them. A new place that calls a model must write the same entry or its calls are not counted.
+- Providers differ: Anthropic reports cache tokens apart from `input_tokens`; OpenAI counts `cached_tokens` **inside** `input_tokens`, so the normal input is `input - cached`. Reasoning/thinking tokens are already inside `output_tokens` and are not added again. With no cache price configured, cache tokens are priced like normal input.
+- `cost.status`: `ok` · `partial` · `no_pricing` (no price for this model) · `no_usage` · `no_data`. A price of `0` is a valid setting (a free local model) and is not the same as "no price set".
+- The cost is an estimate from prices the user configured. The code contains no prices.
 
 ## SSE events
 

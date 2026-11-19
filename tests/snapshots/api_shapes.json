@@ -108,6 +108,27 @@
     "provider": "str",
     "provider_name": "str",
     "status": "str",
+    "summary": {
+      "cost": {
+        "status": "str"
+      },
+      "llm": "NoneType",
+      "per_iteration": [
+        {
+          "input_tokens": "NoneType",
+          "iteration": "int",
+          "llm_calls": "int",
+          "llm_ms": "NoneType",
+          "output_tokens": "NoneType",
+          "sandbox_ms": "int"
+        }
+      ],
+      "sandbox": {
+        "duration_ms": "int",
+        "runs": "int"
+      },
+      "wall_ms": "int"
+    },
     "timeout_seconds": "int"
   },
   "run_list": {

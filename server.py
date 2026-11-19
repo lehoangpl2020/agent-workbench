@@ -96,6 +96,8 @@ def create_app(
     from the run's provider/model through ProviderRegistry.
     """
     settings = settings or Settings.from_env()
+    for warning in settings.model_pricing_warnings:
+        logger.warning(warning)
     runs_dir = Path(runs_dir or settings.runs_dir)
     db_path = Path(db_path or settings.db_path)
     static_dir = Path(static_dir or settings.static_dir)
@@ -177,7 +179,8 @@ def create_app(
             raise busy_409(e.active_run_id)
 
     def run_detail(run_id: str) -> dict:
-        run = build_run_detail(store(), app.state.runs_dir, run_id, manager().active_run_id)
+        run = build_run_detail(store(), app.state.runs_dir, run_id, manager().active_run_id,
+                               pricing=settings.model_pricing)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         return run

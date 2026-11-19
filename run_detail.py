@@ -3,12 +3,14 @@
 from pathlib import Path
 from urllib.parse import quote
 
+from metrics import Pricing, summarize_run
 from model_catalog import describe
 from store import RunStore
 from workspace import ArtifactNotFound, RunWorkspace, guess_mime
 
 
-def build_run_detail(store: RunStore, runs_dir: Path, run_id: str, active_run_id: str | None) -> dict | None:
+def build_run_detail(store: RunStore, runs_dir: Path, run_id: str, active_run_id: str | None,
+                     pricing: Pricing | None = None) -> dict | None:
     """None when there is no such run. Artifact files are only checked, never read."""
     run = store.get_run(run_id)
     if not run:
@@ -37,4 +39,6 @@ def build_run_detail(store: RunStore, runs_dir: Path, run_id: str, active_run_id
     ]
     run["active"] = active_run_id == run_id
     run.update(describe(run.get("provider"), run.get("model")))
+    # Totals are recomputed from the stored log and iterations on every read (see metrics.py)
+    run["summary"] = summarize_run(run, store.list_logs(run_id, source="llm", limit=100_000), pricing)
     return run
