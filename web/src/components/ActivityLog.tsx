@@ -9,7 +9,7 @@ import { ProcessOutputPanel } from "./ResultPanels";
 // Source of the entry: who did this (see runlog.py in the backend)
 const SOURCES: Record<string, { label: string; cls: string; title: string }> = {
   runtime: { label: "RUNTIME", cls: "bg-sky-500/15 text-sky-300", title: "Agent loop (application) action" },
-  llm: { label: "LLM CALL", cls: "bg-violet-500/15 text-violet-300", title: "Claude API request/response" },
+  llm: { label: "LLM CALL", cls: "bg-violet-500/15 text-violet-300", title: "Model API request/response" },
   model: { label: "MODEL", cls: "bg-pink-500/15 text-pink-300", title: "Short explanation written by the model" },
   sandbox: { label: "SANDBOX", cls: "bg-teal-500/15 text-teal-300", title: "Executor / sandbox action" },
 };
