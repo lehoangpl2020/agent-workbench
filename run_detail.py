@@ -1,0 +1,40 @@
+"""The JSON of one run for GET /api/runs/{id}: the stored row plus artifact links and what is still on disk."""
+
+from pathlib import Path
+from urllib.parse import quote
+
+from model_catalog import describe
+from store import RunStore
+from workspace import ArtifactNotFound, RunWorkspace, guess_mime
+
+
+def build_run_detail(store: RunStore, runs_dir: Path, run_id: str, active_run_id: str | None) -> dict | None:
+    """None when there is no such run. Artifact files are only checked, never read."""
+    run = store.get_run(run_id)
+    if not run:
+        return None
+    base = f"/api/runs/{run_id}/artifacts"
+    workspace = RunWorkspace(runs_dir, run_id)
+    last_changed: dict[str, int] = {}
+    for it in run["iterations"]:
+        for a in it["artifacts"]:
+            last_changed[a["path"]] = it["number"]
+            a["mime"] = guess_mime(a["path"])
+            a["url"] = f"{base}/{quote(a['path'])}?iteration={it['number']}"
+            try:
+                workspace.resolve_artifact(a["path"], iteration=it["number"])
+                a["snapshot_available"] = True
+            except ArtifactNotFound:
+                a["snapshot_available"] = False
+    run["artifacts"] = [
+        {
+            **a,
+            "iteration": last_changed.get(a["path"]),
+            "url": f"{base}/{quote(a['path'])}",
+            "download_url": f"{base}/{quote(a['path'])}?download=1",
+        }
+        for a in workspace.list_artifacts()
+    ]
+    run["active"] = active_run_id == run_id
+    run.update(describe(run.get("provider"), run.get("model")))
+    return run

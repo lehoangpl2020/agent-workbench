@@ -21,16 +21,13 @@ Legacy API (used by the CLI client.py, kept compatible):
 Both sync and SSE go through RunManager → CodeAgent.run() → the same single agent loop.
 """
 
-import asyncio
-import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from agent import CodeAgent
@@ -40,7 +37,10 @@ from executor import BaseExecutor, LocalExecutor, PersistentSandboxExecutor, San
 from llm_providers import ProviderError, ProviderRegistry
 from model_catalog import DEFAULT_MODEL, DEFAULT_PROVIDER, InvalidModelSelection, describe, resolve
 from planner import LLMPlanner
+from run_detail import build_run_detail
+from runlog import format_log_line
 from runs import RunBusyError, RunManager
+from sse import drain, sse_event, sse_response
 from schemas import AgentRequest, AgentResponse
 from store import RunStore
 from workspace import ArtifactNotFound, RunWorkspace, guess_mime
@@ -54,7 +54,6 @@ logger = logging.getLogger(__name__)
 # max_iterations = max number of CODE RUNS. Max model calls = max_iterations + 1
 # (the last turn only lets the model review the output and answer DONE), not counting retries for malformed JSON.
 LIMITS = {"max_iterations": [1, 20], "timeout_seconds": [1, 300]}
-SSE_PING_SECONDS = 15
 
 
 def build_executor(settings: Settings, runs_dir: Path) -> BaseExecutor:
@@ -178,33 +177,9 @@ def create_app(
             raise busy_409(e.active_run_id)
 
     def run_detail(run_id: str) -> dict:
-        run = store().get_run(run_id)
-        if not run:
+        run = build_run_detail(store(), app.state.runs_dir, run_id, manager().active_run_id)
+        if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
-        base = f"/api/runs/{run_id}/artifacts"
-        workspace = RunWorkspace(app.state.runs_dir, run_id)
-        last_changed: dict[str, int] = {}
-        for it in run["iterations"]:
-            for a in it["artifacts"]:
-                last_changed[a["path"]] = it["number"]
-                a["mime"] = guess_mime(a["path"])
-                a["url"] = f"{base}/{quote(a['path'])}?iteration={it['number']}"
-                try:
-                    workspace.resolve_artifact(a["path"], iteration=it["number"])
-                    a["snapshot_available"] = True
-                except ArtifactNotFound:
-                    a["snapshot_available"] = False
-        run["artifacts"] = [
-            {
-                **a,
-                "iteration": last_changed.get(a["path"]),
-                "url": f"{base}/{quote(a['path'])}",
-                "download_url": f"{base}/{quote(a['path'])}?download=1",
-            }
-            for a in workspace.list_artifacts()
-        ]
-        run["active"] = manager().active_run_id == run_id
-        run.update(describe(run.get("provider"), run.get("model")))
         return run
 
     # ─── Run API ───────────────────────────────
@@ -263,16 +238,16 @@ def create_app(
         if queue is None:
             # The run already finished → send the final state, then close the stream
             async def finished():
-                yield _sse(Event.DONE, {"session_id": run_id, "status": run["status"],
+                yield sse_event(Event.DONE, {"session_id": run_id, "status": run["status"],
                                     "answer": run["answer"], "message": run["message"],
                                     "iterations": run["iteration_count"]})
-            return _sse_response(finished())
+            return sse_response(finished())
 
         async def live():
-            yield _sse(Event.STATUS, {"session_id": run_id, "status": "running"})
-            async for chunk in _drain(queue):
+            yield sse_event(Event.STATUS, {"session_id": run_id, "status": "running"})
+            async for chunk in drain(queue):
                 yield chunk
-        return _sse_response(live(), on_close=lambda: manager().unsubscribe(run_id, queue))
+        return sse_response(live(), on_close=lambda: manager().unsubscribe(run_id, queue))
 
     @app.get("/api/runs/{run_id}/logs")
     async def get_logs(run_id: str, after: int = 0, iteration: int | None = None):
@@ -332,7 +307,7 @@ def create_app(
     async def execute_stream(request: AgentRequest):
         """Runs the agent with SSE: session → iteration/code/result... → done."""
         run_id, queue = await start_run(request, subscribe=True)
-        return _sse_response(_drain(queue), on_close=lambda: manager().unsubscribe(run_id, queue))
+        return sse_response(drain(queue), on_close=lambda: manager().unsubscribe(run_id, queue))
 
     @app.get("/api/sessions/{session_id}")
     async def get_session(session_id: str):
@@ -367,49 +342,6 @@ def create_app(
             return FileResponse(root / "index.html")
 
     return app
-
-
-def format_log_line(e: dict) -> str:
-    """One log line as text: time, iteration, level, source, message, data."""
-    it = f"iter {e['iteration']}" if e.get("iteration") else "run"
-    data = " ".join(f"{k}={v}" for k, v in (e.get("data") or {}).items())
-    return f"{e['ts']}  {it:<7} {e['level']:<5} {e['source']:<7} {e['message']}" + (f"  [{data}]" if data else "")
-
-
-# ─── SSE helpers ───────────────────────────────
-def _sse(event: str, data: dict) -> str:
-    """Format Server-Sent Event."""
-    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
-
-
-async def _drain(queue: asyncio.Queue):
-    """Reads events from the queue until 'done'; sends pings so the connection is not closed."""
-    while True:
-        try:
-            event, data = await asyncio.wait_for(queue.get(), timeout=SSE_PING_SECONDS)
-        except asyncio.TimeoutError:
-            yield ": ping\n\n"
-            continue
-        yield _sse(event, data)
-        if event == Event.DONE:
-            return
-
-
-def _sse_response(gen, on_close=None) -> StreamingResponse:
-    async def wrapped():
-        try:
-            async for chunk in gen:
-                yield chunk
-        finally:
-            # The client closed the stream: only unsubscribe, the run keeps going (only Stop stops the run)
-            if on_close:
-                on_close()
-
-    return StreamingResponse(
-        wrapped(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
 
 
 app = create_app()

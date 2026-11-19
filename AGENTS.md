@@ -20,6 +20,7 @@ schemas.py        data models + ExecutionStatus      planner.py        one model
 prompts.py        system prompt + context builder    parsing.py        validates the model's JSON reply (pure functions)
 events.py         event names, `flow` tags, payloads  (the contract with runs.py, SSE and web/src/lib/api.ts)
 config.py         Settings.from_env(): every environment variable except provider keys
+run_detail.py     JSON of one run for GET /api/runs/{id}   sse.py   SSE formatting, queue draining, response wrapper
 model_catalog.py  providers/models + default         llm_providers.py  Anthropic / OpenAI / Ollama adapters
 agent.py          the agent loop                     executor.py       Local / Sandbox / PersistentSandbox executors
 runs.py           RunManager (background, Stop, SSE) store.py          SQLite (runs, iterations, run_logs)
