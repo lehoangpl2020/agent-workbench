@@ -1,0 +1,17 @@
+.env
+.env.*
+.venv/
+data/
+static/
+tests/
+__pycache__/
+.pytest_cache/
+web/node_modules/
+web/dist/
+*.md
+.git/
+.github/
+docs/
+.vscode/
+.DS_Store
+*.log

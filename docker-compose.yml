@@ -1,0 +1,70 @@
+# Tên project cố định: volume/network thành agent-workbench_*, không đụng project Compose khác trên máy.
+name: agent-workbench
+
+services:
+  # ── Agent Server: FastAPI API + Web UI (http://localhost:8000, đổi cổng bằng HOST_PORT) ──
+  agent-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    ports:
+      # Chỉ máy này truy cập được. Server chạy code do model sinh ra và không có auth,
+      # nên KHÔNG mở ra LAN. Cố ý demo cho máy khác: BIND_ADDRESS=0.0.0.0 trong .env (tự chịu rủi ro).
+      - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-8000}:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - agent-db:/data/db          # SQLite history (chỉ server thấy)
+      - agent-runs:/data/runs      # code + artifacts của từng run (chung với sandbox)
+    environment:
+      # Đọc từ shell hoặc file .env cạnh file này; chỉ backend có key.
+      # Thiếu key của provider nào thì chỉ provider đó không dùng được.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Ollama chạy trên máy host (Windows): từ trong container "localhost" là chính container,
+      # nên mặc định trỏ host.docker.internal. Đổi bằng OLLAMA_BASE_URL trong .env nếu Ollama ở chỗ khác.
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - USE_DOCKER=true
+      - SANDBOX_MODE=persistent
+      - SANDBOX_CONTAINER_NAME=agent-workbench-sandbox
+      - SANDBOX_RUNS_DIR=/workspace/runs
+      - MAX_ITERATIONS=${MAX_ITERATIONS:-5}
+      - EXECUTION_TIMEOUT=${EXECUTION_TIMEOUT:-30}
+      - DB_PATH=/data/db/agent.db
+      - RUNS_DIR=/data/runs
+    extra_hosts:
+      # Docker Desktop đã có sẵn tên này; dòng này giúp cả Docker Engine trên Linux/WSL
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      sandbox:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Sandbox (chạy sẵn, luôn bật; server chạy code bằng docker exec) ──
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    image: agent-workbench-sandbox:latest
+    container_name: agent-workbench-sandbox
+    # Giữ container sống để debug: docker exec -it agent-workbench-sandbox bash
+    command: tail -f /dev/null
+    volumes:
+      # Hybrid mode (server chạy bằng Python trên host): SANDBOX_RUNS_MOUNT=./data/runs
+      - ${SANDBOX_RUNS_MOUNT:-agent-runs}:/workspace/runs
+    mem_limit: 512m
+    cpus: 1.0
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    # Network bật để auto pip install; muốn cách ly hoàn toàn: network_mode: none
+
+volumes:
+  agent-db:
+  agent-runs:

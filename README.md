@@ -1,0 +1,144 @@
+# Agent Workbench
+
+> A hands-on workbench for building, observing, and evaluating code-executing AI agents.
+
+Agent Workbench is a small, readable **code-execution agent** with a web UI. You give it a task in plain language; a model writes Python, a sandbox runs it, and the result (or the error) goes back to the model until it declares the task done or a limit is reached. The point of the project is to make that loop **visible and inspectable**: every model call, code run, retry and artifact is logged, persisted and can be replayed.
+
+It is a learning and showcase project built while studying AI Agent Engineering. **It is not production software** (see [Current limitations](#current-limitations)).
+
+![Agent Workbench: new-run screen](docs/assets/ui-composer.png)
+
+*The new-run screen (a fresh install, so no history and no provider key yet). There is no recorded demo of a full run in this repository.*
+
+## What problem does it solve?
+
+The core of most coding agents is a short loop, but it is easy to hide behind a framework. This project keeps the loop in one place (`agent.py`), keeps "what the model decides" separate from "what the application decides", and gives you the tools to watch it work: live flow, replay, activity logs, run history and downloadable artifacts.
+
+## Features (implemented)
+
+- **Agent loop**: Plan → Execute → Evaluate → Retry/Done, implemented once in `CodeAgent.run()` and shared by the sync API, the SSE API and the Run API.
+- **Multiple model providers**, chosen per run and fixed for that run: Anthropic Claude (default: Claude Sonnet 4.6), OpenAI (Responses API) and local Ollama. The catalog lives in `model_catalog.py`. No automatic fallback between providers.
+- **Three executors**: persistent Docker sandbox (default in Compose), ephemeral Docker container per run, and a local subprocess (development only, not isolated; the UI shows a warning).
+- **Real timeouts and Stop**: timeout inside the sandbox plus a Python safety net; *Stop* kills the running process, not just the task.
+- **Auto `pip install`** for missing modules (persistent sandbox) and **artifact collection** (files and images produced by the code).
+- **Run API**: background runs (one at a time), Server-Sent Events, SQLite history that survives restarts, per-run workspace with path-traversal protection.
+- **Activity log**: runtime / LLM / model / sandbox entries with secrets redacted before they are stored or sent.
+- **Web UI** (React, TypeScript, Vite, Tailwind, shadcn/ui): composer with presets, Live Flow (Agent Studio), Replay of finished runs, Logs, Files/preview, and History.
+- **Offline test suite** that uses a scripted planner, so it never calls a paid model API.
+
+## Architecture
+
+```text
+Browser (React UI) ──HTTP/SSE──▶ FastAPI server (server.py)
+                                      │
+                               RunManager (runs.py)   ── SQLite history (store.py)
+                                      │                 ── per-run workspace (workspace.py)
+                               CodeAgent.run() (agent.py)   ← the single agent loop
+                                 │            │
+                       LLMPlanner (planner.py)   Executor (executor.py)
+                       + provider adapters       Persistent / Ephemeral sandbox / Local
+                       (llm_providers.py)
+```
+
+The loop, per iteration:
+
+1. **Plan** – the planner streams the selected model's answer: JSON `{thinking, code, language}`. The model decides *what code to write* and *when it is done* (`DONE`).
+2. **Execute** – the executor runs the code with a timeout, installs missing packages if needed, and collects artifacts. The application decides this, not the model.
+3. **Evaluate** – stdout/stderr/exit code (and a simple "false success" check) are fed back to the model in the next iteration.
+4. **Stop** – on `DONE` after at least one successful run, on the run limit, on a timeout, on an error, or when the user presses Stop. `max_iterations` counts **code runs**; if the last run succeeds the model gets one extra *final review* turn whose code is not executed.
+
+Details (in Vietnamese): [docs/vi/ARCHITECTURE.vi.md](docs/vi/ARCHITECTURE.vi.md).
+
+## Prerequisites
+
+- **Docker Desktop** (or Docker Engine + Compose v2) for the recommended setup.
+- An API key for the provider you want to use (Anthropic and/or OpenAI), **or** [Ollama](https://ollama.com) running locally with a model pulled (no key needed). Anthropic and OpenAI calls are billed by the provider.
+- For development without Docker: Python and Node.js. The Docker images use Python 3.11 and Node 22; the offline tests and the UI build were run locally on Python 3.14 and Node 24.
+
+## Quickstart (Docker Compose)
+
+```bash
+git clone https://github.com/lehoangpl2020/agent-workbench.git
+cd agent-workbench
+cp .env.example .env        # then add the key(s) for the provider(s) you use
+docker compose up -d --build
+```
+
+Open <http://localhost:8000>. Check the stack with `curl http://localhost:8000/health` and `docker compose ps`.
+
+- Port 8000 is bound to `127.0.0.1` only. If it is taken, set `HOST_PORT` in `.env`.
+- The Compose project is named `agent-workbench`, with its own container (`agent-workbench-sandbox`), image and volumes, so it does not collide with other Compose projects.
+- History and artifacts live in Docker volumes and survive `docker compose down`. `docker compose down -v` deletes them.
+
+> **Security:** the server executes code written by a model and has **no authentication**. It mounts the Docker socket to control the sandbox. Keep it on `127.0.0.1`, and do not expose it to a LAN or the internet.
+
+### Configuring providers
+
+Put keys in `.env` (Compose reads it); never commit that file. Only the providers you use need a key.
+
+| Provider | Configuration |
+|---|---|
+| Anthropic Claude (default) | `ANTHROPIC_API_KEY` |
+| OpenAI | `OPENAI_API_KEY` (optional `OPENAI_BASE_URL`) |
+| Ollama (local) | no key; `OLLAMA_BASE_URL` defaults to `http://host.docker.internal:11434` in Compose |
+
+Pick the provider and model per run in the UI, or via `provider` / `model` in the API. A missing key, an unreachable Ollama or an unpulled model is reported before the run starts. More: [docs/vi/PROVIDERS.vi.md](docs/vi/PROVIDERS.vi.md).
+
+### Local development (no Docker, not isolated)
+
+```bash
+python -m venv .venv
+.venv/Scripts/pip install -r requirements-dev.txt     # Linux/macOS: .venv/bin/pip
+export ANTHROPIC_API_KEY=...                          # or use Ollama
+USE_DOCKER=false python server.py                     # API on http://127.0.0.1:8000
+cd web && npm ci && npm run dev                       # UI on http://localhost:5173 (proxies to :8000)
+```
+
+In this mode model-written code runs on your machine with your user's permissions. `python server.py` does not read `.env`; export variables in your shell.
+
+## Running the tests
+
+```bash
+# Backend: offline, scripted planner, no model API calls (code still runs for real via LocalExecutor)
+.venv/Scripts/python -m pytest tests -q               # Linux/macOS: .venv/bin/python
+
+# Frontend: type-check + production build (there are no frontend tests yet)
+cd web && npm run build
+```
+
+A test that needs the real Docker sandbox is skipped by default; see the docstring of `tests/test_docker_executor.py` to enable it.
+
+## Current limitations
+
+- **Not production-ready.** No authentication, no cost limits, no quality evaluation, and observability is limited to the activity log and UI.
+- Only one run at a time.
+- The persistent sandbox is shared by all runs; code from one run could in theory read another run's directory. The sandbox has network access (needed for auto-install).
+- The server container mounts `/var/run/docker.sock`, which is very powerful on the host.
+- Local mode is not isolated.
+- No frontend tests; the UI was checked by building it and by manual use.
+- Prompts, generated code and stdout are stored unredacted in SQLite.
+- Documentation beyond this README is mostly in Vietnamese ([docs/vi/](docs/vi/)).
+
+## Roadmap (planned, not implemented)
+
+These are ideas from the author's learning roadmap ([docs/vi/FEATURE_MAP.vi.md](docs/vi/FEATURE_MAP.vi.md)); none of them exist yet:
+
+- Agent-quality evaluation (fixed task sets, pass rate) and per-run token/latency/cost summaries.
+- Run comparison and experiment profiles.
+- Native tool calling and other loop strategies, memory and context management.
+- Human approval steps and stricter sandbox isolation.
+- Frontend tests and CI.
+
+## Documentation
+
+English: this README. Vietnamese (detailed learning notes): [docs/vi/](docs/vi/) — [QUICKSTART](docs/vi/QUICKSTART.vi.md), [ARCHITECTURE](docs/vi/ARCHITECTURE.vi.md), [PROVIDERS](docs/vi/PROVIDERS.vi.md), [TROUBLESHOOTING](docs/vi/TROUBLESHOOTING.vi.md), [full Vietnamese README](docs/vi/README.vi.md). `docs/vi/NEXT_STEPS.vi.md` and `docs/vi/FEATURE_MAP.vi.md` are historical planning notes.
+
+## Origin and attribution
+
+This project **started from practice code of the AI Agent Engineering course by Mentora × ProtonX** (a code-execution agent skeleton: planner, executor, agent loop, FastAPI server, Docker setup). I then extended it while learning: the React web UI, the Run API (background runs, Stop, SSE), SQLite history, per-run workspaces and artifacts, the activity log, multi-provider support (Anthropic, OpenAI, Ollama), localhost-only defaults, the offline test suite and the documentation. The extensions were built with the help of AI coding assistants.
+
+This is **not** an official Mentora or ProtonX project and is not endorsed by them. The starter code is not entirely my own work. See [NOTICE.md](NOTICE.md) for which parts come from where.
+
+## License
+
+**No license is granted yet.** The starter code comes from course material and I found no license text with it, so I have not applied an open-source license to this repository. Until that is clarified, all rights are reserved by the respective authors; viewing the code on GitHub is fine, but please do not assume you may reuse or redistribute it. If you are from Mentora or ProtonX and have questions about this repository, please open an issue.

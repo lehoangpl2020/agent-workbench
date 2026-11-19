@@ -1,0 +1,34 @@
+# Agent Workbench — file sinh ra khi build/chạy, không commit
+
+# Frontend
+web/node_modules/
+web/dist/
+*.tsbuildinfo
+
+# Bản build UI copy vào server (Dockerfile tự build lại)
+static/
+
+# Dữ liệu runtime: SQLite history + artifacts của từng run
+data/
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Secrets
+.env
+.env.*
+
+# Rác của hệ điều hành / file zip / editor
+.DS_Store
+__MACOSX/
+Thumbs.db
+.vscode/
+.idea/
+
+# Log
+*.log
+
+# Secrets: chỉ .env.example được commit
+!.env.example
