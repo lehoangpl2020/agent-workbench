@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent_workbench.config import Settings
-from agent_workbench.execution.executors import LocalExecutor
+from agent_workbench.execution import LocalExecutor
 from agent_workbench.tools.image import DEFAULT_MODEL, ImageRequest, ImageTool, ImageToolError, ImageToolSettings, tool_url
 from agent_workbench.core.prompts import SYSTEM_PROMPT, system_prompt
 from agent_workbench.api.app import build_image_tool, create_app
@@ -239,7 +239,7 @@ def test_runs_stored_before_the_column_existed_read_as_not_using_the_tool(data_d
 
 
 def test_only_a_ticked_run_gets_the_tool_in_its_prompt():
-    from agent_workbench.llm.providers import ChatResult
+    from agent_workbench.llm import ChatResult
     from agent_workbench.llm.catalog import find
     from agent_workbench.core.planner import LLMPlanner
     from agent_workbench.domain.schemas import AgentState

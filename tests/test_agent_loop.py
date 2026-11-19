@@ -7,7 +7,7 @@ import asyncio
 import time
 
 from agent_workbench.core.agent import CodeAgent
-from agent_workbench.execution.executors import BaseExecutor, LocalExecutor
+from agent_workbench.execution import BaseExecutor, LocalExecutor
 from agent_workbench.core.prompts import build_messages
 from agent_workbench.domain.schemas import AgentRequest, ExecutionResult, ExecutionStatus
 from tests.conftest import DONE, Hang, ScriptedPlanner, code

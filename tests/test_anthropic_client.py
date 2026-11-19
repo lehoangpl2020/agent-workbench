@@ -4,7 +4,7 @@ from agent_workbench.llm.catalog import models_for
 
 
 def test_anthropic_client_retries_and_timeout_are_explicit():
-    from agent_workbench.llm.providers import ANTHROPIC_MAX_RETRIES, ANTHROPIC_TIMEOUT_SECONDS, ProviderRegistry, ProviderSettings
+    from agent_workbench.llm import ANTHROPIC_MAX_RETRIES, ANTHROPIC_TIMEOUT_SECONDS, ProviderRegistry, ProviderSettings
     from anthropic import DEFAULT_MAX_RETRIES
 
     registry = ProviderRegistry(ProviderSettings(anthropic_api_key="test-key"))

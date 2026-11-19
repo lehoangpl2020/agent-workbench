@@ -35,9 +35,9 @@ from fastapi.staticfiles import StaticFiles
 from agent_workbench.core.agent import CodeAgent
 from agent_workbench.config import Settings
 from agent_workbench.domain.events import Event
-from agent_workbench.execution.executors import BaseExecutor, LocalExecutor, PersistentSandboxExecutor, SandboxExecutor
+from agent_workbench.execution import BaseExecutor, LocalExecutor, PersistentSandboxExecutor, SandboxExecutor
 from agent_workbench.tools.image import ImageRequest, ImageTool, ImageToolError
-from agent_workbench.llm.providers import ProviderError, ProviderRegistry
+from agent_workbench.llm import ProviderError, ProviderRegistry
 from agent_workbench.llm.catalog import DEFAULT_MODEL, DEFAULT_PROVIDER, InvalidModelSelection, describe, resolve
 from agent_workbench.core.planner import LLMPlanner
 from agent_workbench.runs.detail import build_run_detail

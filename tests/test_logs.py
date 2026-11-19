@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from agent_workbench.llm.providers import AnthropicChat
+from agent_workbench.llm import AnthropicChat
 from agent_workbench.llm.catalog import ModelSpec
 from agent_workbench.core.planner import LLMPlanner
 from agent_workbench.domain.schemas import AgentState

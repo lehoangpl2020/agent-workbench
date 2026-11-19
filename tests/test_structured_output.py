@@ -7,7 +7,7 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from agent_workbench.llm.providers import RESPONSE_SCHEMA, AnthropicChat
+from agent_workbench.llm import RESPONSE_SCHEMA, AnthropicChat
 from agent_workbench.llm.catalog import ModelSpec, models_for
 from agent_workbench.core.planner import LLMPlanner
 from agent_workbench.domain.schemas import AgentState

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from agent_workbench.config import Settings
-from agent_workbench.execution.executors import LocalExecutor
+from agent_workbench.execution import LocalExecutor
 from agent_workbench.core.planner import LLMPlanner
 from agent_workbench.llm.catalog import find
 

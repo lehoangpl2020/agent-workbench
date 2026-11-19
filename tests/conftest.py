@@ -69,7 +69,7 @@ def ollama_transport(pulled=("qwen3.5:4b",), calls: list | None = None):
 
 def fake_registry(anthropic=True, openai=True, pulled=("qwen3.5:4b",), calls=None, transport=None):
     """ProviderRegistry with fake keys (never calls a real API) + a fake Ollama."""
-    from agent_workbench.llm.providers import ProviderRegistry, ProviderSettings
+    from agent_workbench.llm import ProviderRegistry, ProviderSettings
 
     settings = ProviderSettings(
         anthropic_api_key="test-anthropic-key" if anthropic else None,

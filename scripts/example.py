@@ -12,7 +12,7 @@ from agent_workbench.core.agent import CodeAgent
 from agent_workbench.config import Settings
 from agent_workbench.llm.catalog import default_spec
 from agent_workbench.core.planner import LLMPlanner
-from agent_workbench.execution.executors import LocalExecutor
+from agent_workbench.execution import LocalExecutor
 from agent_workbench.domain.schemas import AgentRequest
 
 logging.basicConfig(

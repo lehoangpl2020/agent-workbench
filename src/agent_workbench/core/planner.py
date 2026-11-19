@@ -10,7 +10,7 @@ import time
 from typing import Awaitable, Callable
 
 from agent_workbench.domain.events import METRIC_LLM_CALL, Flow
-from agent_workbench.llm.providers import ChatClient, ProviderError, ProviderRegistry
+from agent_workbench.llm import ChatClient, ProviderError, ProviderRegistry
 from agent_workbench.llm.catalog import ModelSpec, default_spec
 from agent_workbench.core.parsing import extract_partial_json_string, parse_response
 from agent_workbench.core.prompts import build_messages, system_prompt

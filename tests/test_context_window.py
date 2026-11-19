@@ -3,7 +3,7 @@
 import asyncio
 import json
 
-from agent_workbench.llm.providers import ChatResult
+from agent_workbench.llm import ChatResult
 from agent_workbench.llm.catalog import ModelSpec
 from agent_workbench.core.planner import CONTEXT_WARN_RATIO, LLMPlanner
 from agent_workbench.domain.schemas import AgentState

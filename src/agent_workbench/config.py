@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Mapping
 
 from agent_workbench.tools.image import DEFAULT_MAX_PER_RUN, DEFAULT_MODEL as DEFAULT_IMAGE_MODEL, ImageToolSettings
-from agent_workbench.llm.providers import ProviderSettings
+from agent_workbench.llm import ProviderSettings
 from agent_workbench.runs.metrics import load_pricing
 
 # The repository root (src/agent_workbench/config.py → ../..): default home of data/ and static/

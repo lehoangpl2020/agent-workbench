@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent_workbench.core import planner as planner_mod
-from agent_workbench.llm.providers import (
+from agent_workbench.llm import (
     AUTH, CONNECTION, MODEL_NOT_FOUND, MODEL_NOT_PULLED, NOT_CONFIGURED, PERMISSION, RATE_LIMIT,
     TIMEOUT, ChatResult, OllamaChat, OpenAIChat, ProviderError, ProviderRegistry, ProviderSettings,
 )

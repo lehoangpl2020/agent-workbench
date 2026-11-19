@@ -19,8 +19,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent_workbench.core.agent import CodeAgent
-from agent_workbench.execution.executors import LocalExecutor
-from agent_workbench.llm.providers import ChatResult
+from agent_workbench.execution import LocalExecutor
+from agent_workbench.llm import ChatResult
 from agent_workbench.llm.catalog import ModelSpec
 from agent_workbench.core.planner import LLMPlanner
 from agent_workbench.core.prompts import SYSTEM_PROMPT, build_messages

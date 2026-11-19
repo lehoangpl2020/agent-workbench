@@ -10,7 +10,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_workbench.execution.executors import LocalExecutor
+from agent_workbench.execution import LocalExecutor
 from agent_workbench.api.app import create_app
 from agent_workbench.storage.run_store import RunStore
 from tests.conftest import DONE, ScriptedPlanner, code, fake_registry, wait_until

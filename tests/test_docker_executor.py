@@ -23,7 +23,7 @@ RUNS_DIR = os.getenv("RUNS_DIR", "/data/runs")
 
 
 def make():
-    from agent_workbench.execution.executors import PersistentSandboxExecutor, _KILL_SNIPPET  # noqa: F401
+    from agent_workbench.execution.docker_persistent import PersistentSandboxExecutor, _KILL_SNIPPET  # noqa: F401
     from agent_workbench.storage.workspace import RunWorkspace
 
     ex = PersistentSandboxExecutor(container_name="agent-workbench-sandbox", timeout=10, runs_dir=RUNS_DIR)
