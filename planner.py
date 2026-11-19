@@ -6,7 +6,6 @@ chosen from the run's ModelSpec and called through llm_providers.ChatClient — 
 """
 
 import logging
-import os
 import time
 from typing import Awaitable, Callable
 
@@ -19,9 +18,6 @@ from runlog import ERROR, INFO, WARN, LogFn, no_log
 
 logger = logging.getLogger(__name__)
 
-# Long plotting code (~9k characters) + JSON escaping can exceed 4096 tokens → truncated → broken JSON.
-# Env override for every model; when unset, the model's max_output_tokens from the catalog is used.
-_MAX_OUTPUT_ENV = os.getenv("MAX_OUTPUT_TOKENS")
 # How many times the LLM may retry after returning badly formatted JSON (a truncated response is not retried).
 MAX_FORMAT_RETRIES = 1
 
@@ -48,13 +44,16 @@ class LLMPlanner:
         spec: ModelSpec | None = None,
         chat: ChatClient | None = None,
         registry: ProviderRegistry | None = None,
+        max_output_tokens: int | None = None,
     ):
         self.spec = spec or default_spec()
         # Only create the client of the selected provider (Ollama does not need an Anthropic key...)
         self.chat = chat or (registry or ProviderRegistry()).create(self.spec)
         self.model = self.spec.id
         self.provider = self.spec.provider
-        self.max_tokens = int(_MAX_OUTPUT_ENV) if _MAX_OUTPUT_ENV else self.spec.max_output_tokens
+        # Long plotting code (~9k characters) + JSON escaping can exceed 4096 tokens → truncated → broken JSON.
+        # `max_output_tokens` (MAX_OUTPUT_TOKENS) overrides every model; otherwise the catalog's value for this model.
+        self.max_tokens = max_output_tokens or self.spec.max_output_tokens
 
     async def generate_code(
         self,

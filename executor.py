@@ -241,7 +241,7 @@ class LocalExecutor(BaseExecutor):
 
     def __init__(self, timeout: int = 30, runs_dir=None, python: str | None = None):
         super().__init__(timeout=timeout, runs_dir=runs_dir)
-        self.python = python or os.getenv("LOCAL_PYTHON") or sys.executable
+        self.python = python or sys.executable
         self._procs: dict[str, subprocess.Popen] = {}
 
     def prepare_code(self, code: str, workspace: RunWorkspace) -> str:

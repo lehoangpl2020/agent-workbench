@@ -19,6 +19,7 @@ Out of scope unless a maintainer asks: new frameworks, queues, databases, authen
 schemas.py        data models + ExecutionStatus      planner.py        one model call (streaming, format retry) → CodeBlock
 prompts.py        system prompt + context builder    parsing.py        validates the model's JSON reply (pure functions)
 events.py         event names, `flow` tags, payloads  (the contract with runs.py, SSE and web/src/lib/api.ts)
+config.py         Settings.from_env(): every environment variable except provider keys
 model_catalog.py  providers/models + default         llm_providers.py  Anthropic / OpenAI / Ollama adapters
 agent.py          the agent loop                     executor.py       Local / Sandbox / PersistentSandbox executors
 runs.py           RunManager (background, Stop, SSE) store.py          SQLite (runs, iterations, run_logs)
@@ -56,7 +57,7 @@ Run everything from the repository root.
 
 If Docker reports `additional privileges requested: pass "--allow=fs.read=..."`, build the images directly; see [docs/troubleshooting.md](docs/troubleshooting.md).
 
-Environment variables (read in `server.py` unless noted). Never read or print the contents of `.env`; only the names matter.
+Environment variables (all read once in `config.py` by `Settings.from_env()`, except provider keys and URLs, which `llm_providers.ProviderSettings.from_env()` reads). Never read or print the contents of `.env`; only the names matter.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -65,7 +66,7 @@ Environment variables (read in `server.py` unless noted). Never read or print th
 | `OLLAMA_BASE_URL` | `http://localhost:11434` (code), `http://host.docker.internal:11434` (Compose) | Ollama, as seen from where the backend runs |
 | `MAX_ITERATIONS` | `5` | Maximum number of **code runs** (a request may override it, 1–20); the model may be called once more |
 | `EXECUTION_TIMEOUT` | `30` | Seconds per code run (a request may override it, 1–300) |
-| `MAX_OUTPUT_TOKENS` | per model in the catalog | Overrides the output-token limit for every model (`planner.py`) |
+| `MAX_OUTPUT_TOKENS` | per model in the catalog | Overrides the output-token limit for every model (passed to `LLMPlanner`) |
 | `USE_DOCKER` | `false` | `true` uses a Docker sandbox |
 | `SANDBOX_MODE` | `ephemeral` (code), `persistent` (Compose) | `ephemeral` or `persistent` |
 | `SANDBOX_CONTAINER_NAME` | `agent-workbench-sandbox` | Name of the persistent sandbox container |
@@ -88,6 +89,7 @@ The code default for `SANDBOX_MODE` is `ephemeral`, but `docker-compose.yml` set
 - **Docker:** `Dockerfile.server` copies only `*.py` from the repository root (`COPY *.py .`). Put new Python modules in the root, or update the Dockerfile if you add a subdirectory.
 - Keep changes small and focused. Do not refactor beyond the task. Do not add dependencies to `requirements.txt` or `web/package.json` without a clear need and a note in the PR.
 - Do not edit generated or installed files: `web/dist/`, `static/`, `data/`, `.venv/`, `node_modules/`, `__pycache__/`, `*.tsbuildinfo`.
+- Adding a setting: add it to `Settings` in `config.py` and the table above; do not read `os.environ` anywhere else (redaction in `runlog.py` is the one deliberate exception).
 - Adding an API field: update `schemas.py`/`server.py`, `web/src/lib/api.ts`, the related tests, and `docs/api.md` for a new endpoint.
 - Adding an event, a `flow` tag or a payload key: declare it in `events.py` and mirror it in `web/src/lib/api.ts` (`SSE_EVENTS`, `FLOWS`); `tests/test_event_contract.py` fails if the two sides differ. Only add; never change the meaning of an old one.
 - Adding a log or event: emit it where the action really happens (`emit("log", entry)`), with the right `source` (`runtime`, `llm`, `model`, `sandbox`), and pass it through `redact()`.

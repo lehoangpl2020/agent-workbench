@@ -24,7 +24,6 @@ Both sync and SSE go through RunManager → CodeAgent.run() → the same single 
 import asyncio
 import json
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
@@ -35,6 +34,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Str
 from fastapi.staticfiles import StaticFiles
 
 from agent import CodeAgent
+from config import Settings
 from events import Event
 from executor import BaseExecutor, LocalExecutor, PersistentSandboxExecutor, SandboxExecutor
 from llm_providers import ProviderError, ProviderRegistry
@@ -51,60 +51,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).resolve().parent
-
-# ─── Config (read from env or defaults) ────────
-USE_DOCKER = os.getenv("USE_DOCKER", "false").lower() in ("true", "1", "yes")
-SANDBOX_MODE = os.getenv("SANDBOX_MODE", "ephemeral")  # ephemeral | persistent
-SANDBOX_CONTAINER_NAME = os.getenv("SANDBOX_CONTAINER_NAME", "agent-workbench-sandbox")
-SANDBOX_RUNS_DIR = os.getenv("SANDBOX_RUNS_DIR", "/workspace/runs")
-MAX_ITERATIONS = int(os.getenv("MAX_ITERATIONS", "5"))
-EXECUTION_TIMEOUT = int(os.getenv("EXECUTION_TIMEOUT", "30"))
-DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data"))
-DB_PATH = Path(os.getenv("DB_PATH", DATA_DIR / "agent.db"))
-RUNS_DIR = Path(os.getenv("RUNS_DIR", DATA_DIR / "runs"))
-STATIC_DIR = Path(os.getenv("STATIC_DIR", BASE_DIR / "static"))
-
-# By default listen on this machine only. The server runs code written by a model and has no auth:
-# exposing it to the LAN (0.0.0.0) lets other machines run code and spend your API keys.
-HOST = os.getenv("HOST", "127.0.0.1")
-# Origins allowed to call the API from a browser. The built UI is served from the same origin as the API, so it needs no CORS;
-# only the Vite dev server (:5173) does. The Vite proxy calls server-side so it would not need it either, but it is kept to be safe.
-CORS_ORIGINS = [
-    o.strip()
-    for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
-    if o.strip()
-]
-
 # max_iterations = max number of CODE RUNS. Max model calls = max_iterations + 1
 # (the last turn only lets the model review the output and answer DONE), not counting retries for malformed JSON.
 LIMITS = {"max_iterations": [1, 20], "timeout_seconds": [1, 300]}
 SSE_PING_SECONDS = 15
 
 
-def build_executor(runs_dir: Path) -> BaseExecutor:
-    if USE_DOCKER and SANDBOX_MODE == "persistent":
-        logger.info(f"🐳 Using PersistentSandboxExecutor → container '{SANDBOX_CONTAINER_NAME}'")
+def build_executor(settings: Settings, runs_dir: Path) -> BaseExecutor:
+    if settings.use_docker and settings.sandbox_mode == "persistent":
+        logger.info(f"🐳 Using PersistentSandboxExecutor → container '{settings.sandbox_container_name}'")
         return PersistentSandboxExecutor(
-            container_name=SANDBOX_CONTAINER_NAME,
-            timeout=EXECUTION_TIMEOUT,
+            container_name=settings.sandbox_container_name,
+            timeout=settings.execution_timeout,
             runs_dir=runs_dir,
-            sandbox_runs_dir=SANDBOX_RUNS_DIR,
+            sandbox_runs_dir=settings.sandbox_runs_dir,
         )
-    if USE_DOCKER:
+    if settings.use_docker:
         logger.info("🐳 Using SandboxExecutor (ephemeral containers)")
         return SandboxExecutor(
             image="agent-workbench-sandbox:latest",
-            timeout=EXECUTION_TIMEOUT,
+            timeout=settings.execution_timeout,
             memory_limit="256m",
             network_disabled=True,
             runs_dir=runs_dir,
         )
     logger.warning("⚠️  Using LocalExecutor (subprocess). Set USE_DOCKER=true for isolation.")
-    return LocalExecutor(timeout=EXECUTION_TIMEOUT, runs_dir=runs_dir)
+    return LocalExecutor(timeout=settings.execution_timeout, runs_dir=runs_dir, python=settings.local_python)
 
 
 def create_app(
+    settings: Settings | None = None,
     *,
     planner=None,
     providers: ProviderRegistry | None = None,
@@ -112,17 +88,20 @@ def create_app(
     db_path: str | Path | None = None,
     runs_dir: str | Path | None = None,
     static_dir: str | Path | None = None,
-    max_iterations: int = MAX_ITERATIONS,
-    default_timeout: int = EXECUTION_TIMEOUT,
+    max_iterations: int | None = None,
+    default_timeout: int | None = None,
 ) -> FastAPI:
     """
-    App factory: production uses defaults from env; tests inject a fake planner/executor/registry.
+    App factory: settings default to Settings.from_env(); tests inject a fake planner/executor/registry.
     With a fixed planner (tests) → every run uses that planner; otherwise each run creates a planner
     from the run's provider/model through ProviderRegistry.
     """
-    runs_dir = Path(runs_dir or RUNS_DIR)
-    db_path = Path(db_path or DB_PATH)
-    static_dir = Path(static_dir or STATIC_DIR)
+    settings = settings or Settings.from_env()
+    runs_dir = Path(runs_dir or settings.runs_dir)
+    db_path = Path(db_path or settings.db_path)
+    static_dir = Path(static_dir or settings.static_dir)
+    max_iterations = max_iterations or settings.max_iterations
+    default_timeout = default_timeout or settings.execution_timeout
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -131,11 +110,12 @@ def create_app(
         interrupted = store.mark_interrupted()
         if interrupted:
             logger.warning(f"Marked {interrupted} interrupted run(s) as error")
-        registry = providers or ProviderRegistry()
+        registry = providers or ProviderRegistry(settings.providers)
         agent = CodeAgent(
             planner=planner,
-            planner_factory=lambda spec: LLMPlanner(spec, registry=registry),
-            executor=executor or build_executor(runs_dir),
+            planner_factory=lambda spec: LLMPlanner(spec, registry=registry,
+                                                    max_output_tokens=settings.max_output_tokens),
+            executor=executor or build_executor(settings, runs_dir),
             max_iterations=max_iterations,
             default_timeout=default_timeout,
         )
@@ -158,7 +138,7 @@ def create_app(
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=CORS_ORIGINS,
+        allow_origins=list(settings.cors_origins),
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
     )
@@ -364,9 +344,9 @@ def create_app(
         agent: CodeAgent = app.state.agent
         return {
             "status": "ok",
-            "docker": USE_DOCKER,
-            "sandbox_mode": SANDBOX_MODE if USE_DOCKER else "local",
-            "sandbox_container": SANDBOX_CONTAINER_NAME if SANDBOX_MODE == "persistent" else None,
+            "docker": settings.use_docker,
+            "sandbox_mode": settings.sandbox_mode if settings.use_docker else "local",
+            "sandbox_container": settings.sandbox_container_name if settings.sandbox_mode == "persistent" else None,
             "executor": agent.executor.describe(),
             "active_run_id": manager().active_run_id,
         }
@@ -438,7 +418,8 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    if HOST not in ("127.0.0.1", "localhost", "::1"):
-        logger.warning(f"⚠️  Listening on {HOST}: other machines on the network can run code here. "
+    settings = Settings.from_env()
+    if settings.host not in ("127.0.0.1", "localhost", "::1"):
+        logger.warning(f"⚠️  Listening on {settings.host}: other machines on the network can run code here. "
                        "There is no authentication.")
-    uvicorn.run(app, host=HOST, port=int(os.getenv("PORT", "8668")))
+    uvicorn.run(app, host=settings.host, port=settings.port)

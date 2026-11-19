@@ -16,7 +16,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Awaitable, Callable, Mapping, Protocol
 
 import httpx
 
@@ -89,13 +89,14 @@ class ProviderSettings:
     ollama_base_url: str = "http://localhost:11434"
 
     @classmethod
-    def from_env(cls) -> "ProviderSettings":
+    def from_env(cls, env: Mapping[str, str] | None = None) -> "ProviderSettings":
+        env = os.environ if env is None else env
         return cls(
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or None,
-            anthropic_auth_token=os.getenv("ANTHROPIC_AUTH_TOKEN") or None,
-            openai_api_key=os.getenv("OPENAI_API_KEY") or None,
-            openai_base_url=(os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/"),
-            ollama_base_url=(os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/"),
+            anthropic_api_key=env.get("ANTHROPIC_API_KEY") or None,
+            anthropic_auth_token=env.get("ANTHROPIC_AUTH_TOKEN") or None,
+            openai_api_key=env.get("OPENAI_API_KEY") or None,
+            openai_base_url=(env.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/"),
+            ollama_base_url=(env.get("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/"),
         )
 
     def missing_config(self, provider: str) -> str | None:
