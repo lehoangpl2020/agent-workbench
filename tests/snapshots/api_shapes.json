@@ -1,0 +1,133 @@
+{
+  "config": {
+    "active_run_id": "NoneType",
+    "defaults": {
+      "max_iterations": "int",
+      "model": "str",
+      "provider": "str",
+      "timeout_seconds": "int"
+    },
+    "executor": "str",
+    "limits": {
+      "max_iterations": [
+        "int"
+      ],
+      "timeout_seconds": [
+        "int"
+      ]
+    },
+    "llm_configured": "bool",
+    "model": "str",
+    "sandboxed": "bool"
+  },
+  "health": {
+    "active_run_id": "NoneType",
+    "docker": "bool",
+    "executor": "str",
+    "sandbox_container": "NoneType",
+    "sandbox_mode": "str",
+    "status": "str"
+  },
+  "logs": {
+    "logs": [
+      {
+        "data": {
+          "executor": "str",
+          "flow": "str",
+          "max_iterations": "int",
+          "model": "str",
+          "provider": "str",
+          "timeout_seconds": "int"
+        },
+        "id": "int",
+        "iteration": "NoneType",
+        "level": "str",
+        "message": "str",
+        "run_id": "str",
+        "source": "str",
+        "ts": "str"
+      }
+    ]
+  },
+  "run_detail": {
+    "active": "bool",
+    "activity": "str",
+    "activity_at": "str",
+    "activity_iteration": "int",
+    "activity_phase": "str",
+    "answer": "str",
+    "artifacts": [
+      {
+        "download_url": "str",
+        "iteration": "int",
+        "mime": "str",
+        "path": "str",
+        "size": "int",
+        "url": "str"
+      }
+    ],
+    "created_at": "str",
+    "executor": "str",
+    "finished_at": "str",
+    "id": "str",
+    "iteration_count": "int",
+    "iterations": [
+      {
+        "artifacts": [
+          {
+            "mime": "str",
+            "path": "str",
+            "size": "int",
+            "snapshot_available": "bool",
+            "url": "str"
+          }
+        ],
+        "code": "str",
+        "execution_time_ms": "float",
+        "exit_code": "int",
+        "explanation": "str",
+        "false_success": "bool",
+        "finished_at": "str",
+        "intent": "str",
+        "intent_detail": "str",
+        "language": "str",
+        "number": "int",
+        "run_id": "str",
+        "started_at": "str",
+        "status": "str",
+        "stderr": "str",
+        "stdout": "str",
+        "timed_out": "bool"
+      }
+    ],
+    "max_iterations": "int",
+    "message": "str",
+    "model": "str",
+    "model_name": "str",
+    "prompt": "str",
+    "provider": "str",
+    "provider_name": "str",
+    "status": "str",
+    "timeout_seconds": "int"
+  },
+  "run_list": {
+    "active_run_id": "NoneType",
+    "runs": [
+      {
+        "created_at": "str",
+        "finished_at": "str",
+        "id": "str",
+        "iteration_count": "int",
+        "max_iterations": "int",
+        "message": "str",
+        "model": "str",
+        "model_name": "str",
+        "prompt": "str",
+        "provider": "str",
+        "provider_name": "str",
+        "status": "str",
+        "timeout_seconds": "int"
+      }
+    ]
+  }
+}
