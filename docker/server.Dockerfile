@@ -20,6 +20,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
+# CLI client + example, so `docker compose exec agent-server python scripts/client.py ...` works
+COPY scripts/ ./scripts/
 # The package is imported from src/ (no install step): config.py finds static/ two levels up, in /app
 ENV PYTHONPATH=/app/src
 COPY --from=web /web/dist ./static
