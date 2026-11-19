@@ -200,12 +200,15 @@ class RunStore:
             return cur.lastrowid
 
     def list_logs(self, run_id: str, after_id: int = 0, iteration: int | None = None,
-                  limit: int = 5000) -> list[dict]:
+                  limit: int = 5000, source: str | None = None) -> list[dict]:
         sql = "SELECT * FROM run_logs WHERE run_id=? AND id>?"
         params: list = [run_id, after_id]
         if iteration is not None:
             sql += " AND iteration=?"
             params.append(iteration)
+        if source is not None:
+            sql += " AND source=?"
+            params.append(source)
         sql += " ORDER BY id LIMIT ?"
         params.append(limit)
         rows = self._query(sql, tuple(params))

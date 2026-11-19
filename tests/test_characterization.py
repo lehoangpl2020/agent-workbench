@@ -37,7 +37,9 @@ _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 _WIN_PATH = re.compile(r"[A-Za-z]:[\\/][^\s\"',)]*")
 _POSIX_PATH = re.compile(r"/[^\s\"',)]*/(?:runs|code|output)/[^\s\"',)]*")
 _SECONDS = re.compile(r"\d+\.\d+s\b")
-_TIME_KEYS = {"time_ms", "execution_time_ms", "elapsed_ms"}
+_TIME_KEYS = {"time_ms", "execution_time_ms", "elapsed_ms",
+              # P1.1 (metrics.py): measured in the log of each model call and in the run summary
+              "duration_ms", "first_token_ms", "first_token_ms_avg", "first_token_ms_max", "llm_ms", "sandbox_ms", "wall_ms"}
 
 
 def norm(value, key=None):

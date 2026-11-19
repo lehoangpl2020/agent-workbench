@@ -7,7 +7,7 @@ Interactive Swagger docs are served at <http://localhost:8668/docs> when the ser
 | Method | Path | Description |
 |---|---|---|
 | POST | `/api/runs` | Create a run and execute it in the background (`409` if a run is active) |
-| GET | `/api/runs`, `/api/runs/{id}` | History / details of a run + iterations + artifacts |
+| GET | `/api/runs`, `/api/runs/{id}` | History / details of a run + iterations + artifacts. The details also have `summary`: model calls, tokens, model and sandbox time, estimated cost ([below](#usage-and-cost-of-a-run)) |
 | GET | `/api/runs/{id}/events` | SSE progress (`activity`, `code_progress`, `iteration`, `code`, `result`, `done`, ...) |
 | POST | `/api/runs/{id}/stop` | Stop the run and kill the running process |
 | GET | `/api/runs/{id}/artifacts/{path}` | View/download a file (`?iteration=N`, `?download=1`) |
@@ -29,6 +29,28 @@ curl -X POST http://localhost:8668/api/execute -H "Content-Type: application/jso
 ```
 
 Response `status`: `success` (Completed) · `max_retries` (Code run limit reached) · `timeout` · `error` · `stopped`; plus `answer` (the result, or a partial result) and `message` (why the run ended).
+
+### Usage and cost of a run
+
+`GET /api/runs/{id}` includes `summary` (computed by `metrics.py`, see [architecture.md](architecture.md#run-totals-tokens-time-cost)):
+
+```json
+{"llm": {"calls": 3, "failed_calls": 0, "format_retries": 0, "calls_with_usage": 3, "usage_complete": true,
+         "input_tokens": 600, "output_tokens": 110, "cache_read_input_tokens": null,
+         "duration_ms": 4100, "first_token_ms_avg": 550, "first_token_ms_max": 700},
+ "sandbox": {"runs": 2, "duration_ms": 1700},
+ "wall_ms": 6200,
+ "cost": {"status": "ok", "amount": 0.00345, "currency": "USD", "pricing_key": "anthropic/claude-sonnet-4-6"},
+ "per_iteration": [{"iteration": 1, "llm_calls": 1, "llm_ms": 1500, "input_tokens": 100, "output_tokens": 40, "sandbox_ms": 850}]}
+```
+
+Anything that was not measured is `null`, not 0 (`llm` is `null` for a run stored before this existed). The cost uses the price table in `MODEL_PRICING`: JSON, **USD per 1M tokens**, keyed `provider/model`, or the path of a JSON file. The code has no prices, so a model without an entry gets `cost.status = "no_pricing"` and only tokens and time are shown.
+
+```bash
+MODEL_PRICING='{"anthropic/claude-sonnet-4-6": {"input": 3, "output": 15, "cache_read": 0.3}, "ollama/qwen3.5:4b": {"input": 0, "output": 0}}'
+```
+
+The numbers above are only an example of the format; check the provider's current price list. An invalid entry is ignored with a warning in the server log.
 
 ### Stop conditions
 

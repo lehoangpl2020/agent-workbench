@@ -24,7 +24,9 @@ from tests.test_characterization import UPDATE, norm
 FIXTURES = Path(__file__).resolve().parents[1] / "web" / "src" / "lib" / "__fixtures__"
 RUN_ID = "00000000-0000-4000-8000-000000000001"
 BASE = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-TIME_KEYS = {"time_ms", "execution_time_ms", "elapsed_ms"}
+TIME_KEYS = {"time_ms", "execution_time_ms", "elapsed_ms",
+              # P1.1 (metrics.py): measured in the log of each model call and in the run summary
+              "duration_ms", "first_token_ms", "first_token_ms_avg", "first_token_ms_max", "llm_ms", "sandbox_ms", "wall_ms"}
 
 RUNS = {
     # An error, a fix that writes a file, then DONE: every beat of the normal flow.

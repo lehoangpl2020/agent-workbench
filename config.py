@@ -11,11 +11,12 @@ the values that are set when a message is logged, not the ones that were set at 
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
 from llm_providers import ProviderSettings
+from metrics import load_pricing
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -60,12 +61,16 @@ class Settings:
     # needs no CORS; only the Vite dev server (:5173) does.
     cors_origins: tuple[str, ...]
     providers: ProviderSettings
+    # Cost estimate (metrics.py): USD per 1M tokens, keyed "provider/model". Empty = tokens and time only; the code has no prices.
+    model_pricing: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
+    model_pricing_warnings: tuple[str, ...] = ()   # why part of MODEL_PRICING was ignored; server.py logs them at startup
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None, base_dir: Path = BASE_DIR) -> "Settings":
         env = os.environ if env is None else env
         data_dir = Path(env.get("DATA_DIR") or base_dir / "data")
         max_output = env.get("MAX_OUTPUT_TOKENS")
+        pricing, pricing_warnings = load_pricing(env.get("MODEL_PRICING"))
         return cls(
             use_docker=_flag(env.get("USE_DOCKER", "false")),
             sandbox_mode=env.get("SANDBOX_MODE", "ephemeral"),
@@ -83,4 +88,6 @@ class Settings:
             port=_int(env, "PORT", 8668),
             cors_origins=tuple(o.strip() for o in env.get("CORS_ORIGINS", DEFAULT_CORS_ORIGINS).split(",") if o.strip()),
             providers=ProviderSettings.from_env(env),
+            model_pricing=pricing,
+            model_pricing_warnings=tuple(pricing_warnings),
         )

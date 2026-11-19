@@ -61,8 +61,13 @@
     },
     {
       "data": {
+        "attempt": 0,
         "chars": 84,
+        "duration_ms": 100,
+        "first_token_ms": 100,
         "flow": "response",
+        "metric": "llm_call",
+        "ok": true,
         "stop_reason": "stop"
       },
       "id": 5,
@@ -234,8 +239,13 @@
     },
     {
       "data": {
+        "attempt": 0,
         "chars": 127,
+        "duration_ms": 100,
+        "first_token_ms": 100,
         "flow": "response",
+        "metric": "llm_call",
+        "ok": true,
         "stop_reason": "stop"
       },
       "id": 18,
@@ -413,8 +423,13 @@
     },
     {
       "data": {
+        "attempt": 0,
         "chars": 54,
+        "duration_ms": 100,
+        "first_token_ms": 100,
         "flow": "response",
+        "metric": "llm_call",
+        "ok": true,
         "stop_reason": "stop"
       },
       "id": 31,
@@ -560,6 +575,57 @@
     "provider": "ollama",
     "provider_name": "Ollama (local)",
     "status": "success",
+    "summary": {
+      "cost": {
+        "status": "no_usage"
+      },
+      "llm": {
+        "cache_creation_input_tokens": null,
+        "cache_read_input_tokens": null,
+        "calls": 3,
+        "calls_with_usage": 0,
+        "duration_ms": 100,
+        "failed_calls": 0,
+        "first_token_ms_avg": 100,
+        "first_token_ms_max": 100,
+        "format_retries": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "reasoning_tokens": null,
+        "usage_complete": false
+      },
+      "per_iteration": [
+        {
+          "input_tokens": null,
+          "iteration": 1,
+          "llm_calls": 1,
+          "llm_ms": 100,
+          "output_tokens": null,
+          "sandbox_ms": 100
+        },
+        {
+          "input_tokens": null,
+          "iteration": 2,
+          "llm_calls": 1,
+          "llm_ms": 100,
+          "output_tokens": null,
+          "sandbox_ms": 100
+        },
+        {
+          "input_tokens": null,
+          "iteration": 3,
+          "llm_calls": 1,
+          "llm_ms": 100,
+          "output_tokens": null,
+          "sandbox_ms": null
+        }
+      ],
+      "sandbox": {
+        "duration_ms": 100,
+        "runs": 2
+      },
+      "wall_ms": 100
+    },
     "timeout_seconds": 30
   }
 }
