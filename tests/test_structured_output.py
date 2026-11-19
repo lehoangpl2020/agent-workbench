@@ -52,3 +52,4 @@ def test_every_catalog_anthropic_model_is_flagged():
 def test_schema_follows_the_strict_rules_both_providers_document():
     assert RESPONSE_SCHEMA["additionalProperties"] is False
     assert set(RESPONSE_SCHEMA["required"]) == set(RESPONSE_SCHEMA["properties"])
+

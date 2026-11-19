@@ -39,6 +39,10 @@ RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
+# Anthropic SDK behavior, same as its defaults (checked in anthropic 2.10: DEFAULT_MAX_RETRIES = 2, 10 min timeout)
+ANTHROPIC_MAX_RETRIES = 2
+ANTHROPIC_TIMEOUT_SECONDS = 600.0
+
 # ─── Normalized errors ─────────────────────────────
 NOT_CONFIGURED = "not_configured"      # missing API key / base URL
 CONNECTION = "connection"              # cannot connect to the provider
@@ -424,7 +428,11 @@ class ProviderRegistry:
         if spec.provider == "anthropic":
             if self._anthropic is None:
                 from anthropic import AsyncAnthropic
-                self._anthropic = AsyncAnthropic(api_key=s.anthropic_api_key) if s.anthropic_api_key else AsyncAnthropic()
+                # Retries and timeout are the SDK's own defaults, written out so they are visible and tested:
+                # a transient error (429/5xx/connection) is retried inside ONE model call and is not logged.
+                limits = dict(max_retries=ANTHROPIC_MAX_RETRIES, timeout=ANTHROPIC_TIMEOUT_SECONDS)
+                self._anthropic = (AsyncAnthropic(api_key=s.anthropic_api_key, **limits) if s.anthropic_api_key
+                                   else AsyncAnthropic(**limits))
             return AnthropicChat(spec, self._anthropic)
         if spec.provider == "openai":
             # Reasoning models can stay silent for quite a while before the first token
