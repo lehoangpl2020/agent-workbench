@@ -1,9 +1,9 @@
 """
 Client for Code Execution Agent API.
 Usage:
-    python client.py "Calculate pi to 100 decimal places"
-    python client.py --stream "Generate a chart of sin(x)"
-    python client.py --base-url http://your-server:8668 "Your task here"
+    python scripts/client.py "Calculate pi to 100 decimal places"
+    python scripts/client.py --stream "Generate a chart of sin(x)"
+    python scripts/client.py --base-url http://your-server:8668 "Your task here"
 """
 
 import argparse

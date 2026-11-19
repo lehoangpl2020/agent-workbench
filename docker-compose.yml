@@ -6,7 +6,7 @@ services:
   agent-server:
     build:
       context: .
-      dockerfile: Dockerfile.server
+      dockerfile: docker/server.Dockerfile
     ports:
       # Reachable from this machine only. The server runs code written by a model and has no auth,
       # so it is NOT exposed to the LAN. To demo to another machine on purpose: BIND_ADDRESS=0.0.0.0 in .env (at your own risk).
@@ -56,7 +56,7 @@ services:
   sandbox:
     build:
       context: .
-      dockerfile: Dockerfile.sandbox
+      dockerfile: docker/sandbox.Dockerfile
     image: agent-workbench-sandbox:latest
     container_name: agent-workbench-sandbox
     # Keep the container alive for debugging: docker exec -it agent-workbench-sandbox bash

@@ -20,7 +20,7 @@ from typing import Any, Awaitable, Callable, Mapping, Protocol
 
 import httpx
 
-from model_catalog import PROVIDERS, ModelSpec, models_for
+from agent_workbench.llm.catalog import PROVIDERS, ModelSpec, models_for
 
 logger = logging.getLogger(__name__)
 

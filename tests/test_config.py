@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from config import Settings
-from executor import LocalExecutor
-from planner import LLMPlanner
-from model_catalog import find
+from agent_workbench.config import Settings
+from agent_workbench.execution.executors import LocalExecutor
+from agent_workbench.core.planner import LLMPlanner
+from agent_workbench.llm.catalog import find
 
 
 def settings(**env):

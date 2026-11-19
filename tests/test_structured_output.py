@@ -7,10 +7,10 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from llm_providers import RESPONSE_SCHEMA, AnthropicChat
-from model_catalog import ModelSpec, models_for
-from planner import LLMPlanner
-from schemas import AgentState
+from agent_workbench.llm.providers import RESPONSE_SCHEMA, AnthropicChat
+from agent_workbench.llm.catalog import ModelSpec, models_for
+from agent_workbench.core.planner import LLMPlanner
+from agent_workbench.domain.schemas import AgentState
 from tests.test_logs import FakeStream
 
 GOOD = json.dumps({"thinking": "Print it", "code": "print(1)", "language": "python"})

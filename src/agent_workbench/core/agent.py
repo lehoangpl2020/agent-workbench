@@ -20,8 +20,8 @@ import logging
 from dataclasses import dataclass
 from typing import Awaitable, Callable
 
-from events import Event, Flow
-from schemas import (
+from agent_workbench.domain.events import Event, Flow
+from agent_workbench.domain.schemas import (
     AgentRequest,
     AgentResponse,
     AgentState,
@@ -29,11 +29,11 @@ from schemas import (
     ExecutionResult,
     ExecutionStatus,
 )
-from model_catalog import ModelSpec, resolve
-from planner import LLMPlanner
-from executor import BaseExecutor, LocalExecutor
-from workspace import RunWorkspace
-from runlog import ERROR, INFO, WARN, LogFn, make_entry
+from agent_workbench.llm.catalog import ModelSpec, resolve
+from agent_workbench.core.planner import LLMPlanner
+from agent_workbench.execution.executors import BaseExecutor, LocalExecutor
+from agent_workbench.storage.workspace import RunWorkspace
+from agent_workbench.observability.runlog import ERROR, INFO, WARN, LogFn, make_entry
 
 logger = logging.getLogger(__name__)
 

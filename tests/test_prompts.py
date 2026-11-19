@@ -1,7 +1,7 @@
 """Behavior of the context sent back to the model (the full conversation shapes are pinned in test_characterization)."""
 
-from prompts import MAX_STDERR_CHARS, TRUNCATION_NOTE, build_messages
-from schemas import AgentState, CodeBlock, ExecutionResult
+from agent_workbench.core.prompts import MAX_STDERR_CHARS, TRUNCATION_NOTE, build_messages
+from agent_workbench.domain.schemas import AgentState, CodeBlock, ExecutionResult
 
 
 def failed_state(stderr: str) -> AgentState:

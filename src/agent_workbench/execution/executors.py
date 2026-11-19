@@ -31,11 +31,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
-from events import Flow, artifact_label
-from image_tool import tool_url
-from runlog import ERROR, INFO, WARN, LogFn, fmt_bytes, no_log
-from schemas import ExecutionResult
-from workspace import RunWorkspace
+from agent_workbench.domain.events import Flow, artifact_label
+from agent_workbench.tools.image import tool_url
+from agent_workbench.observability.runlog import ERROR, INFO, WARN, LogFn, fmt_bytes, no_log
+from agent_workbench.domain.schemas import ExecutionResult
+from agent_workbench.storage.workspace import RunWorkspace
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class BaseExecutor:
         self.timeout = timeout
         self.runs_dir = Path(runs_dir or Path(tempfile.gettempdir()) / "agent-workbench-runs")
         self._counter = itertools.count(1)
-        # The server as the SANDBOX reaches it. Set by server.py only when the image tool is on; None = not offered.
+        # The server as the SANDBOX reaches it. Set by api/app.py only when the image tool is on; None = not offered.
         self.image_tool_url: str | None = None
 
     def tool_env(self, workspace: RunWorkspace) -> dict[str, str]:
@@ -345,7 +345,7 @@ class SandboxExecutor(BaseExecutor):
         except docker.errors.ImageNotFound:
             logger.warning(
                 f"Image '{self.image}' not found. "
-                "Build it with: docker build -t agent-workbench-sandbox -f Dockerfile.sandbox ."
+                "Build it with: docker build -t agent-workbench-sandbox -f docker/sandbox.Dockerfile ."
             )
 
     async def _run(self, workspace, code_path, language, timeout, progress=None) -> RawRun:
@@ -381,7 +381,7 @@ class SandboxExecutor(BaseExecutor):
             except self._docker.errors.ImageNotFound as e:
                 raise SandboxUnavailable(
                     f"Sandbox image '{self.image}' not found. "
-                    "Run: docker build -t agent-workbench-sandbox -f Dockerfile.sandbox ."
+                    "Run: docker build -t agent-workbench-sandbox -f docker/sandbox.Dockerfile ."
                 ) from e
             except self._docker.errors.DockerException as e:
                 raise SandboxUnavailable(f"Docker error: {e}") from e

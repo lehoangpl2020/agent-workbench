@@ -7,7 +7,7 @@ Pure functions, no model calls and no I/O.
 import json
 import re
 
-from schemas import CodeBlock
+from agent_workbench.domain.schemas import CodeBlock
 
 
 def parse_response(content: str) -> CodeBlock:

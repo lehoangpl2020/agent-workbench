@@ -15,10 +15,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from config import Settings
-from llm_providers import ChatResult, ProviderError, ProviderRegistry
-from metrics import load_pricing, summarize_run
-from store import now_iso
+from agent_workbench.config import Settings
+from agent_workbench.llm.providers import ChatResult, ProviderError, ProviderRegistry
+from agent_workbench.runs.metrics import load_pricing, summarize_run
+from agent_workbench.storage.run_store import now_iso
 from tests.conftest import fake_registry
 from tests.test_api import make_app, wait_finished
 

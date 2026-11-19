@@ -4,16 +4,12 @@ Claude API), but the code still runs FOR REAL through LocalExecutor (subprocess)
 """
 
 import asyncio
-import sys
 import time
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
-from schemas import AgentState, CodeBlock  # noqa: E402
+from agent_workbench.domain.schemas import AgentState, CodeBlock
 
 DONE = CodeBlock(code="", explanation="DONE")
 
@@ -73,7 +69,7 @@ def ollama_transport(pulled=("qwen3.5:4b",), calls: list | None = None):
 
 def fake_registry(anthropic=True, openai=True, pulled=("qwen3.5:4b",), calls=None, transport=None):
     """ProviderRegistry with fake keys (never calls a real API) + a fake Ollama."""
-    from llm_providers import ProviderRegistry, ProviderSettings
+    from agent_workbench.llm.providers import ProviderRegistry, ProviderSettings
 
     settings = ProviderSettings(
         anthropic_api_key="test-anthropic-key" if anthropic else None,

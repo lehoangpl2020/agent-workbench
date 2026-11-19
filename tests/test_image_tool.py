@@ -13,13 +13,13 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from config import Settings
-from executor import LocalExecutor
-from image_tool import DEFAULT_MODEL, ImageRequest, ImageTool, ImageToolError, ImageToolSettings, tool_url
-from prompts import SYSTEM_PROMPT, system_prompt
-from server import build_image_tool, create_app
+from agent_workbench.config import Settings
+from agent_workbench.execution.executors import LocalExecutor
+from agent_workbench.tools.image import DEFAULT_MODEL, ImageRequest, ImageTool, ImageToolError, ImageToolSettings, tool_url
+from agent_workbench.core.prompts import SYSTEM_PROMPT, system_prompt
+from agent_workbench.api.app import build_image_tool, create_app
 from tests.conftest import ScriptedPlanner, code, fake_registry, wait_until
-from workspace import RunWorkspace
+from agent_workbench.storage.workspace import RunWorkspace
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"fake image bytes"
 SLOW = code("import time\ntime.sleep(5)\nprint('x')")   # keeps the run active while the test calls the tool
@@ -239,10 +239,10 @@ def test_runs_stored_before_the_column_existed_read_as_not_using_the_tool(data_d
 
 
 def test_only_a_ticked_run_gets_the_tool_in_its_prompt():
-    from llm_providers import ChatResult
-    from model_catalog import find
-    from planner import LLMPlanner
-    from schemas import AgentState
+    from agent_workbench.llm.providers import ChatResult
+    from agent_workbench.llm.catalog import find
+    from agent_workbench.core.planner import LLMPlanner
+    from agent_workbench.domain.schemas import AgentState
 
     seen: list[str] = []
 

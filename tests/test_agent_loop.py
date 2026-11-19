@@ -6,10 +6,10 @@ Mock planner + LocalExecutor running a real subprocess.
 import asyncio
 import time
 
-from agent import CodeAgent
-from executor import BaseExecutor, LocalExecutor
-from prompts import build_messages
-from schemas import AgentRequest, ExecutionResult, ExecutionStatus
+from agent_workbench.core.agent import CodeAgent
+from agent_workbench.execution.executors import BaseExecutor, LocalExecutor
+from agent_workbench.core.prompts import build_messages
+from agent_workbench.domain.schemas import AgentRequest, ExecutionResult, ExecutionStatus
 from tests.conftest import DONE, Hang, ScriptedPlanner, code
 
 
@@ -213,7 +213,7 @@ def test_sandbox_system_error_stops_loop(tmp_path):
 def test_file_scanning_and_snapshots_do_not_block_the_event_loop(tmp_path, monkeypatch):
     """Invariant 2: directory walks and snapshot copies run in a worker thread, not on the event loop."""
     import threading
-    from workspace import RunWorkspace
+    from agent_workbench.storage.workspace import RunWorkspace
 
     seen: dict[str, set[int]] = {"scan": set(), "snapshot": set()}
     scan, snapshot = RunWorkspace.scan, RunWorkspace.snapshot

@@ -5,8 +5,8 @@ The end-to-end behavior of the same rules is covered in test_agent_loop.py.
 
 import pytest
 
-from agent import Turn, best_answer, detect_false_success, done_outcome, intent_for, limit_outcome, next_turn
-from schemas import AgentState, CodeBlock, ExecutionResult, ExecutionStatus
+from agent_workbench.core.agent import Turn, best_answer, detect_false_success, done_outcome, intent_for, limit_outcome, next_turn
+from agent_workbench.domain.schemas import AgentState, CodeBlock, ExecutionResult, ExecutionStatus
 
 
 def state(*results: ExecutionResult, max_iterations=3, iteration=None) -> AgentState:

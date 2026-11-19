@@ -3,10 +3,10 @@
 from pathlib import Path
 from urllib.parse import quote
 
-from metrics import Pricing, summarize_run
-from model_catalog import describe
-from store import RunStore
-from workspace import ArtifactNotFound, RunWorkspace, guess_mime
+from agent_workbench.runs.metrics import Pricing, summarize_run
+from agent_workbench.llm.catalog import describe
+from agent_workbench.storage.run_store import RunStore
+from agent_workbench.storage.workspace import ArtifactNotFound, RunWorkspace, guess_mime
 
 
 def build_run_detail(store: RunStore, runs_dir: Path, run_id: str, active_run_id: str | None,

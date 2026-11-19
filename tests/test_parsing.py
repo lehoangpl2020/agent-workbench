@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from parsing import extract_partial_json_string, parse_response
+from agent_workbench.core.parsing import extract_partial_json_string, parse_response
 
 
 def reply(code="print(1)", thinking="Print one", **extra):

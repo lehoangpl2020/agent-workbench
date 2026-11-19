@@ -3,10 +3,10 @@
 import asyncio
 import json
 
-from llm_providers import ChatResult
-from model_catalog import ModelSpec
-from planner import CONTEXT_WARN_RATIO, LLMPlanner
-from schemas import AgentState
+from agent_workbench.llm.providers import ChatResult
+from agent_workbench.llm.catalog import ModelSpec
+from agent_workbench.core.planner import CONTEXT_WARN_RATIO, LLMPlanner
+from agent_workbench.domain.schemas import AgentState
 
 GOOD = json.dumps({"thinking": "Print", "code": "print(1)", "language": "python"})
 

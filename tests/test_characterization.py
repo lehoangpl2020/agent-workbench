@@ -18,13 +18,13 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from agent import CodeAgent
-from executor import LocalExecutor
-from llm_providers import ChatResult
-from model_catalog import ModelSpec
-from planner import LLMPlanner
-from prompts import SYSTEM_PROMPT, build_messages
-from schemas import AgentRequest, AgentState, CodeBlock, ExecutionResult
+from agent_workbench.core.agent import CodeAgent
+from agent_workbench.execution.executors import LocalExecutor
+from agent_workbench.llm.providers import ChatResult
+from agent_workbench.llm.catalog import ModelSpec
+from agent_workbench.core.planner import LLMPlanner
+from agent_workbench.core.prompts import SYSTEM_PROMPT, build_messages
+from agent_workbench.domain.schemas import AgentRequest, AgentState, CodeBlock, ExecutionResult
 from tests.conftest import DONE, ScriptedPlanner, code
 from tests.test_api import make_app, wait_finished
 

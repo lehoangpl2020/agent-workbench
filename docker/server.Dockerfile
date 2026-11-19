@@ -19,11 +19,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY *.py .
+COPY src/ ./src/
+# The package is imported from src/ (no install step): config.py finds static/ two levels up, in /app
+ENV PYTHONPATH=/app/src
 COPY --from=web /web/dist ./static
 
 EXPOSE 8000
 
 # 0.0.0.0 here is INSIDE the container (required for Docker to forward the port).
 # Who can reach it is limited in docker-compose.yml: ports "127.0.0.1:8668:8000".
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "agent_workbench.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

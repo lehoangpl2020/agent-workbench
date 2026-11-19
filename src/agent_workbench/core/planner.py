@@ -9,13 +9,13 @@ import logging
 import time
 from typing import Awaitable, Callable
 
-from events import METRIC_LLM_CALL, Flow
-from llm_providers import ChatClient, ProviderError, ProviderRegistry
-from model_catalog import ModelSpec, default_spec
-from parsing import extract_partial_json_string, parse_response
-from prompts import build_messages, system_prompt
-from schemas import CodeBlock, AgentState
-from runlog import ERROR, INFO, WARN, LogFn, no_log
+from agent_workbench.domain.events import METRIC_LLM_CALL, Flow
+from agent_workbench.llm.providers import ChatClient, ProviderError, ProviderRegistry
+from agent_workbench.llm.catalog import ModelSpec, default_spec
+from agent_workbench.core.parsing import extract_partial_json_string, parse_response
+from agent_workbench.core.prompts import build_messages, system_prompt
+from agent_workbench.domain.schemas import CodeBlock, AgentState
+from agent_workbench.observability.runlog import ERROR, INFO, WARN, LogFn, no_log
 
 logger = logging.getLogger(__name__)
 

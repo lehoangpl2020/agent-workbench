@@ -17,7 +17,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from events import METRIC_LLM_CALL
+from agent_workbench.domain.events import METRIC_LLM_CALL
 
 # Prices are USD per 1,000,000 tokens. cache_read / cache_write are optional.
 PRICE_FIELDS = ("input", "output", "cache_read", "cache_write")

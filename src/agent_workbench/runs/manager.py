@@ -22,11 +22,11 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agent import CodeAgent
-from events import Event, Flow, artifact_size
-from runlog import WARN, make_entry
-from schemas import AgentRequest, AgentResponse, AgentState, ExecutionStatus
-from store import (
+from agent_workbench.core.agent import CodeAgent
+from agent_workbench.domain.events import Event, Flow, artifact_size
+from agent_workbench.observability.runlog import WARN, make_entry
+from agent_workbench.domain.schemas import AgentRequest, AgentResponse, AgentState, ExecutionStatus
+from agent_workbench.storage.run_store import (
     ITER_DONE,
     ITER_EXECUTING,
     ITER_FAILED,
@@ -35,7 +35,7 @@ from store import (
     RunStore,
     now_iso,
 )
-from workspace import RunWorkspace
+from agent_workbench.storage.workspace import RunWorkspace
 
 logger = logging.getLogger(__name__)
 

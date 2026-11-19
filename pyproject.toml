@@ -1,0 +1,12 @@
+# Project metadata and tool settings. Dependencies stay in requirements*.txt (Docker and run.sh install from them).
+# The backend is the package in src/agent_workbench; see docs/project-structure.md.
+[project]
+name = "agent-workbench"
+version = "0.2.0"
+description = "A small code-execution agent plus a web UI for observing it"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+# src/ layout: tests import `agent_workbench` from src/ without installing it
+pythonpath = ["src"]
+testpaths = ["tests"]

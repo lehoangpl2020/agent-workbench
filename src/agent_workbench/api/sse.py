@@ -5,7 +5,7 @@ import json
 
 from fastapi.responses import StreamingResponse
 
-from events import Event
+from agent_workbench.domain.events import Event
 
 SSE_PING_SECONDS = 15
 

@@ -25,7 +25,7 @@ from typing import Literal
 import httpx
 from pydantic import BaseModel, Field
 
-from workspace import RunWorkspace
+from agent_workbench.storage.workspace import RunWorkspace
 
 logger = logging.getLogger(__name__)
 

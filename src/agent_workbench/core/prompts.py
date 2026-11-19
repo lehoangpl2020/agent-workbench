@@ -8,7 +8,7 @@ do it in its own commit, never together with a structural refactor.
 
 import json
 
-from schemas import AgentState
+from agent_workbench.domain.schemas import AgentState
 
 SYSTEM_PROMPT = """\
 You are a code execution agent. Your job is to solve the user's request 

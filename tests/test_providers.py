@@ -14,18 +14,18 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-import planner as planner_mod
-from llm_providers import (
+from agent_workbench.core import planner as planner_mod
+from agent_workbench.llm.providers import (
     AUTH, CONNECTION, MODEL_NOT_FOUND, MODEL_NOT_PULLED, NOT_CONFIGURED, PERMISSION, RATE_LIMIT,
     TIMEOUT, ChatResult, OllamaChat, OpenAIChat, ProviderError, ProviderRegistry, ProviderSettings,
 )
-from model_catalog import (
+from agent_workbench.llm.catalog import (
     CATALOG, DEFAULT_MODEL, DEFAULT_PROVIDER, PROVIDERS, InvalidModelSelection, ModelSpec, find,
     models_for, resolve,
 )
-from planner import LLMPlanner, PlannerOutputError
-from schemas import AgentState
-from store import RunStore
+from agent_workbench.core.planner import LLMPlanner, PlannerOutputError
+from agent_workbench.domain.schemas import AgentState
+from agent_workbench.storage.run_store import RunStore
 from tests.conftest import fake_registry, ollama_transport, wait_until
 from tests.test_api import make_app, parse_sse, wait_finished
 

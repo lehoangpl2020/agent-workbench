@@ -10,9 +10,9 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from executor import LocalExecutor
-from server import create_app
-from store import RunStore
+from agent_workbench.execution.executors import LocalExecutor
+from agent_workbench.api.app import create_app
+from agent_workbench.storage.run_store import RunStore
 from tests.conftest import DONE, ScriptedPlanner, code, fake_registry, wait_until
 
 
@@ -290,7 +290,7 @@ def test_cors_rejects_unknown_origin(data_dir):
 
 
 def test_server_defaults_to_localhost_only():
-    from config import Settings
+    from agent_workbench.config import Settings
     settings = Settings.from_env({})
     assert settings.host == "127.0.0.1", "HOST must default to 127.0.0.1"
     assert "*" not in settings.cors_origins

@@ -10,10 +10,10 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from llm_providers import AnthropicChat
-from model_catalog import ModelSpec
-from planner import LLMPlanner
-from schemas import AgentState
+from agent_workbench.llm.providers import AnthropicChat
+from agent_workbench.llm.catalog import ModelSpec
+from agent_workbench.core.planner import LLMPlanner
+from agent_workbench.domain.schemas import AgentState
 from tests.conftest import DONE, ScriptedPlanner, code, wait_until
 from tests.test_api import make_app, wait_finished
 

@@ -1,7 +1,7 @@
 """
 Application settings, read from environment variables in ONE place.
 
-`Settings.from_env()` is called once when the app starts (server.py) and the result is passed to the parts
+`Settings.from_env()` is called once when the app starts (api/app.py) and the result is passed to the parts
 that need it. Nothing else reads these variables, so what the server runs with can be seen (and tested) by
 building a Settings. Provider keys and URLs are read the same way into `ProviderSettings` (llm_providers.py)
 and are never copied here, so Settings can be logged without leaking a secret.
@@ -15,11 +15,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
-from image_tool import DEFAULT_MAX_PER_RUN, DEFAULT_MODEL as DEFAULT_IMAGE_MODEL, ImageToolSettings
-from llm_providers import ProviderSettings
-from metrics import load_pricing
+from agent_workbench.tools.image import DEFAULT_MAX_PER_RUN, DEFAULT_MODEL as DEFAULT_IMAGE_MODEL, ImageToolSettings
+from agent_workbench.llm.providers import ProviderSettings
+from agent_workbench.runs.metrics import load_pricing
 
-BASE_DIR = Path(__file__).resolve().parent
+# The repository root (src/agent_workbench/config.py → ../..): default home of data/ and static/
+BASE_DIR = Path(__file__).resolve().parents[2]
 
 DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 
@@ -65,7 +66,7 @@ class Settings:
     image_tool: ImageToolSettings     # opt-in tool: the code in the sandbox asks the server for an image (image_tool.py)
     # Cost estimate (metrics.py): USD per 1M tokens, keyed "provider/model". Empty = tokens and time only; the code has no prices.
     model_pricing: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
-    model_pricing_warnings: tuple[str, ...] = ()   # why part of MODEL_PRICING was ignored; server.py logs them at startup
+    model_pricing_warnings: tuple[str, ...] = ()   # why part of MODEL_PRICING was ignored; api/app.py logs them at startup
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None, base_dir: Path = BASE_DIR) -> "Settings":

@@ -32,21 +32,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from agent import CodeAgent
-from config import Settings
-from events import Event
-from executor import BaseExecutor, LocalExecutor, PersistentSandboxExecutor, SandboxExecutor
-from image_tool import ImageRequest, ImageTool, ImageToolError
-from llm_providers import ProviderError, ProviderRegistry
-from model_catalog import DEFAULT_MODEL, DEFAULT_PROVIDER, InvalidModelSelection, describe, resolve
-from planner import LLMPlanner
-from run_detail import build_run_detail
-from runlog import INFO, WARN, fmt_bytes, format_log_line
-from runs import RunBusyError, RunManager
-from sse import drain, sse_event, sse_response
-from schemas import AgentRequest, AgentResponse
-from store import RunStore
-from workspace import ArtifactNotFound, RunWorkspace, guess_mime
+from agent_workbench.core.agent import CodeAgent
+from agent_workbench.config import Settings
+from agent_workbench.domain.events import Event
+from agent_workbench.execution.executors import BaseExecutor, LocalExecutor, PersistentSandboxExecutor, SandboxExecutor
+from agent_workbench.tools.image import ImageRequest, ImageTool, ImageToolError
+from agent_workbench.llm.providers import ProviderError, ProviderRegistry
+from agent_workbench.llm.catalog import DEFAULT_MODEL, DEFAULT_PROVIDER, InvalidModelSelection, describe, resolve
+from agent_workbench.core.planner import LLMPlanner
+from agent_workbench.runs.detail import build_run_detail
+from agent_workbench.observability.runlog import INFO, WARN, fmt_bytes, format_log_line
+from agent_workbench.runs.manager import RunBusyError, RunManager
+from agent_workbench.api.sse import drain, sse_event, sse_response
+from agent_workbench.domain.schemas import AgentRequest, AgentResponse
+from agent_workbench.storage.run_store import RunStore
+from agent_workbench.storage.workspace import ArtifactNotFound, RunWorkspace, guess_mime
 
 logging.basicConfig(
     level=logging.INFO,
@@ -424,12 +424,3 @@ def create_app(
 
 app = create_app()
 
-
-if __name__ == "__main__":
-    import uvicorn
-
-    settings = Settings.from_env()
-    if settings.host not in ("127.0.0.1", "localhost", "::1"):
-        logger.warning(f"⚠️  Listening on {settings.host}: other machines on the network can run code here. "
-                       "There is no authentication.")
-    uvicorn.run(app, host=settings.host, port=settings.port)

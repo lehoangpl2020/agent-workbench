@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from agent import CodeAgent
-from events import EVENTS, FLOWS, PAYLOADS, Event, Flow, artifact_label, artifact_size
-from executor import LocalExecutor
-from schemas import AgentRequest
+from agent_workbench.core.agent import CodeAgent
+from agent_workbench.domain.events import EVENTS, FLOWS, PAYLOADS, Event, Flow, artifact_label, artifact_size
+from agent_workbench.execution.executors import LocalExecutor
+from agent_workbench.domain.schemas import AgentRequest
 from tests.conftest import ScriptedPlanner
 from tests.test_characterization import SCENARIOS
 

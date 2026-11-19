@@ -1,19 +1,19 @@
 """
 Test script — runs the agent directly (without the server).
-Usage: python example.py   (needs a running Ollama with qwen3.5:4b pulled; this makes real model calls)
-       (the default model comes from model_catalog.py; change it with LLMPlanner(resolve("anthropic", "claude-sonnet-4-6")),
+Usage: PYTHONPATH=src python scripts/example.py   (from the repository root; needs a running Ollama with qwen3.5:4b pulled; this makes real model calls)
+       (the default model comes from llm/catalog.py; change it with LLMPlanner(resolve("anthropic", "claude-sonnet-4-6")),
        which needs ANTHROPIC_API_KEY and is billed by Anthropic)
 """
 
 import asyncio
 import json
 import logging
-from agent import CodeAgent
-from config import Settings
-from model_catalog import default_spec
-from planner import LLMPlanner
-from executor import LocalExecutor
-from schemas import AgentRequest
+from agent_workbench.core.agent import CodeAgent
+from agent_workbench.config import Settings
+from agent_workbench.llm.catalog import default_spec
+from agent_workbench.core.planner import LLMPlanner
+from agent_workbench.execution.executors import LocalExecutor
+from agent_workbench.domain.schemas import AgentRequest
 
 logging.basicConfig(
     level=logging.INFO,
