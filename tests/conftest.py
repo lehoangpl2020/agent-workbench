@@ -4,16 +4,12 @@ Claude API), but the code still runs FOR REAL through LocalExecutor (subprocess)
 """
 
 import asyncio
-import sys
 import time
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
-from schemas import AgentState, CodeBlock  # noqa: E402
+from agent_workbench.domain.schemas import AgentState, CodeBlock
 
 DONE = CodeBlock(code="", explanation="DONE")
 
@@ -73,7 +69,7 @@ def ollama_transport(pulled=("qwen3.5:4b",), calls: list | None = None):
 
 def fake_registry(anthropic=True, openai=True, pulled=("qwen3.5:4b",), calls=None, transport=None):
     """ProviderRegistry with fake keys (never calls a real API) + a fake Ollama."""
-    from llm_providers import ProviderRegistry, ProviderSettings
+    from agent_workbench.llm import ProviderRegistry, ProviderSettings
 
     settings = ProviderSettings(
         anthropic_api_key="test-anthropic-key" if anthropic else None,
@@ -96,3 +92,26 @@ def wait_until(predicate, timeout: float = 10, interval: float = 0.05):
 @pytest.fixture
 def data_dir(tmp_path) -> Path:
     return tmp_path
+
+
+def make_app(data_dir, scripts, **kw):
+    """The app with a scripted planner (or None: the real planner factory) and a real LocalExecutor."""
+    from agent_workbench.api.app import create_app
+    from agent_workbench.execution import LocalExecutor
+
+    kw.setdefault("providers", fake_registry())
+    return create_app(
+        planner=ScriptedPlanner(scripts) if scripts is not None else None,
+        executor=LocalExecutor(timeout=10, runs_dir=data_dir / "runs"),
+        db_path=data_dir / "agent.db",
+        runs_dir=data_dir / "runs",
+        static_dir=data_dir / "no-static",
+        **kw,
+    )
+
+
+def wait_finished(client, run_id, timeout=15):
+    return wait_until(
+        lambda: (r := client.get(f"/api/runs/{run_id}").json())["status"] != "running" and r,
+        timeout=timeout,
+    )

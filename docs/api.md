@@ -17,10 +17,10 @@ Interactive Swagger docs are served at <http://localhost:8668/docs> when the ser
 | POST | `/api/execute` | Legacy API: run and wait for the result (sync) |
 | POST | `/api/execute/stream` | Legacy API: SSE (`session`, `iteration`, `code`, `result`, `done`, `error` + the newer events) |
 | GET | `/api/config` | Defaults and limits used by the UI form |
-| GET | `/api/providers` | Provider/model catalog (`model_catalog.py`) + readiness: key present, Ollama reachable / model pulled |
+| GET | `/api/providers` | Provider/model catalog (`llm/catalog.py`) + readiness: key present, Ollama reachable / model pulled |
 | GET | `/health` | Health check |
 
-`POST /api/runs` and `/api/execute*` accept optional `provider` and `model` fields. If omitted, Ollama `qwen3.5:4b` is used (the default in `model_catalog.py`). A choice outside the catalog returns `422`; a missing key, an unreachable Ollama or an unpulled model returns `400` with `detail.code`. Run details, history, responses and the `session` event include `provider`, `model` (+ `provider_name`, `model_name`). See [providers.md](providers.md).
+`POST /api/runs` and `/api/execute*` accept optional `provider` and `model` fields. If omitted, Ollama `qwen3.5:4b` is used (the default in `llm/catalog.py`). A choice outside the catalog returns `422`; a missing key, an unreachable Ollama or an unpulled model returns `400` with `detail.code`. Run details, history, responses and the `session` event include `provider`, `model` (+ `provider_name`, `model_name`). See [providers.md](providers.md).
 
 ```bash
 curl -X POST http://localhost:8668/api/execute -H "Content-Type: application/json" \
@@ -33,7 +33,7 @@ Response `status`: `success` (Completed) · `max_retries` (Code run limit reache
 
 ### Usage and cost of a run
 
-`GET /api/runs/{id}` includes `summary` (computed by `metrics.py`, see [architecture.md](architecture.md#run-totals-tokens-time-cost)):
+`GET /api/runs/{id}` includes `summary` (computed by `runs/metrics.py`, see [architecture.md](architecture.md#run-totals-tokens-time-cost)):
 
 ```json
 {"llm": {"calls": 3, "failed_calls": 0, "format_retries": 0, "calls_with_usage": 3, "usage_complete": true,
@@ -88,28 +88,28 @@ POST {IMAGE_TOOL_URL}
 
 ```bash
 # Sync: wait for the final result
-python client.py "Calculate pi to 100 decimal places"
+python scripts/client.py "Calculate pi to 100 decimal places"
 
 # SSE streaming: watch every iteration in real time
-python client.py --stream "Generate a chart of sin(x)"
+python scripts/client.py --stream "Generate a chart of sin(x)"
 
 # Custom options
-python client.py --stream --max-iterations 3 --timeout 60 "Your task"
+python scripts/client.py --stream --max-iterations 3 --timeout 60 "Your task"
 
 # Choose a provider/model (default: ollama / qwen3.5:4b)
-python client.py --provider ollama --model qwen3.5:4b "Your task"
-python client.py --provider openai --model gpt-6-luna "Your task"
+python scripts/client.py --provider ollama --model qwen3.5:4b "Your task"
+python scripts/client.py --provider openai --model gpt-6-luna "Your task"
 
 # Health check, and a custom server URL
-python client.py --health
-python client.py --base-url http://localhost:8668 "Your task"
+python scripts/client.py --health
+python scripts/client.py --base-url http://localhost:8668 "Your task"
 ```
 
 ## Executor modes
 
 | Mode | Environment | Description |
 |---|---|---|
-| **Local** | `USE_DOCKER=false` (the default for `python server.py`) | A subprocess on the machine running the server, **not isolated**. Development only; the UI shows a *Local mode* warning |
+| **Local** | `USE_DOCKER=false` (the default for `python -m agent_workbench`) | A subprocess on the machine running the server, **not isolated**. Development only; the UI shows a *Local mode* warning |
 | **Ephemeral** | `USE_DOCKER=true`, `SANDBOX_MODE=ephemeral` | A new container for each run, removed afterwards |
 | **Persistent** | `USE_DOCKER=true`, `SANDBOX_MODE=persistent` | A sandbox that is always running; code runs through `docker exec`, which makes it easy to debug (the Docker Compose default) |
 
@@ -124,22 +124,23 @@ $env:USE_DOCKER = "true"
 $env:SANDBOX_MODE = "persistent"
 $env:SANDBOX_CONTAINER_NAME = "agent-workbench-sandbox"
 $env:RUNS_DIR = "./data/runs"
-python server.py                            # API on http://127.0.0.1:8668
+$env:PYTHONPATH = "src"                    # the backend package lives in src/
+python -m agent_workbench                            # API on http://127.0.0.1:8668
 ```
 
 `./run.sh hybrid` does the same in Git Bash/WSL.
 
 ## Using the agent directly from Python
 
-The modules use flat imports (run from the repository root); there is no installable package. A complete example is in [example.py](../example.py).
+The backend is the `agent_workbench` package in `src/` (not installed; put `src/` on the path, e.g. `PYTHONPATH=src`, and run from the repository root). A complete example is in [scripts/example.py](../scripts/example.py): `PYTHONPATH=src python scripts/example.py`.
 
 ```python
 import asyncio
-from agent import CodeAgent
-from executor import LocalExecutor
-from model_catalog import resolve
-from planner import LLMPlanner
-from schemas import AgentRequest
+from agent_workbench.core.agent import CodeAgent
+from agent_workbench.core.planner import LLMPlanner
+from agent_workbench.domain.schemas import AgentRequest
+from agent_workbench.execution import LocalExecutor
+from agent_workbench.llm.catalog import resolve
 
 agent = CodeAgent(
     planner=LLMPlanner(resolve("anthropic", "claude-sonnet-4-6")),
@@ -173,7 +174,7 @@ This is a learning/showcase project. What exists today, and what does **not**:
 
 | Area | Current state |
 |---|---|
-| Access | `127.0.0.1` only (Compose publishes `127.0.0.1:8668`, `python server.py` defaults to `HOST=127.0.0.1`); CORS only allows the Vite dev server. **No authentication.** |
+| Access | `127.0.0.1` only (Compose publishes `127.0.0.1:8668`, `python -m agent_workbench` defaults to `HOST=127.0.0.1`); CORS only allows the Vite dev server. **No authentication.** |
 | Persistent sandbox (Compose) | A separate container, non-root user `sandbox`, `cap_drop: ALL`, `no-new-privileges`, 512 MB memory, 1 CPU. **Network is enabled** (for auto `pip install`). All runs share one container, so code in one run could in theory read another run's directory. |
 | Ephemeral sandbox | A new container per run, 256 MB memory, 1 CPU, **network disabled**. Only works when the server runs directly on the host. |
 | Local mode | **Not isolated**: code runs with your user's permissions. |

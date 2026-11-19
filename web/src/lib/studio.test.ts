@@ -1,5 +1,5 @@
 // Unit tests for the logic behind Live Flow and Replay. The fixtures are real scripted runs recorded from the
-// backend (tests/test_ui_fixtures.py keeps them in sync with what the backend emits).
+// backend (tests/contract/test_ui_fixtures.py keeps them in sync with what the backend emits).
 import { describe, expect, it } from "vitest";
 import type { LogEntry, RunDetail } from "./api";
 import finalReview from "./__fixtures__/final_review_rejected.json";

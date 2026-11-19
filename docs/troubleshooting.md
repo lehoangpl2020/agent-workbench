@@ -2,7 +2,7 @@
 
 Common problems when installing and running Agent Workbench. For the standard setup see the [README](../README.md). Provider-specific problems (wrong key, Ollama unreachable, model not pulled) are covered in [providers.md](providers.md), sections 3 and 5.
 
-Run every `docker compose` and `python ...` command **from the repository root** (the directory with `docker-compose.yml`). Compose looks for `.env` there, and the code uses flat imports (`from schemas import ...`).
+Run every `docker compose` and `python ...` command **from the repository root** (the directory with `docker-compose.yml`). Compose looks for `.env` there, and `PYTHONPATH=src` (which puts the `agent_workbench` package on the path) is relative to it.
 
 ## 1. How environment variables are read
 
@@ -10,7 +10,7 @@ Run every `docker compose` and `python ...` command **from the repository root**
 |---|---|---|
 | `docker compose up` | **Yes**, but only to substitute the `${...}` variables in `docker-compose.yml` | Variables passed to the container: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OLLAMA_BASE_URL`, `MAX_ITERATIONS`, `EXECUTION_TIMEOUT`; `BIND_ADDRESS` and `HOST_PORT` are used for the published port. `USE_DOCKER`, `SANDBOX_MODE`, etc. are fixed in Compose. |
 | `./run.sh local\|hybrid\|docker` (Git Bash/WSL) | **Yes** (`source .env`) | |
-| `python server.py` | **No** | The project does not use python-dotenv. Set variables in your shell, or use VS Code's `envFile` (section 4). |
+| `PYTHONPATH=src python -m agent_workbench` | **No** | The project does not use python-dotenv. Set variables in your shell, or use VS Code's `envFile` (section 4). |
 
 **Shell variables win over `.env`.** If a PowerShell session or `~/.bashrc` still has an old `ANTHROPIC_API_KEY`, Compose uses that key.
 
@@ -34,7 +34,7 @@ If you use `run.sh`, `.env` must have LF line endings: with CRLF, `source .env` 
 | `WARN ... The "ANTHROPIC_API_KEY" variable is not set` on `docker compose up` | Wrong directory, or `.env` has no such key | Harmless if you do not use that provider (for example you only use Ollama). Otherwise `cd` to the right directory, add the key to `.env`, then `docker compose up -d --force-recreate agent-server` |
 | Creating a run is rejected: `400`, `detail.code = not_configured` | The key of the selected provider is missing | As above. There is no fallback to another provider |
 | Run **Failed**, `llm` log has `error_kind: auth` | Wrong or revoked key | Fix `.env`, check whether an old shell variable overrides it, then `--force-recreate agent-server` |
-| `model_not_found` | Wrong model ID, or the key may not use that model | The model list lives in `model_catalog.py`. See [providers.md](providers.md), section 1 |
+| `model_not_found` | Wrong model ID, or the key may not use that model | The model list lives in `llm/catalog.py`. See [providers.md](providers.md), section 1 |
 | `Server unreachable` / `Connection refused` | The server is not running or crashed | `docker compose ps`, `docker compose logs agent-server` |
 | Other machines on the network cannot open `:8668` | **By design.** The port is published on `127.0.0.1` only | Leave it. To demo to another machine: `BIND_ADDRESS=0.0.0.0` in `.env`. The server has no auth, so anyone who can reach it can run code and use your key |
 | Calling the API from another web page fails with a CORS error | **By design.** CORS only allows `http://localhost:5173` and `http://127.0.0.1:5173` (Vite dev) | Change `CORS_ORIGINS` if you really need to |
@@ -46,11 +46,11 @@ If you use `run.sh`, `.env` must have LF line endings: with CRLF, `source .env` 
 | `Permission denied ... docker.sock` (hybrid inside WSL) | The WSL user is not in the `docker` group | `sudo usermod -aG docker $USER`, then `wsl --shutdown` and reopen |
 | `docker: command not found` inside WSL | WSL integration is off | Docker Desktop → Settings → Resources → WSL integration → enable your distro |
 | `agent-server` keeps `Restarting` | The server fails on startup, for example it cannot reach the Docker socket | `docker compose logs agent-server` |
-| Docker reports `additional privileges requested: pass "--allow=fs.read=..."` | The Bake builder | `docker build -f Dockerfile.sandbox -t agent-workbench-sandbox:latest . && docker build -f Dockerfile.server -t agent-workbench-agent-server . && docker compose up -d --no-build` |
+| Docker reports `additional privileges requested: pass "--allow=fs.read=..."` | The Bake builder | `docker build -f docker/sandbox.Dockerfile -t agent-workbench-sandbox:latest . && docker build -f docker/server.Dockerfile -t agent-workbench-agent-server . && docker compose up -d --no-build` |
 | `ModuleNotFoundError: No module named 'seaborn'` (or another package) in the **sandbox** | The package is not in the image | The persistent sandbox runs `pip install` and re-runs the code (needs network). Installed packages stay until the sandbox is recreated |
 | `ModuleNotFoundError: No module named 'matplotlib'` in **local mode** | Local mode only has the packages of the Python environment that runs the server, and it does not auto-install | Use Docker Compose, or install the package into the environment of `LOCAL_PYTHON` |
-| The UI shows *Local mode: code is not isolated* | The server runs `LocalExecutor` (`python server.py` without `USE_DOCKER=true`) | Normal during development. Use Docker Compose if you want the sandbox |
-| `ModuleNotFoundError: No module named 'schemas'` | `python server.py` was run from the wrong directory | `cd` into the repository root |
+| The UI shows *Local mode: code is not isolated* | The server runs `LocalExecutor` (`python -m agent_workbench` without `USE_DOCKER=true`) | Normal during development. Use Docker Compose if you want the sandbox |
+| `ModuleNotFoundError: No module named 'agent_workbench'` | `src/` is not on the Python path, or the command was run from another directory | From the repository root: `PYTHONPATH=src python -m agent_workbench` (PowerShell: `$env:PYTHONPATH = "src"`), or `./run.sh local` |
 | Status **Code run limit reached** although the output looks right | The model reviewed the output in the final-review turn but did not answer `DONE`, or the last run failed | Read the log of the last iteration. Raise *Max code runs* or make the prompt clearer. Semantics: [architecture.md](architecture.md#run-status) |
 | Log `Exit code 0 but the output looks like an error — treating this run as failed` | The false-success heuristic: the first stdout line (under 200 characters) contains `error:`, `not found`, `could not`, ... | Intentional. If it misfires, ask the code to print something else on the first line |
 | Run **Failed**: `Interrupted: the server restarted while this run was in progress.` | The server was stopped or restarted during the run | Run it again. Resuming is not supported |
@@ -150,12 +150,13 @@ The sandbox runs in Docker and the server runs as Python so you can set breakpoi
          "name": "agent-workbench: server (hybrid)",
          "type": "debugpy",
          "request": "launch",
-         "program": "${workspaceFolder}/server.py",
+         "module": "agent_workbench",
          "cwd": "${workspaceFolder}",
          // VS Code loads .env into the process; Python does not do this by itself
          "envFile": "${workspaceFolder}/.env",
          // "env" takes precedence over envFile
          "env": {
+           "PYTHONPATH": "${workspaceFolder}/src",
            "USE_DOCKER": "true",
            "SANDBOX_MODE": "persistent",
            "SANDBOX_CONTAINER_NAME": "agent-workbench-sandbox",
@@ -168,10 +169,10 @@ The sandbox runs in Docker and the server runs as Python so you can set breakpoi
    ```
 
 4. Useful breakpoints:
-   - `planner.py` `LLMPlanner.generate_code`: the `messages` sent to the model (built by `prompts.build_messages`);
-   - `agent.py` `CodeAgent._loop`: the stop conditions;
-   - `executor.py` `_run_with_auto_install`: auto-install.
-5. Press F5, then open http://127.0.0.1:8668. The UI needs a build in `static/`; if there is none, run `cd web && npm run dev` and open http://localhost:5173. Or call the server with `python client.py --stream "..."`.
+   - `core/planner.py` `LLMPlanner.generate_code`: the `messages` sent to the model (built by `core/prompts.py` `build_messages`);
+   - `core/agent.py` `CodeAgent._loop`: the stop conditions;
+   - `execution/docker_persistent.py` `_run_with_auto_install`: auto-install.
+5. Press F5, then open http://127.0.0.1:8668. The UI needs a build in `static/`; if there is none, run `cd web && npm run dev` and open http://localhost:5173. Or call the server with `python scripts/client.py --stream "..."`.
 
 Stopping at a breakpoint for too long can make the CLI client report `ReadTimeout` (600-second timeout). When you are done, stop debugging and run `docker compose up -d agent-server`.
 
@@ -189,7 +190,7 @@ Invoke-RestMethod http://localhost:8668/health
 curl.exe -N http://localhost:8668/api/execute/stream -H "Content-Type: application/json" -d '{\"message\": \"Calculate 2 + 2 and print the result\"}'
 
 # Run the CLI client inside the container (no local Python needed)
-docker compose exec agent-server python client.py --stream "Calculate 2 + 2 and print the result"
+docker compose exec agent-server python scripts/client.py --stream "Calculate 2 + 2 and print the result"
 ```
 
 `Read-Host` only works when you type in an interactive terminal.

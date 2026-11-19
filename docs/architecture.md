@@ -4,19 +4,21 @@ Agent Workbench is a code-execution agent. The mechanism is a single loop: **Pla
 
 ## Components
 
+Backend paths are relative to `src/agent_workbench/`. How the folders are layered, and why, is in [project-structure.md](project-structure.md).
+
 | File | Role | Who decides |
 |---|---|---|
-| `planner.py` | Calls the run's model (Claude / OpenAI / Ollama through `llm_providers.py`, catalog in `model_catalog.py`) in streaming mode and returns JSON `{thinking, code, language}`. One fixed planner per run. Streams the code that is being written through `on_progress`. | **Model**: what code to write, and when to answer `DONE` |
-| `executor.py` | Runs the code: `LocalExecutor` / `SandboxExecutor` (a new container per run) / `PersistentSandboxExecutor` (`docker exec`). Real timeout, kill on Stop, auto `pip install`, artifact collection. | Application |
-| `prompts.py` / `parsing.py` | Pure functions: the system prompt and the conversation built from a run's history (`build_messages`), and validation of the model's JSON reply (`parse_response`). No model calls, no I/O; `tests/test_characterization.py` pins their output. | **Model** sees what `prompts.py` builds; changing it changes model behavior |
-| `agent.py` | **The single agent loop**, `CodeAgent.run()`. Emits events through `emit(event, data)`. Decides the final status. The stop rules are pure functions at the top of the file (`next_turn`, `done_outcome`, `limit_outcome`), covered by `tests/test_stop_conditions.py` without a model or a subprocess. | Application |
-| `image_tool.py` | Optional (`IMAGE_TOOL=true`) OpenAI image tool (`IMAGE_MODEL`). The run's code POSTs to `/api/runs/{id}/tools/generate_image` (`server.py`); the server calls OpenAI with its own key and saves the PNG in `output/`. The loop is unchanged: the model still only writes code, and the file is collected as an artifact. Details in [api.md](api.md#image-tool). | Application: the key, the per-run cap, where the file goes. **Model**: whether and what to draw |
-| `runs.py` | `RunManager`: runs the loop as a background task, one run at a time, Stop = `task.cancel()`, events → SQLite + SSE. | Application |
-| `store.py` | SQLite (`runs`, `iterations`, `run_logs`): history and activity log that survive restarts. | n/a |
-| `runlog.py` | Builds log entries `{ts, iteration, source, level, message, data}` and redacts secrets. | n/a |
-| `metrics.py` | Totals of one run (model calls, tokens, model and sandbox time, estimated cost): `summarize_run()`, and `load_pricing()` for `MODEL_PRICING`. No state of its own; see [Run totals](#run-totals-tokens-time-cost). | n/a |
-| `workspace.py` | A private directory per run, plus path-traversal protection when reading artifacts. | n/a |
-| `server.py` | FastAPI: Run API, legacy API (`/api/execute`, `/stream`), serves the web UI. | n/a |
+| `core/planner.py` | Calls the run's model (Claude / OpenAI / Ollama through `llm/`, catalog in `llm/catalog.py`) in streaming mode and returns JSON `{thinking, code, language}`. One fixed planner per run. Streams the code that is being written through `on_progress`. | **Model**: what code to write, and when to answer `DONE` |
+| `execution/` | Runs the code: `LocalExecutor` / `SandboxExecutor` (a new container per run) / `PersistentSandboxExecutor` (`docker exec`). Real timeout, kill on Stop, auto `pip install`, artifact collection. | Application |
+| `core/prompts.py` / `core/parsing.py` | Pure functions: the system prompt and the conversation built from a run's history (`build_messages`), and validation of the model's JSON reply (`parse_response`). No model calls, no I/O; `tests/contract/test_characterization.py` pins their output. | **Model** sees what `core/prompts.py` builds; changing it changes model behavior |
+| `core/agent.py` | **The single agent loop**, `CodeAgent.run()`. Emits events through `emit(event, data)`. Decides the final status. The stop rules are pure functions in `core/rules.py` (`next_turn`, `done_outcome`, `limit_outcome`), covered by `tests/unit/test_stop_conditions.py` without a model or a subprocess. | Application |
+| `tools/image.py` | Optional (`IMAGE_TOOL=true`) OpenAI image tool (`IMAGE_MODEL`). The run's code POSTs to `/api/runs/{id}/tools/generate_image` (`api/routes/tools.py`); the server calls OpenAI with its own key and saves the PNG in `output/`. The loop is unchanged: the model still only writes code, and the file is collected as an artifact. Details in [api.md](api.md#image-tool). | Application: the key, the per-run cap, where the file goes. **Model**: whether and what to draw |
+| `runs/manager.py` | `RunManager`: runs the loop as a background task, one run at a time, Stop = `task.cancel()`, events → SQLite + SSE. | Application |
+| `storage/run_store.py` | SQLite (`runs`, `iterations`, `run_logs`): history and activity log that survive restarts. | n/a |
+| `observability/runlog.py` | Builds log entries `{ts, iteration, source, level, message, data}` and redacts secrets. | n/a |
+| `runs/metrics.py` | Totals of one run (model calls, tokens, model and sandbox time, estimated cost): `summarize_run()`, and `load_pricing()` for `MODEL_PRICING`. No state of its own; see [Run totals](#run-totals-tokens-time-cost). | n/a |
+| `storage/workspace.py` | A private directory per run, plus path-traversal protection when reading artifacts. | n/a |
+| `api/` | FastAPI: `app.py` (app factory, serves the web UI), `bootstrap.py` (the composition root: picks the executor, the image tool and the provider registry from `Settings`), `routes/` (Run API, legacy API `/api/execute*`, tools, config/health). | n/a |
 | `web/` | React + TypeScript + Vite + Tailwind + shadcn/ui. Reads state from the API; SSE is only a signal to refetch. | n/a |
 
 ## Flow of one run
@@ -52,7 +54,7 @@ An **iteration** is one model call. **`max_iterations`** (UI: *Max code runs*) i
 | Who decides | Decision |
 |---|---|
 | **Model** | What code to write; whether the output is enough (`DONE`) |
-| **Runtime** (`agent.py`) | Whether to run code; when the turns are used up; the false-success check; the final status |
+| **Runtime** (`core/agent.py`) | Whether to run code; when the turns are used up; the false-success check; the final status |
 
 | Run status (API) | UI | When |
 |---|---|---|
@@ -91,10 +93,10 @@ Every real step calls `emit("log", entry)` exactly where it happens. `RunManager
 
 | source | Emitted by | Examples |
 |---|---|---|
-| `runtime` | `agent.py`, `runs.py` | Run started (model, executor, limits), sending the error/result back to the model, Stop, Run finished |
-| `llm` | `planner.py` | Calling model, First token, Response received (timing, stop_reason, tokens when available), parse OK/error, and a WARN when the prompt uses 90% or more of an Ollama model's `num_ctx` |
-| `model` | `agent.py` | The short explanation the model returned (the model's own words, not a runtime action) |
-| `sandbox` | `executor.py` | Writing `code/iter_NN.py`, start of execution, package install, re-run, exit code/time/timeout, artifacts + sizes |
+| `runtime` | `core/agent.py`, `runs/manager.py` | Run started (model, executor, limits), sending the error/result back to the model, Stop, Run finished |
+| `llm` | `core/planner.py` | Calling model, First token, Response received (timing, stop_reason, tokens when available), parse OK/error, and a WARN when the prompt uses 90% or more of an Ollama model's `num_ctx` |
+| `model` | `core/agent.py` | The short explanation the model returned (the model's own words, not a runtime action) |
+| `sandbox` | `execution/` | Writing `code/iter_NN.py`, start of execution, package install, re-run, exit code/time/timeout, artifacts + sizes |
 
 Messages and data go through `redact()`, which masks `sk-ant-…` keys, auth headers, and the values of environment variables whose names contain KEY/TOKEN/SECRET/PASSWORD.
 
@@ -104,8 +106,8 @@ There is no table and no counter for these. `GET /api/runs/{id}` calls `metrics.
 
 | Number | Source |
 |---|---|
-| Model calls, tokens, model time, first token | `llm` log entries whose `data.metric` is `llm_call` (`events.METRIC_LLM_CALL`). `planner.py` writes **one** per model call, successful or failed, with `ok`, `attempt` (> 0 = resent after invalid JSON), `duration_ms`, `first_token_ms` and the token counts the provider reported |
-| Sandbox time | `iterations.execution_time_ms`, measured by `executor.py` (it includes an automatic `pip install` in persistent mode) |
+| Model calls, tokens, model time, first token | `llm` log entries whose `data.metric` is `llm_call` (`events.METRIC_LLM_CALL`). `core/planner.py` writes **one** per model call, successful or failed, with `ok`, `attempt` (> 0 = resent after invalid JSON), `duration_ms`, `first_token_ms` and the token counts the provider reported |
+| Sandbox time | `iterations.execution_time_ms`, measured by `execution/` (it includes an automatic `pip install` in persistent mode) |
 | Whole run | `runs.finished_at - runs.created_at` (null while the run is running) |
 | Cost | tokens × `MODEL_PRICING["provider/model"]` |
 
@@ -122,18 +124,18 @@ How to read them:
 
 `session`, `iteration`, `code`, `result`, `model_done`, `error` and `done` are the legacy events and old clients keep working. The newer events are `activity` (the current action), `code_progress` (code being streamed), `log` (an activity-log entry) and `status`.
 
-The names, the `flow` tags of log entries and the payload of each event are declared in `events.py` (TypedDicts); `web/src/lib/api.ts` mirrors the names, and `tests/test_event_contract.py` checks both sides and the payloads the agent actually emits. `RunManager._persist` is a table from event to the SQLite update it causes.
+The names, the `flow` tags of log entries and the payload of each event are declared in `domain/events.py` (TypedDicts); `web/src/lib/api.ts` mirrors the names, and `tests/contract/test_event_contract.py` checks both sides and the payloads the agent actually emits. `RunManager._persist` is a table from event to the SQLite update it causes.
 
 ## Live Flow and Replay (UI)
 
 - **Live Flow** shows the model, the agent runtime and the Python sandbox as three actors. A data card moves only when a real log entry arrives; the code file only reaches the sandbox after the backend has parsed the response and written `code/iter_NN.py`. After a refresh or reconnect the view is rebuilt from the stored snapshot and logs; history is not replayed as if it were live.
 - **Replay** of a finished run only reads the SQLite history and the per-iteration file snapshots. It never calls a model and never runs code. Partially streamed code is not stored per step, so Replay shows code from the moment the response was parsed. Old runs without detailed logs are labeled **Partial history**; files without a per-iteration snapshot are labeled **Snapshot unavailable**. `prefers-reduced-motion` is honored.
-- Both views are derived from stored events and logs (`web/src/lib/studio.ts`). Each step is placed by the `flow` tag of its log entry (`events.py`); only runs stored before a tag existed are recognized by their message text (`legacyFlow` in `studio.ts`), so a changed message can still alter how an old run is shown; `web/src/lib/studio.test.ts` tests these views against runs recorded from the backend, and `tests/test_ui_fixtures.py` keeps those recordings in sync with what the backend emits. Components and hooks are not tested automatically.
+- Both views are derived from stored events and logs (`web/src/lib/studio.ts`). Each step is placed by the `flow` tag of its log entry (`domain/events.py`); only runs stored before a tag existed are recognized by their message text (`legacyFlow` in `studio.ts`), so a changed message can still alter how an old run is shown; `web/src/lib/studio.test.ts` tests these views against runs recorded from the backend, and `tests/contract/test_ui_fixtures.py` keeps those recordings in sync with what the backend emits. Components and hooks are not tested automatically.
 
 ## Current limitations
 
 - Only one run at a time (the backend returns 409, the UI disables the Run button).
 - The persistent sandbox is one shared container: code from one run could in theory read another run's directory. Use ephemeral mode for stronger separation.
-- There is no authentication. As mitigation the default is `127.0.0.1` only (Compose publishes `127.0.0.1:8668`, `python server.py` defaults to `HOST=127.0.0.1`) and CORS only allows the Vite dev server.
+- There is no authentication. As mitigation the default is `127.0.0.1` only (Compose publishes `127.0.0.1:8668`, `python -m agent_workbench` defaults to `HOST=127.0.0.1`) and CORS only allows the Vite dev server.
 - Local mode is not isolated: model code runs with the permissions of the user running the server.
 - No agent-quality evaluation, cost limits, or observability beyond the log and the UI. **Not production-ready.**

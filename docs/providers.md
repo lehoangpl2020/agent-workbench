@@ -2,17 +2,17 @@
 
 The user picks a **provider** and a **model** when creating a run. That choice is stored with the run and stays fixed for every iteration (writing code, fixing errors, the final DONE review). A new run defaults to **Ollama `qwen3.5:4b`** (`ollama` / `qwen3.5:4b`), including requests from the CLI or the legacy API that send no choice, and the UI preselects it. If the default is not available (Ollama unreachable or the model not pulled), creating the run fails with a clear error; the app never switches to another model or provider. Old runs keep their stored provider/model (or none); the default is never written into them.
 
-## 1. Adding or removing models: edit `model_catalog.py`
+## 1. Adding or removing models: edit `llm/catalog.py`
 
 | To... | Change |
 |---|---|
-| Add or remove a model of an existing provider | Add or delete a `ModelSpec(...)` line in `CATALOG` (`model_catalog.py`) |
+| Add or remove a model of an existing provider | Add or delete a `ModelSpec(...)` line in `CATALOG` (`llm/catalog.py`) |
 | Change the model preselected when the user switches provider | Set `provider_default=True` (exactly one model per provider) |
 | Change the app-wide default | `DEFAULT_PROVIDER`, `DEFAULT_MODEL` |
 | Set per-model parameters | `max_output_tokens`, `options` (`reasoning_effort` for OpenAI; `num_ctx`, `think` for Ollama) |
-| Add a new provider | `PROVIDERS` plus a new adapter in `llm_providers.py` |
+| Add a new provider | `PROVIDERS` here, a new `llm/<name>_chat.py` that implements `ChatClient` (`llm/base.py`), its key in `ProviderSettings.missing_config()`, and one entry in the factory table of `ProviderRegistry.create()` (`llm/registry.py`). See [project-structure.md](project-structure.md#add-a-model-provider) |
 
-After editing, rebuild the server image (see section 4). The UI reads the list from `GET /api/providers`; the frontend keeps no list of its own. `tests/test_providers.py::test_catalog_is_consistent` checks that the catalog is valid.
+After editing, rebuild the server image (see section 4). The UI reads the list from `GET /api/providers`; the frontend keeps no list of its own. `tests/integration/test_providers.py::test_catalog_is_consistent` checks that the catalog is valid.
 
 Ollama models must be **pulled by you beforehand** (`ollama pull <model>`). The app never downloads a model.
 
@@ -53,21 +53,21 @@ Or open the UI: the status line under the Model field says *ready*, *Not pulled 
 ```bash
 docker compose up -d --build
 # If Docker reports "additional privileges requested: pass --allow=fs.read=..." (the Bake builder):
-docker build -f Dockerfile.sandbox -t agent-workbench-sandbox:latest .
-docker build -f Dockerfile.server -t agent-workbench-agent-server .
+docker build -f docker/sandbox.Dockerfile -t agent-workbench-sandbox:latest .
+docker build -f docker/server.Dockerfile -t agent-workbench-agent-server .
 docker compose up -d --no-build
 ```
 
 CLI:
 
 ```bash
-python client.py "Compute 17 * 23"                                       # default: ollama / qwen3.5:4b
-python client.py --provider ollama --model qwen3.8:latest --stream "Compute 17 * 23"
-python client.py --provider anthropic --model claude-sonnet-4-6 "Compute 17 * 23"   # billed by Anthropic
-python client.py --provider openai --model gpt-6-luna "Compute 17 * 23"
+python scripts/client.py "Compute 17 * 23"                                       # default: ollama / qwen3.5:4b
+python scripts/client.py --provider ollama --model qwen3.8:latest --stream "Compute 17 * 23"
+python scripts/client.py --provider anthropic --model claude-sonnet-4-6 "Compute 17 * 23"   # billed by Anthropic
+python scripts/client.py --provider openai --model gpt-6-luna "Compute 17 * 23"
 ```
 
-The model IDs above come from the catalog at the time of writing; `model_catalog.py` is the source of truth.
+The model IDs above come from the catalog at the time of writing; `llm/catalog.py` is the source of truth.
 
 ## 5. Errors
 
@@ -93,7 +93,7 @@ Errors while a model call is in progress end the run as **Failed**; the `llm` lo
 
 There is no fallback: an error is reported for the provider/model that failed, and the app never switches to another provider.
 
-## 6. How the providers differ (adapters in `llm_providers.py`)
+## 6. How the providers differ (adapters in `llm/`)
 
 | | Anthropic | OpenAI | Ollama |
 |---|---|---|---|

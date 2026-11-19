@@ -8,6 +8,8 @@
 #   ./run.sh test     - send one task to the running server (a REAL model call: the server default, local Ollama qwen3.5:4b)
 set -euo pipefail
 cd "$(dirname "$0")"
+# The backend package lives in src/agent_workbench (see docs/project-structure.md)
+export PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}"
 
 MODE="${1:-local}"
 
@@ -40,7 +42,7 @@ case "$MODE" in
   local)
     load_env
     setup_venv
-    USE_DOCKER=false python server.py
+    USE_DOCKER=false python -m agent_workbench
     ;;
   hybrid)
     load_env
@@ -49,7 +51,7 @@ case "$MODE" in
     # The sandbox bind-mounts ./data/runs to see the code/output the host server writes
     SANDBOX_RUNS_MOUNT=./data/runs docker compose up sandbox -d --build
     USE_DOCKER=true SANDBOX_MODE=persistent SANDBOX_CONTAINER_NAME=agent-workbench-sandbox \
-      RUNS_DIR=./data/runs python server.py
+      RUNS_DIR=./data/runs python -m agent_workbench
     ;;
   web)
     (cd web && npm install && npm run dev)
@@ -60,8 +62,8 @@ case "$MODE" in
     ;;
   test)
     setup_venv
-    python client.py --health
-    python client.py --stream "${2:-Calculate 2 + 2 and print the result}"
+    python scripts/client.py --health
+    python scripts/client.py --stream "${2:-Calculate 2 + 2 and print the result}"
     ;;
   *)
     echo "Usage: ./run.sh [docker|local|hybrid|web|check|test]" >&2

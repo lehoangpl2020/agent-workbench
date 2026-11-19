@@ -6,7 +6,7 @@ The shared project guidance is in [AGENTS.md](AGENTS.md); read it first. This fi
 
 ## Working style
 
-- Read the relevant code before answering questions about behavior; compare it with [docs/architecture.md](docs/architecture.md) instead of answering from memory. When explaining the agent loop, separate what the model decides from what the application decides.
+- Read the relevant code before answering questions about behavior; compare it with [docs/architecture.md](docs/architecture.md) instead of answering from memory. Before adding or moving a module, read [docs/project-structure.md](docs/project-structure.md): it says which layer the code belongs to. When explaining the agent loop, separate what the model decides from what the application decides.
 - Prefer small, verifiable changes. When asked to implement or fix something, change the repository rather than only describing the change.
 - Use the dedicated file and search tools for reading and editing files. Use the shell for git, docker, npm and pytest.
 - Ask a question only when the answer would change the approach. Otherwise state a reasonable assumption and continue.
@@ -23,6 +23,7 @@ The shared project guidance is in [AGENTS.md](AGENTS.md); read it first. This fi
 
 ```bash
 .venv/Scripts/python -m pytest tests -q     # offline; .venv/bin/python on Linux/macOS
+.venv/Scripts/python -m pytest tests/unit -q   # fast subset: pure modules only
 cd web && npm run build                     # type-check + build
 cd web && npm test                          # unit tests of web/src/lib (no component tests)
 ```

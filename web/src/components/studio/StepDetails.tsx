@@ -158,7 +158,7 @@ function Body({ run, steps, step, seen, liveEdge, now }: Props & { step: StudioS
 /** What the runtime sends to the model. Only data the run actually stores is shown. */
 function Request({ run, step, it, prev }: { run: RunDetail; step: StudioStep; it?: Iteration; prev?: Iteration }) {
   const intent = step.intent ?? it?.intent ?? "write";
-  const note = <p className="text-[11px] text-muted-foreground">The full message list and system prompt are built in planner.py and are not stored with the run.</p>;
+  const note = <p className="text-[11px] text-muted-foreground">The full message list and system prompt are built in core/planner.py and are not stored with the run.</p>;
   if (intent === "fix" && prev) return <>
     <p className="rounded-md bg-danger-soft px-2.5 py-1.5 font-mono text-xs break-words text-destructive">{it?.intent_detail || "The previous execution failed."}</p>
     <TerminalBlock label={`stderr from ${iterFile(prev.number)} · exit ${prev.exit_code ?? "—"}`} text={prev.stderr.trimEnd()} tone="error" />

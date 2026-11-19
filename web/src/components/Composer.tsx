@@ -39,7 +39,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
   const [imageTool, setImageTool] = useState<boolean>(draft?.imageTool ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<{ message: string; activeRunId?: string } | null>(null);
-  // The catalog comes from the backend (model_catalog.py); the frontend keeps no list of its own.
+  // The catalog comes from the backend (llm/catalog.py); the frontend keeps no list of its own.
   const [catalog, setCatalog] = useState<ProvidersResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -69,7 +69,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
       setCatalog(data);
       setCatalogError(null);
       if (!provider) {
-        // New run: the backend default from model_catalog.py (currently Ollama / qwen3.5:4b)
+        // New run: the backend default from llm/catalog.py (currently Ollama / qwen3.5:4b)
         setProvider(data.default.provider);
         setModel(data.default.model);
       }

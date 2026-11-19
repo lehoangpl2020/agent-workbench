@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { CopyButton } from "./CodeView";
 import { ProcessOutputPanel } from "./ResultPanels";
 
-// Source of the entry: who did this (see runlog.py in the backend)
+// Source of the entry: who did this (see observability/runlog.py in the backend)
 const SOURCES: Record<string, { label: string; cls: string; title: string }> = {
   runtime: { label: "RUNTIME", cls: "bg-sky-500/15 text-sky-300", title: "Agent loop (application) action" },
   llm: { label: "LLM CALL", cls: "bg-violet-500/15 text-violet-300", title: "Model API request/response" },
@@ -28,7 +28,7 @@ function time(ts: string) {
 function formatData(data: Record<string, unknown>) {
   return Object.entries(data)
     // "files": a file name that appears in the message · "flow": internal key for the Live Flow tab
-    // "metric": internal tag that metrics.py counts by (duration_ms, tokens... stay visible)
+    // "metric": internal tag that runs/metrics.py counts by (duration_ms, tokens... stay visible)
     .filter(([k]) => k !== "files" && k !== "flow" && k !== "metric")
     .map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
     .join("  ");

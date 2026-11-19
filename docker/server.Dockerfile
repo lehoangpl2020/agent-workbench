@@ -1,0 +1,33 @@
+# ── Stage 1: build web UI (React + Vite) ─────────
+FROM node:22-slim AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/ ./
+RUN npm run build
+
+# ── Stage 2: FastAPI server ──────────────────────
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# curl for the healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/ ./src/
+# CLI client + example, so `docker compose exec agent-server python scripts/client.py ...` works
+COPY scripts/ ./scripts/
+# The package is imported from src/ (no install step): config.py finds static/ two levels up, in /app
+ENV PYTHONPATH=/app/src
+COPY --from=web /web/dist ./static
+
+EXPOSE 8000
+
+# 0.0.0.0 here is INSIDE the container (required for Docker to forward the port).
+# Who can reach it is limited in docker-compose.yml: ports "127.0.0.1:8668:8000".
+CMD ["uvicorn", "agent_workbench.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

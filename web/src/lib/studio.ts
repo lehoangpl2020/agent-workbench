@@ -62,7 +62,7 @@ function exitFrom(text: string): number | null {
 /**
  * The `flow` tag of an entry. Entries written before a tag existed have none, so they are recognized by their
  * source, data shape or message text: runs stored in older databases must keep rendering the same way.
- * New backend log entries carry their tag (events.py), so this is only a fallback.
+ * New backend log entries carry their tag (domain/events.py), so this is only a fallback.
  */
 function legacyFlow(log: LogEntry): Flow | undefined {
   const d = log.data;

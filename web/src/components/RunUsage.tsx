@@ -14,7 +14,7 @@ function Stat({ label, value, sub, title, muted }: { label: string; value: React
   );
 }
 
-/** Model calls, tokens, time in the model and in the sandbox, and the estimated cost of one run (backend metrics.py). */
+/** Model calls, tokens, time in the model and in the sandbox, and the estimated cost of one run (backend runs/metrics.py). */
 export function RunUsage({ run }: { run: RunDetail }) {
   const { llm, sandbox, wall_ms, cost } = run.summary;
   const running = run.status === "running" || run.status === "pending";

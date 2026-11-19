@@ -78,7 +78,7 @@ export interface RunSummary {
   finished_at: string | null;
 }
 
-/** Totals of one run (backend metrics.py). null means "no data", never 0. */
+/** Totals of one run (backend runs/metrics.py). null means "no data", never 0. */
 export interface RunMetrics {
   llm: {
     calls: number;
@@ -154,7 +154,7 @@ export interface AppConfig {
   image_tool: { available: boolean; reason: string | null; model: string; max_per_run: number };
 }
 
-/** One model in the backend catalog (model_catalog.py) + readiness status */
+/** One model in the backend catalog (llm/catalog.py) + readiness status */
 export interface CatalogModel {
   id: string;
   name: string;
@@ -247,7 +247,7 @@ export const api = {
     `/api/runs/${id}/logs/download${iteration ? `?iteration=${iteration}` : ""}`,
 };
 
-// SSE events emitted by the backend. Mirrors `EVENTS` in events.py; tests/test_event_contract.py compares them.
+// SSE events emitted by the backend. Mirrors `EVENTS` in domain/events.py; tests/contract/test_event_contract.py compares them.
 export const SSE_EVENTS = [
   "session",
   "status",
@@ -264,7 +264,7 @@ export const SSE_EVENTS = [
 
 /**
  * `flow` tags in a log entry's data: they place a step in Live Flow / Replay.
- * Mirrors `FLOWS` in events.py; tests/test_event_contract.py compares them.
+ * Mirrors `FLOWS` in domain/events.py; tests/contract/test_event_contract.py compares them.
  */
 export const FLOWS = [
   "started",
