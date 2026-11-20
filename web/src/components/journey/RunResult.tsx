@@ -189,7 +189,7 @@ function Evidence({ run }: { run: RunDetail }) {
 function FactCell({ fact }: { fact: Fact }) {
   const Icon = fact.label === "Task validation" ? CircleDashed : ICON[fact.tone];
   return <div className="min-w-0 border-b px-4 py-2.5 sm:px-6 @xl:border-r @xl:border-b-0">
-    <dt className="text-[10.5px] font-semibold tracking-[.08em] text-muted-foreground uppercase">{fact.label}</dt>
+    <dt className="text-[12px] font-medium text-muted-foreground">{fact.label}</dt>
     <dd className={cn("mt-0.5 flex items-center gap-1.5 font-medium", TONE[fact.tone])}><Icon className="size-3.5 shrink-0" aria-hidden />{fact.value}</dd>
   </div>;
 }

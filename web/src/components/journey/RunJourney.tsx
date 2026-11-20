@@ -202,12 +202,17 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
     if (top < 56 || (!wide && top > window.innerHeight * 0.5)) el.scrollIntoView({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" });
   }, [selected, wide, section]);
 
+  // Live only at the live edge of a running run; anywhere else the diagram shows what was recorded at that point
+  const liveNow = running && liveEdge;
   const stage = <div className={cn("bg-background", replay && !clock.playing && "is-paused")}>
-    <div className="flex items-center gap-2 border-b px-4 py-1.5">
-      <h3 className="eyebrow text-foreground">Flow</h3>
-      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">who holds the data at the selected point</span>
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b px-4 py-2">
+      <h3 className="text-[13.5px] font-semibold">Flow</h3>
+      {liveNow ? <span className="tag border-brand text-foreground"><span className="mark animate-pulse bg-brand" aria-hidden />Live now</span>
+        : replay ? <span className="tag tag-ink">Replay · recorded</span> : <span className="tag">Recorded</span>}
+      <span className="min-w-0 flex-1 basis-48 text-[13px] text-muted-foreground">{liveNow
+        ? "what is happening in the run right now" : "who holds the data at the selected point"}</span>
       <button type="button" aria-pressed={panels} onClick={() => { setPanels(!panels); writePref("journey-panels", !panels); }}
-        className="inline-flex shrink-0 items-center gap-1 rounded-xs px-1.5 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
+        className="inline-flex shrink-0 items-center gap-1 rounded-xs px-1.5 py-1 text-[13px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
         {panels ? <PanelTopClose className="size-3.5" /> : <PanelTopOpen className="size-3.5" />}{panels ? "Hide actor panels" : "Actor panels"}</button>
     </div>
     <StudioStage run={run} steps={steps} step={stageStep} seen={seen} animate={animate} speed={replay ? clock.speed : 1}
@@ -218,6 +223,7 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
   // (wide: its own column; narrow: opened inside the list under the selected step).
   const inspector = <Inspector run={run} steps={steps} sections={sections} section={section} step={step} upto={upto}
     eventLevel={eventLevel} revealed={revealed} seen={seen} liveEdge={liveEdge} now={now} onSelectEvent={selectEvent}
+    onGotoSection={key => { const s = sections.find(x => x.key === key); if (s) { picking.current = true; selectSection(s); } }}
     stage={stage} />;
 
   const list = <JourneyList run={run} sections={sections} selected={selected} eventLevel={eventLevel} revealed={revealed}

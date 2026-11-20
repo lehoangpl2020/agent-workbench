@@ -136,8 +136,8 @@
 .surface { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
 /* The emphasised surface (the run result): same, with an ink rule across the top. */
 .surface-strong { border: 1px solid var(--border); border-top: 2px solid var(--rule); border-radius: 0 0 var(--radius) var(--radius); background: var(--card); }
-/* Small uppercase label above a block of evidence */
-.eyebrow { font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+/* Small label above a block: sentence case, so the page does not shout in tiny capitals */
+.eyebrow { font-size: 12.5px; line-height: 18px; font-weight: 600; letter-spacing: .005em; color: var(--muted-foreground); }
 /* A section number in the label row: 01, 02… only where the order means something */
 .idx { font: 500 11px/16px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
 /* Ink link with a vermilion underline: readable everywhere, recognisably a link, never a red block of text */
@@ -298,6 +298,14 @@
 .studio-check.is-na .studio-check-mark { border-style: dashed; color: var(--muted-foreground); }
 .studio-check.is-unknown .studio-check-mark { border-style: dotted; color: var(--muted-foreground); }
 .studio-check.is-upcoming .studio-check-mark { border-color: #dddbd4; }
+/* Recorded as started at the selected point (history): a solid vermilion outline, no fill, no motion */
+.studio-check.is-underway { color: var(--foreground); font-weight: 600; }
+.studio-check.is-underway .studio-check-mark { border-color: var(--brand); }
+.studio-check.is-underway .studio-check-note { color: var(--primary); font-weight: 500; }
+/* Recorded next, not happening now: an outlined box with a dashed vermilion edge, never the filled "active" mark */
+.studio-check.is-next { color: var(--foreground); }
+.studio-check.is-next .studio-check-mark { border-style: dashed; border-color: var(--brand); }
+.studio-check.is-next .studio-check-note { color: var(--primary); font-weight: 500; }
 .studio-check-note { font-weight: 400; color: var(--muted-foreground); }
 .studio-check.is-failed .studio-check-note { color: inherit; }
 
@@ -370,6 +378,35 @@
 .tl-inline { --inspector-pad: 16px; position: relative; z-index: 1; margin: 4px 0 10px; padding: 16px; overflow: hidden; border: 1px solid var(--border); border-top: 2px solid var(--rule); border-radius: 0 0 var(--radius) var(--radius); background: var(--card); }
 /* The flow diagram spans the inspector edge to edge, whatever its padding */
 .inspector-bleed { margin-inline: calc(var(--inspector-pad, 20px) * -1); }
+
+/* ── Inspector: the selected step as a short technical document ── */
+.ins { font-size: 14px; line-height: 1.55; }
+/* Block heading: ink, sentence case, with a quiet note after it */
+.ins-h { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 15px; line-height: 22px; font-weight: 600; letter-spacing: -.005em; color: var(--foreground); }
+/* "In this run": label column + value column, separated by fine rules */
+.ins-account { padding: 14px 16px 6px; border: 1px solid var(--border); border-left: 3px solid var(--rule); border-radius: var(--radius); background: var(--card); }
+.ins-account .ins-h { margin-bottom: 4px; }
+.ins-account-row { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 2px 16px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14.5px; line-height: 1.5; }
+.ins-account-row dt { padding-top: 1px; font-size: 13px; font-weight: 500; color: var(--muted-foreground); }
+/* Supporting material that opens on demand: a full-width row over a hairline */
+.ins-disclosure { padding: 10px 0; border-top: 1px solid var(--border); }
+.ins-disclosure + .ins-disclosure { margin-top: 0; }
+.ins-disclosure-head {
+  display: flex; min-width: 0; flex: 1; flex-wrap: wrap; align-items: center; gap: 2px 8px; padding: 4px 6px 4px 2px; margin-left: -2px;
+  border-radius: 2px; font-size: 14px; line-height: 20px; text-align: left;
+}
+button.ins-disclosure-head:hover { background: var(--accent); }
+button.ins-disclosure-head:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+/* Reasoning, read as prose: the model's color as a rule, comfortable measure, no box of its own once complete */
+.ins-reasoning {
+  max-width: 78ch; padding: 10px 14px; border-left: 2px solid var(--model); border-radius: 2px; background: color-mix(in oklab, var(--model-soft) 55%, transparent);
+  font: 14px/1.65 var(--font-sans); white-space: pre-wrap; overflow-wrap: anywhere; color: color-mix(in oklab, var(--foreground) 90%, transparent);
+}
+.ins-reasoning:focus-visible { outline-offset: 1px; }
+@media (max-width: 639px) {
+  .ins-account { padding: 12px 12px 4px; }
+  .ins-account-row { grid-template-columns: minmax(0, 1fr); }
+}
 .tl-head:focus-visible, .tl-row:focus-visible, .tl-more:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 
 @media (max-width: 639px) {

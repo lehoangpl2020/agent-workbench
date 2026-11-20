@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { BrainCircuit, Check, FileText, Minus, SquareTerminal, Workflow, X } from "lucide-react";
 import type { RunDetail } from "@/lib/api";
 import { isImage, RUN_STATUS, TONE_CLASSES } from "@/lib/format";
-import { ACTOR_NAME, turnChecklist, type TurnState } from "@/lib/journey";
+import { ACTOR_NAME, executorKind, turnChecklist, type TurnState } from "@/lib/journey";
 import { iterFile, type Actor, type Seen, type StudioStep, type Transfer } from "@/lib/studio";
 import { cn } from "@/lib/utils";
 
@@ -84,8 +84,8 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
     send: "Request on its way", calling: "Waiting for the response", reasoning: "Reasoning", first_token: "Generating the answer",
     accepted: `Returned ${iterFile(lastModel.iteration)}`, done_reply: "Replied DONE",
   } as Partial<Record<string, string>>)[lastModel.beat] ?? lastModel.title;
-  const modelWaiting = (live && ["write", "fix", "review", "reasoning"].includes(run.activity_phase)) ||
-    (!live && active === "model" && (lastModel?.beat === "calling" || lastModel?.beat === "send"));
+  // Only a live run waits: history never shows a station as busy now
+  const modelWaiting = live && ["write", "fix", "review", "reasoning", "streaming"].includes(run.activity_phase);
 
   // ── Sandbox pane ──
   const handoff = upto.filter(s => s.beat === "handoff" ||
@@ -96,12 +96,12 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
   const exited = sn != null && seen.exited.has(sn) && sit?.exit_code != null;
   const killed = sandboxSteps.some(s => s.beat === "killed");
   const executing = sandboxSteps.find(s => s.beat === "executing");
-  const runningNow = !!executing && !exited && !killed && !(seen.finished);
+  const runningNow = live && !!executing && !exited && !killed && !(seen.finished);
   const tail = (text: string, k: number) => text.trimEnd().split("\n").filter(Boolean).slice(-k);
 
   // One line naming what the diagram shows: the hand-off, or who is working.
   const caption = step?.transfer ? <><b className="font-semibold">{ACTOR_NAME[step.transfer.from]} → {ACTOR_NAME[step.transfer.to]}</b>
-      <span className="text-muted-foreground"> · carries </span><span className="font-mono">{step.transfer.label}</span></>
+      <span className="text-muted-foreground"> · {transferVerb(step.transfer)} </span><span className="font-mono">{step.transfer.label}</span></>
     : seen.finished ? <span className="text-muted-foreground">Run ended · {RUN_STATUS[run.status].label} · nothing is in transit</span>
     : active ? <><b className="font-semibold">{ACTOR_NAME[active]}</b><span className="text-muted-foreground"> · {
         streaming ? "writing code" : reasoningNow ? "reasoning before its answer"
@@ -119,7 +119,7 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
       <Station actor="runtime" active={active === "runtime"} iconRef={el => { icons.current.runtime = el; }}
         title="Runtime" sub={n != null ? `Model call ${n}${n > run.max_iterations ? " · final review" : ""}` : "Coordinator"} />
       <Station actor="sandbox" active={active === "sandbox"} waiting={runningNow} iconRef={el => { icons.current.sandbox = el; }}
-        title="Sandbox" sub={run.executor || "executor"} />
+        title="Sandbox" sub={executorKind(run.executor)} hint={run.executor} />
     </div>
     <p className="studio-caption-line" aria-live="off">{caption}</p>
     {!detailed && n != null && <LoopChecklist run={run} steps={steps} n={n} upto={seen.index} row />}
@@ -140,7 +140,7 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
           </pre>
           : modelDone ? <p className="studio-quote">Replied DONE (the model’s own judgement of the output).</p>
           : accepted ? <figure className="space-y-1">
-              <figcaption className="text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">Short explanation · model call {accepted.iteration}</figcaption>
+              <figcaption className="text-[12px] font-medium text-muted-foreground">Short explanation · model call {accepted.iteration}</figcaption>
               <blockquote className="studio-quote">{accepted.log?.message}</blockquote>
             </figure>
           : <p className="text-xs text-muted-foreground">{n == null ? "No request yet." : "Nothing returned yet in this iteration."}</p>}
@@ -192,8 +192,16 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
   </div>;
 }
 
-function Station({ actor, active, waiting, title, sub, iconRef }: {
-  actor: Actor; active: boolean; waiting?: boolean; title: string; sub: string; iconRef: (el: HTMLSpanElement | null) => void;
+/** What a transfer does, in words: the packet label alone ("exit 1", "Output") does not say who acts. */
+function transferVerb(t: Transfer): string {
+  if (t.from === "runtime" && t.to === "model") return t.tone === "error" ? "sends the error back:" : t.tone === "output" ? "sends the output back:" : "sends";
+  if (t.from === "model") return t.tone === "done" ? "replies" : "returns code:";
+  if (t.to === "sandbox") return "hands over the code:";
+  return "returns the result:";
+}
+
+function Station({ actor, active, waiting, title, sub, hint, iconRef }: {
+  actor: Actor; active: boolean; waiting?: boolean; title: string; sub: string; hint?: string; iconRef: (el: HTMLSpanElement | null) => void;
 }) {
   const Icon = actor === "model" ? BrainCircuit : actor === "sandbox" ? SquareTerminal : Workflow;
   return <div className={cn("studio-station", `is-${actor}`, active && "is-active", actor === "runtime" && "is-small")}>
@@ -201,8 +209,8 @@ function Station({ actor, active, waiting, title, sub, iconRef }: {
       <Icon className={actor === "runtime" ? "size-4" : "size-5"} />
       {active && waiting && <span className="studio-wait" aria-hidden />}
     </span>
-    <span className="text-xs font-semibold leading-tight">{title}</span>
-    <span className="max-w-full truncate font-mono text-[10.5px] text-muted-foreground">{sub}</span>
+    <span className="text-[13px] font-semibold leading-tight">{title}</span>
+    <span className="max-w-full truncate font-mono text-[11px] text-muted-foreground" title={hint}>{sub}</span>
   </div>;
 }
 
@@ -227,7 +235,7 @@ function Motion({ transfer, geo, animate, duration }: { transfer: Transfer; geo:
 }
 
 const STATE_TEXT: Record<TurnState, string> = {
-  done: "done", failed: "failed", active: "in progress", upcoming: "not yet", na: "not applicable", unknown: "unknown",
+  done: "done", failed: "failed", active: "happening now", underway: "under way at the selected point", next: "recorded next", upcoming: "later", na: "not applicable", unknown: "unknown",
 };
 
 /** The four parts of this turn of the loop. Parts that do not apply (DONE, final review) say so instead of looking unfinished. */

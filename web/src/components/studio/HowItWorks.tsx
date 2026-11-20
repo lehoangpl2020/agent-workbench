@@ -24,7 +24,7 @@ export function HowItWorks() {
       </div>)}
       <p className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">
         Every step on this page comes from the run’s recorded activity log. The live view shows new events in order with a short pause so fast hand-offs stay visible, then waits on the real current state.
-        Model explanations are the short text the model returned with its code; the model’s internal reasoning is not shown.
+        The model’s short explanation is the text it returned with its code. When Reasoning is turned on for a run, the provider’s separate reasoning stream (the model’s own text, or a summary the provider writes) is shown under each model call, apart from that explanation.
       </p>
     </div>
   </details>;

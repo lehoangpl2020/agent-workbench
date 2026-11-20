@@ -61,7 +61,7 @@ export function ProcessOutputPanel({ run, iteration }: { run: RunDetail; iterati
       <dl className="flex flex-wrap gap-x-6 gap-y-1 border-y py-2 text-[13px]">
         {stats.map((s) => (
           <div key={s.label} className="flex items-baseline gap-1.5">
-            <dt className="text-[10.5px] font-semibold tracking-[.08em] text-muted-foreground uppercase">{s.label}</dt>
+            <dt className="text-[12px] font-medium text-muted-foreground">{s.label}</dt>
             <dd className={cn("font-mono font-medium", s.bad && "text-destructive")}>{s.value}</dd>
           </div>
         ))}

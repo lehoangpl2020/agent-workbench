@@ -4,8 +4,9 @@ import type { LogEntry, RunDetail } from "./api";
 import finalReview from "./__fixtures__/final_review_rejected.json";
 import fixThenDone from "./__fixtures__/fix_then_done.json";
 import {
-  buildJourney, checkDecision, describeMessage, meaningfulOrder, neighbor, neighborSection, nextTransition, outcomeOf,
-  recordedRequests, sectionIndex, sectionSummary, sectionTarget, sectionTransferStep, turnChecklist,
+  buildJourney, checkDecision, describeMessage, executorKind, feedbackTarget, lastErrorLine, meaningfulOrder, modelOutcome, neighbor,
+  neighborSection, nextTransition, outcomeOf, previousCode, recordedRequests, sectionIndex, sectionSummary, sectionTarget,
+  sectionTransferStep, stepAccount, turnChecklist,
 } from "./journey";
 import { buildSteps } from "./studio";
 
@@ -139,7 +140,8 @@ describe("a run whose final review asked for another step", () => {
     expect(call2.finalReview).toBe(true);
     expect(call2.purpose).toBe("Final review (no code runs left)");
     expect(sections.filter(s => s.kind === "code")).toHaveLength(1);
-    expect(sectionSummary(call2, review.run, last)?.text).toBe("Wanted another step · not executed");
+    expect(sectionSummary(call2, review.run, last)?.text).toBe("Returned code · not executed");
+    expect(modelOutcome(call2, review.run, last)?.kind).toBe("not_executed");
     expect(nextTransition(call2, sections, review.run, last)).toContain("does not execute this code");
     // Choosing the section shows the model's reply, not the runtime's limit message logged after it
     expect(steps[call2.focus]).toMatchObject({ beat: "note", actor: "model", title: "Two" });
@@ -229,7 +231,13 @@ describe("the loop checklist of one turn", () => {
 
   it("shows later parts as upcoming at an earlier event, not as missing", () => {
     const call1 = sections[1];
-    expect(states(1, call1.main[0].index)).toMatchObject({ send: "done", model: "active", run: "upcoming", check: "upcoming" });
+    expect(states(1, call1.main[0].index)).toMatchObject({ send: "done", model: "next:next", run: "upcoming", check: "upcoming" });
+    // Exploring history never shows a part as happening now: after the code is accepted, the run is "next"
+    expect(states(1, call1.focus)).toMatchObject({ model: "done:iter_01.py", run: "next:next" });
+    // Once the call is recorded as started, the model part is under way at that point (still not "now")
+    const calling = call1.steps.find(s => s.beat === "calling")!.index;
+    expect(states(1, calling).model).toBe("underway:under way at this point");
+    expect(nextTransition(call1, sections, fix.run, calling, last)).toMatch(/^Not reached yet at this event/);
   });
 
   it("does not ask for code to run in a final review", () => {
@@ -249,6 +257,109 @@ describe("the loop checklist of one turn", () => {
     expect(items.map(i => `${i.key}:${i.state}:${i.note ?? ""}`)).toEqual([
       "send:done:", "model:unknown:interrupted by Stop", "run:unknown:not reached", "check:unknown:not reached",
     ]);
+  });
+});
+
+describe("the observed outcome of a model call", () => {
+  const { steps, sections } = journey(fix);
+  const last = steps.length - 1;
+
+  it("names what came back, not the purpose of the call", () => {
+    expect(modelOutcome(sections[1], fix.run, last)).toMatchObject({ kind: "code", text: "Returned code" });
+    expect(modelOutcome(sections[4], fix.run, last)).toMatchObject({ kind: "code", text: "Returned code" });
+    expect(modelOutcome(sections[7], fix.run, last)).toMatchObject({ kind: "done", text: "Replied DONE" });
+    expect(sectionSummary(sections[1], fix.run, last)?.text).toBe("Returned code · iter_01.py");
+    // Not answered yet at the call's first event
+    expect(modelOutcome(sections[1], fix.run, sections[1].first)).toBeNull();
+  });
+
+  it("says a review call returned more code when it did", () => {
+    const logs = fix.logs.map(l => l.iteration === 3 && l.data.flow === "done_reply"
+      ? { ...l, message: "Check again", data: { ...l.data, flow: "code" } } : l);
+    const run = clone(fix.run);
+    Object.assign(run.iterations[2], { code: "print(1)", status: "succeeded" });
+    const { steps: ss } = buildSteps(run, logs);
+    const secs = buildJourney(run, ss);
+    expect(secs[7].purpose).toBe("Review the result");
+    expect(modelOutcome(secs[7], run, ss.length - 1)).toMatchObject({ kind: "code", text: "Returned more code" });
+  });
+
+  it("does not claim a reply for a call cut off without a response", () => {
+    const cut = fix.logs.findIndex(l => l.iteration === 1 && l.data.flow === "calling");
+    const logs = [...fix.logs.slice(0, cut + 1),
+      { ...fix.logs[cut], id: 9001, message: "Stop requested by the user", data: { flow: "stop" } },
+      { ...fix.logs[cut], id: 9002, message: "Run finished: stopped", data: { flow: "finished" } }];
+    const run = { ...clone(fix.run), status: "stopped" as const, iterations: fix.run.iterations.slice(0, 1).map(i => ({ ...i, exit_code: null, code: "" })) };
+    const { steps: ss } = buildSteps(run, logs);
+    const secs = buildJourney(run, ss);
+    expect(modelOutcome(secs[1], run, ss.length - 1)).toMatchObject({ kind: "none", text: "No response recorded" });
+    // Reasoning that streamed before Stop is not a reply
+    const withReasoning = [...logs.slice(0, -2), { ...fix.logs[cut], id: 9000, message: "Model is reasoning", data: { flow: "reasoning" } }, ...logs.slice(-2)];
+    const reasoned = { ...run, reasoning: true, iterations: run.iterations.map(i => ({ ...i, reasoning: "partial thought" })) };
+    const { steps: rs } = buildSteps(reasoned, withReasoning);
+    const rsecs = buildJourney(reasoned, rs);
+    expect(modelOutcome(rsecs[1], reasoned, rs.length - 1)?.kind).toBe("none");
+    expect(stepAccount(rsecs[1], rsecs, reasoned, rs.length - 1).find(r => r.key === "output")?.detail).toBe("The call was interrupted by Stop.");
+  });
+});
+
+describe("the account of one step in this run", () => {
+  const { steps, sections } = journey(fix);
+  const last = steps.length - 1;
+  const rows = (k: number, upto = last) => Object.fromEntries(stepAccount(sections[k], sections, fix.run, upto).map(r => [r.key, r]));
+
+  it("tells who acted, what came in, what came out and what the record shows next", () => {
+    const call1 = rows(1);
+    expect(call1.who.text).toBe("Model · Qwen 3.5 4B");
+    expect(call1.input.text).toBe("System instructions and 1 message");
+    expect(call1.output).toMatchObject({ text: "Returned code", detail: "iter_01.py · 1 line" });
+    expect(call1.next).toMatchObject({ goto: { key: sections[2].key, label: "Code run 1" } });
+    expect(call1.next.text).toContain("the runtime decides whether it runs");
+  });
+
+  it("names the recorded next step once the selected step is complete, but not before", () => {
+    const call1 = sections[1];
+    const whole = Object.fromEntries(stepAccount(call1, sections, fix.run, call1.last, last).map(r => [r.key, r]));
+    expect(whole.next.goto?.label).toBe("Code run 1");
+    const early = Object.fromEntries(stepAccount(call1, sections, fix.run, call1.first, last).map(r => [r.key, r]));
+    expect(early.next.goto).toBeUndefined();
+    expect(early.output.text).toBe("Not returned yet at this event");
+  });
+
+  it("surfaces the recorded error of a failed code run and where it went", () => {
+    const run1 = rows(2);
+    expect(run1.who.text).toBe("Sandbox · local");
+    expect(run1.output).toMatchObject({ tone: "bad", detail: "Last line of stderr: NameError: name 'undefined_name' is not defined" });
+    expect(feedbackTarget(sections[2], sections, last)?.title).toBe("Model call 2");
+    // Before the next model call is recorded, it is not named
+    expect(feedbackTarget(sections[2], sections, sections[3].last)).toBeNull();
+  });
+
+  it("connects the feedback in a model's input to the code run it came from", () => {
+    expect(rows(7).input.detail).toBe("Newest: Execution feedback: success (from Code run 2)");
+    expect(rows(7).output).toMatchObject({ text: "DONE, with no code", tone: "ok" });
+    expect(rows(7).next.text).toContain("ended the run as Completed");
+  });
+
+  it("says when the model input was not recorded", () => {
+    const logs = fix.logs.map(l => { const data = { ...l.data }; delete data.request; return { ...l, data }; });
+    const { steps: ss, sections: secs } = journey(fix, logs);
+    const input = stepAccount(secs[1], secs, fix.run, ss.length - 1).find(r => r.key === "input");
+    expect(input).toMatchObject({ text: "Not recorded", tone: "muted" });
+  });
+
+  it("ends with the outcome and no next step", () => {
+    const end = stepAccount(sections.at(-1)!, sections, fix.run, last);
+    expect(end.map(r => r.key)).toEqual(["who", "input", "output"]);
+    expect(end[1].text).toBe("Model call 3: Replied DONE");
+  });
+
+  it("keeps helpers literal", () => {
+    expect(lastErrorLine("Traceback...\n  File x\nValueError: bad\n\n")).toBe("ValueError: bad");
+    expect(lastErrorLine("")).toBeNull();
+    expect(executorKind("docker-persistent (agent-workbench-sandbox)")).toBe("docker-persistent");
+    expect(previousCode(fix.run, 2)?.number).toBe(1);
+    expect(previousCode(fix.run, 1)).toBeNull();
   });
 });
 

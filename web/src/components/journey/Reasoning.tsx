@@ -4,7 +4,7 @@ import type { ReasoningKind } from "@/lib/api";
 import { formatMs } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "../CodeView";
-import { NOTE } from "../styles";
+import { Disclosure } from "./Disclosure";
 
 /**
  * Where the selected point stands in this model call's reasoning:
@@ -32,12 +32,18 @@ interface Props {
   kind: ReasoningKind;
 }
 
-/** The model's reasoning in one model call, exactly as the provider streamed it. Nothing here is generated. */
+/**
+ * The model's reasoning in one model call, exactly as the provider streamed it. Nothing here is generated.
+ * It is open while it streams live; for a finished call it is a closed reading view, so it never pushes the
+ * returned code out of sight.
+ */
 export function Reasoning({ state, text, firstReasoningMs, firstAnswerMs, retried, calling, provider, kind }: Props) {
   const summary = kind === "summary";
   const box = useRef<HTMLPreElement>(null);
   const [follow, setFollow] = useState(true);
   const live = state === "live";
+  const [open, setOpen] = useState(live);
+  useEffect(() => { if (live) setOpen(true); }, [live]);
   const thought = firstReasoningMs != null && firstAnswerMs != null && firstAnswerMs >= firstReasoningMs
     ? firstAnswerMs - firstReasoningMs : null;
 
@@ -46,50 +52,54 @@ export function Reasoning({ state, text, firstReasoningMs, firstAnswerMs, retrie
     if (live && follow && box.current) box.current.scrollTop = box.current.scrollHeight;
   }, [text, live, follow]);
 
-  if (state === "waiting") {
-    return <p className={NOTE}>{calling ? "Waiting for the model. Its reasoning appears here as soon as it starts."
-      : "No reasoning yet at this event."}</p>;
-  }
-  if (state === "later") {
-    return <p className={NOTE}>The model was reasoning at this point. Its text is shown from the call’s response event on,
-      so nothing appears here before it arrived{text ? ` (${text.length.toLocaleString()} chars in total)` : ""}.</p>;
-  }
-  if (!text) {
-    return <p className={NOTE}>{state === "partial" ? "The call ended before any reasoning arrived."
-      : summary ? `${provider} returned no reasoning summary for this call. The model decides per call whether to reason; for a task it finds simple it often answers directly, so there is nothing to summarize.`
-      : "The model streamed no reasoning in this call."}</p>;
+  const label = summary ? "Reasoning summary" : "Reasoning";
+  const source = summary ? `written by ${provider}` : `reasoning channel · ${provider}`;
+
+  let note: string | null = null;
+  if (state === "waiting") note = calling ? "appears here as soon as the model starts reasoning" : "none yet at this event";
+  else if (state === "later") note = "recorded with the call’s response, after this event";
+  else if (!text) note = state === "partial" ? "the call ended before any reasoning arrived"
+    : summary ? `${provider} returned no summary for this call` : "the model streamed no reasoning in this call";
+  if (note) {
+    return <section className="ins-disclosure">
+      <p className="ins-disclosure-head cursor-default">
+        <Brain className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="font-semibold">{label}</span>
+        <span className="min-w-0 text-muted-foreground">{note}</span>
+      </p>
+      {summary && !text && state === "complete" && <p className="mt-1 pl-6 text-[13px] leading-relaxed text-muted-foreground">
+        The model decides per call whether to reason; for a task it finds simple it often answers directly, so there is nothing to summarize.</p>}
+    </section>;
   }
 
-  return <figure className="space-y-2">
-    <figcaption className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      {live ? <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
-          <span className="mark animate-pulse bg-model" aria-hidden />{summary ? "Summary streaming" : "Reasoning now"}</span>
-        : state === "partial" ? <span className="font-semibold text-warning">Partial: the call ended before the model finished</span>
-        : <span className="inline-flex items-center gap-1.5 font-medium text-foreground"><Brain className="size-3.5 text-model" aria-hidden />Complete</span>}
-      <span className="font-mono tabular-nums">{text.length.toLocaleString()} chars</span>
-      {thought != null && !live && <span className="font-mono tabular-nums" title="From the first reasoning token to the first answer token">
-        {summary ? "summary streamed for" : "reasoned for"} {formatMs(thought)}</span>}
-      {retried && <span>last attempt (the call was resent after invalid JSON)</span>}
-      <span className="ml-auto"><CopyButton text={text} light /></span>
-    </figcaption>
-    <pre ref={box} tabIndex={0} aria-label={summary ? "Reasoning summary" : "Model reasoning"} aria-live="off"
-      onScroll={e => {
-        const el = e.currentTarget;
-        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
-        if (atBottom !== follow) setFollow(atBottom);
-      }}
-      className={cn("max-h-80 overflow-auto rounded-xs border-l-2 border-model bg-model-soft/50 px-3.5 py-2.5 font-sans text-[13px]",
-        "leading-relaxed whitespace-pre-wrap text-foreground/90 [overflow-wrap:anywhere] focus-visible:outline-offset-1")}>
-      {text}{live && <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-model align-[-2px]" aria-hidden />}
-    </pre>
-    <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-      {summary
-        ? <>A summary {provider} writes of the model’s reasoning, streamed apart from the JSON answer. {provider} never
-          returns the reasoning itself, so this is a condensed account, not the reasoning, and not a verified explanation
-          of how the model produced the code. It is not sent back to the model.</>
-        : <>The text the model wrote in its reasoning channel, as {provider} streamed it, kept apart from the JSON answer. It
-          is not sent back to the model, and it is the model’s own account, not a verified explanation of how it produced
-          the code.</>}
-    </p>
-  </figure>;
+  const meta = <>
+    {live ? <span className="inline-flex items-center gap-1.5 font-medium text-foreground"><span className="mark animate-pulse bg-model" aria-hidden />streaming now</span>
+      : state === "partial" ? <span className="font-medium text-warning">partial</span> : source}
+    <span className="font-mono text-[12px] tabular-nums"> · {text.length.toLocaleString()} chars</span>
+    {thought != null && !live && <span className="font-mono text-[12px] tabular-nums" title="From the first reasoning token to the first answer token">
+      {" "}· {formatMs(thought)}</span>}
+  </>;
+
+  return <Disclosure label={label} meta={meta} icon={Brain} open={open} onOpenChange={setOpen}
+    actions={<CopyButton text={text} light />}>
+    <div className="space-y-2">
+      {state === "partial" && <p className="text-[13px] text-warning">Partial: the call ended before the model finished.</p>}
+      {retried && <p className="text-[13px] text-muted-foreground">From the last attempt (the call was resent after invalid JSON).</p>}
+      <pre ref={box} tabIndex={0} aria-label={summary ? "Reasoning summary" : "Model reasoning"} aria-live="off"
+        onScroll={live ? e => {
+          const el = e.currentTarget;
+          const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
+          if (atBottom !== follow) setFollow(atBottom);
+        } : undefined}
+        className={cn("ins-reasoning", live && "max-h-80 overflow-auto")}>
+        {text}{live && <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-model align-[-2px]" aria-hidden />}
+      </pre>
+      <p className="max-w-[78ch] text-[13px] leading-relaxed text-muted-foreground">
+        {summary
+          ? <>A summary {provider} writes of the model’s reasoning; {provider} does not return the reasoning itself. </>
+          : <>The text the model wrote in its reasoning channel, kept apart from its JSON answer. </>}
+        It is the model’s own account, not a verified explanation of the code, and it is not sent back to the model.
+      </p>
+    </div>
+  </Disclosure>;
 }

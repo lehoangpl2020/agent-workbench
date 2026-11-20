@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 function Stat({ label, value, sub, title, muted }: { label: string; value: ReactNode; sub?: ReactNode; title?: string; muted?: boolean }) {
   return (
     <div className="min-w-0 border-l pl-3" title={title}>
-      <dt className="text-[10.5px] font-semibold tracking-[.08em] text-muted-foreground uppercase">{label}</dt>
+      <dt className="text-[12px] font-medium text-muted-foreground">{label}</dt>
       <dd className={cn("mt-1 font-mono text-[15px] font-semibold tabular-nums", muted && "font-sans text-sm font-normal text-muted-foreground")}>{value}</dd>
       {sub && <dd className="mt-0.5 text-[11px] leading-snug text-muted-foreground tabular-nums">{sub}</dd>}
     </div>
@@ -80,7 +80,7 @@ export function UsageSummary({ run }: { run: RunDetail }) {
   ];
   return <div className="text-xs text-muted-foreground">
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="text-[10.5px] font-semibold tracking-[.08em] uppercase">Usage</span>
+      <span className="text-[12px] font-semibold">Usage</span>
       <span className="min-w-0 font-mono text-[11.5px] tabular-nums">{parts.join(" · ")}</span>
       <button type="button" aria-expanded={open} onClick={() => setOpen(v => !v)}
         className="text-link inline-flex items-center gap-0.5">

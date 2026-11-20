@@ -204,7 +204,7 @@ function Meta({ label, title, className, icon, sub, mono, children }: {
   label: string; title?: string; className?: string; icon?: React.ReactNode; sub?: string; mono?: boolean; children: React.ReactNode;
 }) {
   return <div className={cn("min-w-0 py-2.5 pr-4 sm:max-w-[42ch] sm:flex-[0_1_auto] sm:px-5 sm:first:pl-0", className)} title={title}>
-    <dt className="flex items-center gap-1.5 text-[10.5px] font-semibold tracking-[.08em] text-muted-foreground uppercase">{icon}{label}</dt>
+    <dt className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">{icon}{label}</dt>
     <dd className={cn("mt-1 text-[13.5px] leading-snug font-medium break-words", mono && "font-mono text-[12.5px] [overflow-wrap:anywhere]")}>{children}</dd>
     {sub && <dd className="text-xs text-muted-foreground">{sub}</dd>}
   </div>;

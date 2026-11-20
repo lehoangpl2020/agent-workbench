@@ -183,7 +183,7 @@ export function sectionLead(section: JourneySection, run: RunDetail): string {
     case "model": {
       if (section.finalReview) return "No code runs are left: the model reviews the last output and may reply DONE. Code it returns here is not run.";
       const intent = section.steps.find(s => s.intent)?.intent ?? run.iterations.find(i => i.number === section.iteration)?.intent ?? "write";
-      return intent === "fix" ? "The model receives the error and returns corrected code."
+      return intent === "fix" ? "The model receives the error and returns new code (whether it fixes the error shows in the next code run)."
         : intent === "review" ? "The model receives the output and decides: reply DONE, or return code for another step."
         : "The model receives your task and returns Python code.";
     }
@@ -210,12 +210,15 @@ export function checkDecision(run: RunDetail, iteration: number | null): string 
 
 // ─── The loop of one model call, as of a step ─────────────────────────
 
-export type TurnState = "done" | "failed" | "active" | "upcoming" | "na" | "unknown";
+export type TurnState = "done" | "failed" | "active" | "underway" | "next" | "upcoming" | "na" | "unknown";
 export interface TurnItem { key: "send" | "model" | "run" | "check"; label: string; state: TurnState; note?: string }
 
 /**
  * The four parts of one turn of the loop (send → model → sandbox → check) as of step `upto`. A part that does not
  * apply to this turn (DONE, or a final review) is "na", never pending; a part that was never recorded is "unknown".
+ * "active" means happening right now, so it only appears at the live edge of a running run. When exploring or
+ * replaying history, a part the record shows had started but not finished at the selected point is "underway", and
+ * a part that only follows it is "next".
  */
 export function turnChecklist(run: RunDetail, steps: StudioStep[], n: number | null, upto: number): TurnItem[] {
   if (n == null) return [];
@@ -232,14 +235,17 @@ export function turnChecklist(run: RunDetail, steps: StudioStep[], n: number | n
   const finalReview = isFinalReview(run, n, steps);
   const done = has("done_reply") || (snapshot && it?.status === "done");
   // Not reached at this step: it comes later if this turn continues in the record (or live), else it never happened.
-  const continues = turn.some(s => s.index > upto) || (running && upto >= steps.length - 1);
+  const liveEdge = running && upto >= steps.length - 1;
+  const continues = turn.some(s => s.index > upto) || liveEdge;
   // Without a recorded end (older or cut-off history) a missing part is unknown rather than "not reached".
   const ended = running || steps.some(s => s.beat === "finished" || s.beat === "stop");
   const pending = (): Pick<TurnItem, "state" | "note"> => continues ? { state: "upcoming" }
     : { state: "unknown", note: ended ? "not reached" : "not recorded" };
   // In progress at this step; if the turn ends here without a result, it was cut off (Stop) or its outcome is unknown.
   const stopped = steps.some(s => s.beat === "stop");
-  const inProgress = (): Pick<TurnItem, "state" | "note"> => continues || running ? { state: "active" }
+  // `started`: the record shows this part had begun at the selected point (the call was sent, the process started...)
+  const inProgress = (started: boolean): Pick<TurnItem, "state" | "note"> => liveEdge ? { state: "active", note: "now" }
+    : continues || running ? started ? { state: "underway", note: "under way at this point" } : { state: "next", note: "next" }
     : { state: "unknown", note: stopped ? "interrupted by Stop" : "no result recorded" };
 
   const modelReply = seen.some(s => s.beat === "note" && s.log?.source === "model");
@@ -257,22 +263,54 @@ export function turnChecklist(run: RunDetail, steps: StudioStep[], n: number | n
       ...(done ? { state: "done" as const, note: "DONE" }
         : has("accepted") || (snapshot && it?.code) ? { state: "done" as const, note: iterFile(n) }
         : modelReply ? { state: "done" as const, note: finalReview ? "asked for another step" : undefined }
-        : at("send", "iteration", "calling", "reasoning", "first_token", "response", "parsed") && !modelFailed ? inProgress()
+        : at("send", "iteration", "calling", "reasoning", "first_token", "response", "parsed") && !modelFailed ? inProgress(!at("send", "iteration"))
         : modelFailed ? { state: "failed" as const, note: "call failed" }
         : pending()) },
     { key: "run", label: "Run in sandbox",
       ...(skip ? { state: "na" as const, note: skip }
         : ran ? { state: exitCode === 0 ? "done" as const : "failed" as const, note: it?.timed_out ? "timed out" : exitCode != null ? `exit ${exitCode}` : undefined }
         : has("killed") ? { state: "failed" as const, note: "killed" }
-        : at("accepted", "handoff", "executing", "install") ? inProgress()
+        : at("accepted", "handoff", "executing", "install") ? inProgress(at("executing", "install"))
         : pending()) },
     { key: "check", label: "Check the result",
       ...(skip ? { state: "na" as const, note: skip }
         : has("result") || (snapshot && it?.exit_code != null) ? { state: "done" as const, note: it?.exit_code === 0 ? "success" : "failure" }
-        : at("exited", "artifact", "no_files", "checking") ? inProgress()
+        : at("exited", "artifact", "no_files", "checking") ? inProgress(at("checking"))
         : pending()) },
   ];
   return items;
+}
+
+export type ModelOutcomeKind = "code" | "done" | "not_executed" | "failed" | "partial" | "none";
+export interface ModelOutcome { kind: ModelOutcomeKind; text: string; tone: FactTone }
+
+/**
+ * What the model call is observed to have returned as of step `upto`, read from the record (never its intent).
+ * Null while the call has not answered yet. "Review the result" does not mean the model stops: a review call
+ * can return more code, and a final review's code is never run.
+ */
+export function modelOutcome(section: JourneySection, run: RunDetail, upto: number): ModelOutcome | null {
+  if (section.kind !== "model") return null;
+  const reached = section.steps.filter(s => s.index <= upto);
+  const has = (beat: Beat) => reached.some(s => s.beat === beat);
+  const it = run.iterations.find(i => i.number === section.iteration);
+  const intent = section.steps.find(s => s.intent)?.intent ?? it?.intent ?? "write";
+  const snapshot = has("snapshot");
+  if (has("done_reply") || (snapshot && it?.status === "done")) return { kind: "done", text: "Replied DONE", tone: "ok" };
+  if (has("accepted") || (snapshot && it?.code && !section.finalReview))
+    return { kind: "code", text: intent === "review" ? "Returned more code" : "Returned code", tone: "muted" };
+  if (section.finalReview && it?.code && (reached.some(s => s.log?.source === "model" || s.level === "WARN") || snapshot))
+    return { kind: "not_executed", text: "Returned code · not executed", tone: "warn" };
+  if (reached.some(s => s.level === "ERROR")) return { kind: "failed", text: "Model call failed", tone: "bad" };
+  const running = run.status === "running" || run.status === "pending";
+  // The section's record continues (or the run is live): the answer is still to come
+  if (section.steps.some(s => s.index > upto) || running) return null;
+  const answered = section.steps.some(s => s.beat === "response");
+  // Partial = answer text had started streaming; reasoning alone is not a reply (it is shown on its own)
+  if (!answered && has("first_token") && it?.code)
+    return { kind: "partial", text: "Partial response · not used", tone: "warn" };
+  if (!answered && reached.length) return { kind: "none", text: "No response recorded", tone: "muted" };
+  return null;
 }
 
 /** One-line summary of a section's result, as of the step `upto` (later steps never leak in). */
@@ -281,14 +319,11 @@ export function sectionSummary(section: JourneySection, run: RunDetail, upto: nu
   const has = (beat: Beat) => reached.some(s => s.beat === beat);
   const it = run.iterations.find(i => i.number === section.iteration);
   switch (section.kind) {
-    case "model":
-      if (has("done_reply")) return { text: "Replied DONE", tone: "ok" };
-      if (has("accepted")) return { text: `Returned ${iterFile(section.iteration)}`, tone: "muted" };
-      if (section.finalReview && reached.some(s => s.log?.source === "model" || s.level === "WARN") && it?.code)
-        return { text: "Wanted another step · not executed", tone: "warn" };
-      if (reached.some(s => s.level === "ERROR")) return { text: "Model call failed", tone: "bad" };
-      if (reached.some(s => s.beat === "snapshot") && it?.status === "done") return { text: "Replied DONE", tone: "ok" };
-      return null;
+    case "model": {
+      const o = modelOutcome(section, run, upto);
+      if (!o) return null;
+      return o.kind === "code" ? { text: `${o.text} · ${iterFile(section.iteration)}`, tone: o.tone } : { text: o.text, tone: o.tone };
+    }
     case "code": {
       if (has("killed") && !has("exited")) return { text: "Process killed", tone: "warn" };
       if (!(has("exited") || has("snapshot")) || it?.exit_code == null) return null;
@@ -316,11 +351,17 @@ export function sectionSummary(section: JourneySection, run: RunDetail, upto: nu
   }
 }
 
-/** What the recorded data says happens after this section (the transition rule), as of step `upto`. */
-export function nextTransition(section: JourneySection, sections: JourneySection[], run: RunDetail, upto: number): string {
+/**
+ * What the recorded data says happens after this section (the transition rule), as of step `upto`. `known` is how
+ * far the record is revealed (the whole run when exploring, the replay position in replay): once the section itself
+ * is complete, the step recorded after it may be named even though it lies past `upto`.
+ */
+export function nextTransition(section: JourneySection, sections: JourneySection[], run: RunDetail, upto: number, known = upto): string {
   const running = run.status === "running" || run.status === "pending";
-  const pos = sections.indexOf(section);
-  const after = sections.slice(pos + 1).find(s => s.first <= upto && s.kind !== "stop");
+  const after = sectionAfter(section, sections, section.last <= upto ? Math.max(upto, known) : upto);
+  // Exploring or replaying a point inside a step: what follows is in the record, but not reached yet
+  if (section.kind !== "end" && section.kind !== "stop" && section.steps.some(s => s.index > upto))
+    return "Not reached yet at this event: the rest of this step is recorded later.";
   const reached = section.steps.filter(s => s.index <= upto);
   const it = run.iterations.find(i => i.number === section.iteration);
   const ended = after?.kind === "end";
@@ -330,10 +371,16 @@ export function nextTransition(section: JourneySection, sections: JourneySection
       return after?.kind === "model" ? "The runtime sends your task and the system instructions to the model (Model call 1)."
         : ended ? endReason : "The runtime is about to call the model.";
     case "model":
-      if (reached.some(s => s.beat === "done_reply") || (reached.some(s => s.beat === "snapshot") && it?.status === "done"))
+      if (reached.some(s => s.beat === "done_reply") || (reached.some(s => s.beat === "snapshot") && it?.status === "done")) {
+        if (ended && run.status === "success") return "The model replied DONE. The runtime accepts DONE only after at least one successful code run, so it ended the run as Completed.";
+        if (ended && run.status === "error") return "The model replied DONE, but no code run had succeeded, so the runtime ended the run as Failed.";
         return "The model replied DONE. The runtime accepts DONE only after at least one successful code run, then ends the run.";
-      if (after?.kind === "code") return `The runtime writes the code to ${iterFile(section.iteration)} and hands it to the sandbox (${after.title}).`;
-      if (section.finalReview && it?.code) return "No code runs are left, so the runtime does not execute this code. The run stops without DONE.";
+      }
+      if (after?.kind === "code") {
+        const used = run.iterations.filter(i => i.exit_code !== null && i.number < (section.iteration ?? 0)).length;
+        return `The model returned code; the runtime decides whether it runs. With ${used} of ${run.max_iterations} code runs used, the runtime writes the code to ${iterFile(section.iteration)} and hands it to the sandbox (${after.title}).`;
+      }
+      if (section.finalReview && it?.code) return `The model returned code, but ${allRunsUsed(run.max_iterations)}, so the runtime does not execute this code. The run stops without DONE.`;
       if (ended) return endReason;
       return running ? "Waiting for the model’s response. Code is only run after the full reply is parsed." : "No further step was recorded.";
     case "code":
@@ -362,6 +409,166 @@ export function nextTransition(section: JourneySection, sections: JourneySection
     case "end":
       return "Nothing else happens. History, logs and file snapshots are stored for inspection and replay.";
   }
+}
+
+// ─── What happened in this step of this run ──────────────────────────
+
+/** The next recorded section (Stop excluded) as of `upto`: what the record shows came after this one. */
+export function sectionAfter(section: JourneySection, sections: JourneySection[], upto: number): JourneySection | undefined {
+  return sections.slice(sections.indexOf(section) + 1).find(s => s.first <= upto && s.kind !== "stop");
+}
+
+/** The model call that received a code run's result as its newest input (null if the loop ended first). */
+export function feedbackTarget(section: JourneySection, sections: JourneySection[], upto: number): JourneySection | null {
+  for (const s of sections.slice(sections.indexOf(section) + 1)) {
+    if (s.first > upto || s.kind === "end" || s.kind === "code") return null;
+    if (s.kind === "model") return s;
+  }
+  return null;
+}
+
+/** The latest earlier code file the model returned, to compare a new reply with. */
+export function previousCode(run: RunDetail, n: number | null): Iteration | null {
+  if (n == null) return null;
+  return [...run.iterations].reverse().find(i => i.number < n && i.code.trim() !== "") ?? null;
+}
+
+/** The last non-empty line of stderr: usually the exception line. Shown as recorded text, never as a diagnosis. */
+export function lastErrorLine(stderr: string): string | null {
+  const line = stderr.trimEnd().split("\n").map(l => l.trim()).filter(Boolean).at(-1);
+  return line ? (line.length > 300 ? `${line.slice(0, 300)}…` : line) : null;
+}
+
+/** "docker-persistent (agent-workbench-sandbox)" → "docker-persistent": the container name is a detail. */
+export function executorKind(executor: string | null | undefined): string {
+  return (executor ?? "").replace(/\s*\(.*\)\s*$/, "").trim() || "executor not recorded";
+}
+
+/** "all 5 code runs are used" / "the 1 allowed code run is used" */
+export const allRunsUsed = (max: number) => max === 1 ? "the 1 allowed code run is used" : `all ${max} code runs are used`;
+
+const lineCount = (code: string) => code.replace(/\n$/, "").split("\n").length;
+const linesOf = (code: string) => { const k = lineCount(code); return `${k} line${k === 1 ? "" : "s"}`; };
+
+export interface AccountRow {
+  key: "who" | "input" | "output" | "next";
+  label: string;
+  text: string;
+  tone?: FactTone;
+  /** A second, quieter line of recorded detail (an error line, the stop message). */
+  detail?: string;
+  /** The detail is literal program output (an error line), set in monospace. */
+  mono?: boolean;
+  /** The section this row points to, e.g. the next step. */
+  goto?: { key: string; label: string };
+}
+
+/**
+ * The selected step told as this run recorded it: who acted, what input was available, what came back, and what the
+ * record shows happened next. Every value is read from the stored run and its log; nothing is inferred about why.
+ */
+export function stepAccount(section: JourneySection, sections: JourneySection[], run: RunDetail, upto: number, known = upto): AccountRow[] {
+  const n = section.iteration;
+  const it = run.iterations.find(i => i.number === n);
+  const reached = section.steps.filter(s => s.index <= upto);
+  const has = (...beats: Beat[]) => reached.some(s => beats.includes(s.beat));
+  const running = run.status === "running" || run.status === "pending";
+  // The step after this one is named only once this one is complete at the selected point (no outcome leaks early)
+  const after = sectionAfter(section, sections, section.last <= upto ? Math.max(upto, known) : upto);
+  const later = section.steps.some(s => s.index > upto);
+  const rows: AccountRow[] = [];
+  const who = (text: string, detail?: string) => rows.push({ key: "who", label: "Who", text, detail });
+  const input = (text: string, tone?: FactTone, detail?: string) => rows.push({ key: "input", label: "Input", text, tone, detail });
+  const output = (text: string, tone?: FactTone, detail?: string) => rows.push({ key: "output", label: section.kind === "model" ? "Returned" : "Result", text, tone, detail });
+  const pending = later ? "Not recorded yet at this event" : running ? "In progress" : "No result was recorded";
+  const modelName = run.model_name ?? (run.model || "model not recorded");
+  const codeBefore = [...sections.slice(0, sections.indexOf(section))].reverse().find(s => s.kind === "code");
+
+  switch (section.kind) {
+    case "setup":
+      who("Runtime", "the application code that runs the loop");
+      input(`Your task (${run.prompt.length.toLocaleString()} characters) and the run settings`);
+      output(`Up to ${run.max_iterations} code run${run.max_iterations === 1 ? "" : "s"}, ${run.timeout_seconds} s each, with ${modelName}`);
+      break;
+    case "model": {
+      who(`Model · ${modelName}`, run.provider_name ?? run.provider ?? undefined);
+      const all = recordedRequests(section);
+      const seen = all.filter(r => r.step.index <= upto);
+      const shown = seen.at(-1);
+      if (shown) {
+        const k = shown.messages.length;
+        const newest = shown.messages.at(-1);
+        const feedback = newest && newest.role === "user" && k > 1 && /^Execution feedback/.test(describeMessage(newest, k - 1));
+        input(`System instructions and ${k} message${k === 1 ? "" : "s"}`, undefined,
+          newest ? `Newest: ${describeMessage(newest, k - 1)}${feedback && codeBefore ? ` (from ${codeBefore.title})` : ""}` : undefined);
+      } else if (all.length) input("Recorded when the call starts", "muted");
+      else if (running && !section.steps.some(s => s.beat === "calling")) input("The runtime is preparing the request", "muted");
+      else input("Not recorded", "muted", "This run was stored before model inputs were saved.");
+      const o = modelOutcome(section, run, upto);
+      const lines = it?.code ? `${iterFile(n)} · ${linesOf(it.code)}` : undefined;
+      const retried = section.formatRetries > 0 ? ` (after ${section.formatRetries} format ${section.formatRetries === 1 ? "retry" : "retries"})` : "";
+      if (!o) output(running && !later ? "Not returned yet" : "Not returned yet at this event", "muted");
+      else if (o.kind === "code") output(`${o.text}${retried}`, undefined, lines);
+      else if (o.kind === "done") output(`DONE, with no code${retried}`, "ok");
+      else if (o.kind === "not_executed") output("Code that the runtime did not run", "warn", lines ? `${lines} · no code runs were left` : undefined);
+      else if (o.kind === "failed") output("No usable reply: the call failed", "bad", reached.find(s => s.level === "ERROR")?.title);
+      else if (o.kind === "partial") output("A partial reply, cut off before it was complete", "warn", "It was never parsed and never ran.");
+      else output("No response was recorded", "muted", sections.some(s => s.kind === "stop") && !section.steps.some(s => s.beat === "response")
+        ? "The call was interrupted by Stop." : undefined);
+      break;
+    }
+    case "code": {
+      const container = /\(([^)]+)\)\s*$/.exec(run.executor ?? "")?.[1];
+      who(`Sandbox · ${executorKind(run.executor)}`, container ? `container ${container}` : undefined);
+      input(it?.code ? `${iterFile(n)}, returned by Model call ${n}` : "No code is recorded for this run", it?.code ? undefined : "muted",
+        it?.code ? linesOf(it.code) : undefined);
+      const exited = has("exited", "snapshot") && it?.exit_code != null;
+      if (exited && it) {
+        const time = it.execution_time_ms != null ? ` after ${formatMs(it.execution_time_ms)}` : "";
+        if (it.timed_out) output(`Timed out${time}`, "warn", `Killed at the ${run.timeout_seconds} s limit (exit 124).`);
+        else if (it.false_success) output(`Exit code 0${time}`, "warn", "But the first line of stdout looked like an error message.");
+        else if (it.exit_code === 0) output(`Exit code 0${time}`, "ok", it.stdout.trim() ? `${it.stdout.length.toLocaleString()} characters of stdout` : "Nothing printed to stdout");
+        else {
+          const line = lastErrorLine(it.stderr);
+          output(`Exit code ${it.exit_code}${time}`, "bad", line ? `Last line of stderr: ${line}` : "stderr is empty");
+          rows[rows.length - 1].mono = !!line;
+        }
+      } else if (has("killed")) output("The process was killed before it finished", "warn");
+      else output(pending, "muted");
+      break;
+    }
+    case "check": {
+      who("Runtime", "applies the stop rules; the model is not involved");
+      const used = run.iterations.filter(i => i.exit_code !== null && i.number <= (n ?? 0)).length;
+      if (it && it.exit_code != null && has("checking", "result", "snapshot"))
+        input(`${it.timed_out ? "Timed out" : `Exit code ${it.false_success ? 0 : it.exit_code}`} from ${codeBefore?.title ?? "the code run"}`, undefined,
+          `${used} of ${run.max_iterations} code runs used`);
+      else input(pending, "muted");
+      const decision = has("result", "snapshot") ? checkDecision(run, n) : null;
+      if (decision && it) output(it.false_success ? "Treated as failed by the output check" : it.exit_code === 0 ? "Success" : "Failure",
+        it.exit_code === 0 ? "ok" : it.false_success ? "warn" : "bad", decision);
+      else output(pending, "muted");
+      break;
+    }
+    case "stop":
+      who("You, then the runtime");
+      input("Stop pressed in the UI");
+      output("The agent task is cancelled; a running process is killed");
+      break;
+    case "end": {
+      who("Runtime");
+      const prev = [...sections.slice(0, sections.indexOf(section))].reverse().find(s => s.kind !== "stop") ?? null;
+      const prevSummary = prev ? sectionSummary(prev, run, upto, sections) : null;
+      if (prev) input(`${prev.title}${prevSummary ? `: ${prevSummary.text}` : ""}`);
+      const meta = RUN_STATUS[run.status];
+      output(meta?.label ?? run.status, meta?.tone === "success" ? "ok" : meta?.tone === "danger" ? "bad" : meta?.tone === "warning" ? "warn" : "muted",
+        run.message || undefined);
+      return rows;
+    }
+  }
+  rows.push({ key: "next", label: "Next", text: nextTransition(section, sections, run, upto, known),
+    goto: after ? { key: after.key, label: after.title } : undefined });
+  return rows;
 }
 
 /** The rule that decides the transition after a runtime check (core/rules.py, core/agent.py). */
