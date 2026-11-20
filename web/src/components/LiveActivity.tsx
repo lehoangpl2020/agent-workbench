@@ -35,7 +35,7 @@ export function LiveActivity({ run }: { run: RunDetail }) {
   const iteration = run.activity_iteration ?? (run.iterations.length || null);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t bg-accent/40 px-4 py-2.5 sm:px-5" aria-live="polite">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-accent/40 px-4 py-2.5 sm:px-5" aria-live="polite">
       <span
         className={cn(
           "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide uppercase",

@@ -5,39 +5,40 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Light workspace, dark text, cobalt accent */
+/* Precision Studio: cool-gray page, white working surfaces, graphite text, cobalt for actions.
+   Actor colors (model purple, runtime blue, sandbox teal) are used only to recognise who acted. */
 :root {
-  --radius: 0.625rem;
-  --background: #f6f8fb;
-  --foreground: #0f172a;
+  --radius: 0.5rem;
+  --background: #f3f5f8;
+  --foreground: #161b26;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #161b26;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
+  --popover-foreground: #161b26;
   --primary: #0047ab;
   --primary-foreground: #ffffff;
-  --secondary: #eef2f8;
-  --secondary-foreground: #0f172a;
-  --muted: #f1f4f9;
-  --muted-foreground: #5b6577;
-  --accent: #e8effb;
+  --secondary: #eef1f6;
+  --secondary-foreground: #161b26;
+  --muted: #f1f3f7;
+  --muted-foreground: #586273;
+  --accent: #e9f0fb;
   --accent-foreground: #0a3a8c;
-  --destructive: #c62828;
-  --border: #e3e8f0;
-  --input: #d9e0ea;
-  --ring: #3d74d6;
-  --sidebar: #ffffff;
+  --destructive: #c42525;
+  --border: #e1e5ec;
+  --input: #d3d9e3;
+  --ring: #2f6bd6;
+  --sidebar: #fbfcfd;
 
-  --code-bg: #0e1420;
+  --code-bg: #0f1520;
   --code-fg: #e6ebf4;
-  --code-muted: #8892a6;
-  --code-border: #1d2636;
+  --code-muted: #8a94a8;
+  --code-border: #1e2737;
 
   --success: #12805c;
-  --success-soft: #e7f6ef;
-  --warning: #a15c07;
-  --warning-soft: #fdf3e2;
-  --danger-soft: #fdecec;
+  --success-soft: #e8f6ef;
+  --warning: #9a5806;
+  --warning-soft: #fdf4e4;
+  --danger-soft: #fdeded;
 }
 
 @theme inline {
@@ -92,6 +93,15 @@
   }
 }
 
+/* ── Shared surfaces and type ─────────────────────────────── */
+/* One working surface: white, a fine border, a moderate radius and no elevation. */
+.surface { border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+/* Small uppercase label above a block of evidence */
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.text-link { font-weight: 500; color: var(--primary); text-underline-offset: 2px; border-radius: 3px; }
+.text-link:hover { text-decoration: underline; }
+.text-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
 /* Checkerboard behind transparent PNGs */
 .checker {
   background-color: #fff;
@@ -111,13 +121,15 @@
 
 /* ── Agent Studio ─────────────────────────────────────────── */
 :root {
-  --model: #6d28d9;
-  --model-soft: #f3effe;
+  --model: #6d3fc8;
+  --model-soft: #f3effc;
+  --runtime: #2a5db0;
+  --runtime-soft: #eaf0fa;
   --sandbox: #0f766e;
-  --sandbox-soft: #e6f5f2;
+  --sandbox-soft: #e6f4f1;
   --ease-studio: cubic-bezier(0.22, 0.8, 0.24, 1);
 }
-.studio-card { @apply rounded-xl border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]; }
+.studio-card { border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .studio-segment {
   display: inline-flex; padding: 2px; border-radius: 8px; border: 1px solid var(--border); background: var(--muted);
 }
@@ -125,20 +137,21 @@
   display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px;
   font-size: 13px; font-weight: 500; color: var(--muted-foreground); transition: background-color .15s, color .15s;
 }
-.studio-segment button[aria-pressed="true"] { background: var(--card); color: var(--foreground); box-shadow: 0 1px 2px rgba(15,23,42,.1); }
+.studio-segment button[aria-pressed="true"] { background: var(--card); color: var(--foreground); box-shadow: 0 0 0 1px var(--border); }
+.studio-segment button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .studio-segment button:not(:disabled):hover { color: var(--foreground); }
 .studio-segment button:disabled { opacity: .45; cursor: not-allowed; }
 .studio-dot { display: inline-block; width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; }
 .studio-intent { @apply rounded bg-accent px-1.5 font-mono text-[10.5px] leading-[18px] text-accent-foreground; }
-.studio-actor-chip { border-radius: 999px; padding: 1px 8px; font-size: 10.5px; font-weight: 600; background: var(--accent); color: var(--primary); }
+.studio-actor-chip { border-radius: 999px; padding: 1px 8px; font-size: 11px; font-weight: 600; background: var(--runtime-soft); color: var(--runtime); }
 .studio-actor-chip.is-model { background: var(--model-soft); color: var(--model); }
 .studio-actor-chip.is-sandbox { background: var(--sandbox-soft); color: var(--sandbox); }
 .studio-caption { animation: studio-fade 260ms var(--ease-studio) both; }
 
 /* Stage */
 .studio-stage {
-  padding: 22px clamp(12px, 2.6vw, 24px) 18px;
-  background: radial-gradient(#d9e0ea 0.8px, transparent 0.9px) 0 0 / 16px 16px, #fafbfd;
+  padding: 18px clamp(12px, 2.6vw, 24px) 16px;
+  background: #fafbfc;
 }
 .studio-rail, .studio-panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.78fr) minmax(0, 1fr); column-gap: 12px; }
 .studio-rail { position: relative; padding-bottom: 16px; }
@@ -150,8 +163,8 @@
   transition: border-color .3s var(--ease-studio), background-color .3s var(--ease-studio), color .3s, box-shadow .3s;
 }
 .studio-station.is-small .studio-station-icon { width: 34px; height: 34px; margin: 5px 0 10px; border-radius: 10px; }
-.studio-station.is-model.is-active .studio-station-icon { border-color: var(--model); background: var(--model-soft); color: var(--model); box-shadow: 0 0 0 4px #6d28d912; }
-.studio-station.is-runtime.is-active .studio-station-icon { border-color: var(--primary); background: var(--accent); color: var(--primary); box-shadow: 0 0 0 4px #0047ab12; }
+.studio-station.is-model.is-active .studio-station-icon { border-color: var(--model); background: var(--model-soft); color: var(--model); box-shadow: 0 0 0 4px #6d3fc812; }
+.studio-station.is-runtime.is-active .studio-station-icon { border-color: var(--runtime); background: var(--runtime-soft); color: var(--runtime); box-shadow: 0 0 0 4px #2a5db012; }
 .studio-station.is-sandbox.is-active .studio-station-icon { border-color: var(--sandbox); background: var(--sandbox-soft); color: var(--sandbox); box-shadow: 0 0 0 4px #0f766e12; }
 /* The only "waiting" indicator: a slow ring on the station that is doing real work. */
 .studio-wait { position: absolute; inset: -6px; border: 2px solid currentColor; border-radius: 18px; opacity: 0; animation: studio-wait 1.8s ease-in-out infinite; }
@@ -223,10 +236,13 @@
 .studio-check-note { font-weight: 400; color: var(--muted-foreground); }
 .studio-check.is-failed .studio-check-note { color: inherit; }
 
-.studio-stage.is-compact { padding-top: 14px; padding-bottom: 10px; }
+.studio-stage.is-compact { padding-top: 14px; padding-bottom: 12px; }
 .studio-stage.is-compact .studio-rail { padding-bottom: 6px; }
 .studio-caption-line { min-height: 18px; margin-bottom: 12px; overflow: hidden; font-size: 12.5px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-.studio-stage.is-compact .studio-caption-line { margin-bottom: 0; }
+.studio-stage.is-compact .studio-caption-line { margin-bottom: 8px; }
+/* The four parts of the selected turn, in one line under the compact diagram */
+.studio-checks-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; }
+.studio-checks-row .studio-check { font-size: 12px; }
 
 /* Timeline */
 .studio-group { display: flex; flex-direction: column; gap: 6px; min-width: max-content; padding: 6px 8px 8px; border: 1px solid transparent; border-radius: 8px; background: #f3f6fa; }
@@ -259,48 +275,53 @@
 @keyframes studio-fade { from { transform: translateY(3px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes studio-wait { 0%, 100% { transform: scale(.94); opacity: 0; } 50% { transform: scale(1); opacity: .35; } }
 
-/* ── Journey ─────────────────────────────────────────────── */
-.journey-section {
-  --actor: var(--primary); --actor-soft: var(--accent);
-  position: relative; border: 1px solid var(--border); border-left: 3px solid var(--actor); border-radius: 10px;
-  background: var(--card); transition: box-shadow .15s, border-color .15s;
+/* ── Journey timeline ────────────────────────────────────── */
+/* A continuous line of steps. Selected = tint + cobalt bar; hover = gray; focus = ring; live = pulsing dot + label. */
+.tl { position: relative; }
+.tl-item { --actor: var(--runtime); --actor-soft: var(--runtime-soft); position: relative; scroll-margin-top: 64px; }
+.tl-item.is-model { --actor: var(--model); --actor-soft: var(--model-soft); }
+.tl-item.is-sandbox { --actor: var(--sandbox); --actor-soft: var(--sandbox-soft); }
+.tl-item:not(:last-child)::before {
+  content: ""; position: absolute; z-index: 0; left: 22px; top: 30px; bottom: -6px; width: 1px; background: var(--border);
 }
-.journey-section.is-model { --actor: var(--model); --actor-soft: var(--model-soft); }
-.journey-section.is-sandbox { --actor: var(--sandbox); --actor-soft: var(--sandbox-soft); }
-.journey-section.is-selected {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--actor) 18%, transparent); border-color: color-mix(in srgb, var(--actor) 60%, var(--border));
-  border-left-width: 5px; border-left-color: var(--actor); background: color-mix(in srgb, var(--actor-soft) 30%, var(--card));
+.tl-head {
+  position: relative; z-index: 1; display: flex; width: 100%; align-items: flex-start; gap: 10px; padding: 7px 10px;
+  border-radius: 8px; text-align: left; transition: background-color .12s;
 }
-.journey-head {
-  display: flex; width: 100%; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 8px 8px 0 0; text-align: left;
+.tl-head:hover { background: var(--muted); }
+.tl-node {
+  display: grid; flex-shrink: 0; place-items: center; width: 24px; height: 24px; margin-top: 1px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--card); color: var(--actor);
 }
-.journey-head:hover { background: color-mix(in srgb, var(--actor-soft) 60%, transparent); }
-.journey-head.is-current { background: var(--actor-soft); }
-.journey-head[aria-current="step"] { box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--actor) 25%, transparent); }
-.journey-icon {
-  display: grid; flex-shrink: 0; place-items: center; width: 24px; height: 24px; border-radius: 7px;
-  background: var(--actor-soft); color: var(--actor);
-}
-.journey-rows { display: flex; flex-direction: column; gap: 1px; padding: 0 6px 6px 22px; }
-.journey-row, .journey-more {
+.tl-title { display: block; font-size: 13.5px; line-height: 1.4; font-weight: 600; color: var(--foreground); }
+.tl-purpose { font-weight: 400; color: var(--muted-foreground); }
+.tl-summary { display: block; margin-top: 1px; font: 12px/1.45 var(--font-mono); overflow-wrap: anywhere; }
+.tl-item.is-selected > .tl-head { background: var(--accent); box-shadow: inset 3px 0 0 var(--primary); }
+.tl-item.is-selected > .tl-head .tl-node { border-color: var(--actor); background: var(--actor-soft); }
+.tl-item.is-selected > .tl-head .tl-title { color: var(--accent-foreground); }
+/* When one event of the step is selected, the bar moves to that event's row */
+.tl-item.is-selected.has-event > .tl-head { box-shadow: none; }
+.tl-events { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px 34px; padding-left: 8px; border-left: 1px solid var(--border); background: var(--card); }
+.tl-events-label { padding: 6px 8px 2px; }
+.tl-row, .tl-more {
   display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 8px; border-radius: 6px;
-  font-size: 12.5px; text-align: left; color: var(--foreground);
+  font-size: 13px; text-align: left; color: var(--foreground);
 }
-.journey-row:hover, .journey-more:hover { background: var(--muted); }
-.journey-row.is-technical { padding-left: 20px; color: var(--muted-foreground); font-size: 12px; }
-.journey-row.is-current { background: var(--actor-soft); font-weight: 600; box-shadow: inset 2px 0 0 var(--actor); }
-.journey-row.is-warn { color: var(--warning); }
-.journey-row.is-error { color: var(--destructive); }
-.journey-row.is-feedback.tone-fix { color: var(--destructive); }
-.journey-row.is-feedback.tone-review { color: var(--success); }
-.journey-dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 999px; background: color-mix(in srgb, var(--actor) 55%, transparent); }
-.journey-row.is-current .journey-dot { background: var(--actor); }
-.journey-row.is-technical .journey-dot { width: 4px; height: 4px; background: #cbd5e1; }
-.journey-more { font-size: 11.5px; color: var(--muted-foreground); }
-.journey-inline { margin: 0 6px 6px; border-top: 1px solid var(--border); border-radius: 0 0 8px 8px; background: #fbfcfe; }
-.journey-head:focus-visible, .journey-row:focus-visible, .journey-more:focus-visible {
-  outline: 2px solid var(--ring); outline-offset: 1px;
-}
+.tl-row:hover, .tl-more:hover { background: var(--muted); }
+.tl-row.is-technical { color: var(--muted-foreground); font-size: 12.5px; }
+.tl-row.is-current { background: var(--accent); color: var(--accent-foreground); font-weight: 600; box-shadow: inset 3px 0 0 var(--primary); }
+.tl-row.is-warn { color: var(--warning); }
+.tl-row.is-error { color: var(--destructive); }
+.tl-row.is-feedback.tone-fix { color: var(--destructive); }
+.tl-row.is-feedback.tone-review { color: var(--success); }
+.tl-dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 999px; background: color-mix(in srgb, var(--actor) 55%, transparent); }
+.tl-row.is-technical .tl-dot { width: 4px; height: 4px; background: #c3cad6; }
+.tl-more { font-size: 12.5px; color: var(--muted-foreground); }
+.tl-live { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 12.5px; color: var(--primary); }
+.tl-inline { --inspector-pad: 16px; position: relative; z-index: 1; margin: 4px 0 10px; padding: 16px; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+/* The flow diagram spans the inspector edge to edge, whatever its padding */
+.inspector-bleed { margin-inline: calc(var(--inspector-pad, 20px) * -1); }
+.tl-head:focus-visible, .tl-row:focus-visible, .tl-more:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 
 @media (max-width: 639px) {
   .studio-panes { grid-template-columns: minmax(0, 1fr); }
@@ -310,7 +331,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .studio-stage *, .studio-caption, .studio-tick, .studio-check-mark, .journey-section, .journey-section * { animation: none !important; transition: none !important; }
+  .studio-stage *, .studio-caption, .studio-tick, .studio-check-mark, .tl * { animation: none !important; transition: none !important; }
   .studio-wait { opacity: .3; }
   .animate-spin, .animate-pulse, [class*="animate-[progress"] { animation: none !important; }
   /* Sheets (menu, examples) appear and disappear without sliding or fading */

@@ -26,8 +26,9 @@ interface Props {
 const TONE = { ok: "text-success", bad: "text-destructive", warn: "text-warning", muted: "text-muted-foreground" } as const;
 
 /**
- * The journey: one entry per step of the loop (model call, code run, runtime check...). Only the selected step lists
- * its recorded events, so the list stays short; bookkeeping events stay behind a disclosure inside it.
+ * The journey as one continuous timeline: one entry per step of the loop (model call, code run, runtime check...).
+ * Steps are the navigation level. Only the selected step lists its recorded events, and bookkeeping events stay
+ * behind a disclosure inside it.
  */
 export function JourneyList({ run, sections, selected, eventLevel, revealed, liveIndex, liveText, onSelectSection, onSelectEvent, inline }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -50,7 +51,7 @@ export function JourneyList({ run, sections, selected, eventLevel, revealed, liv
     target.click();
   }
 
-  return <ol className="space-y-1.5" aria-label="Journey steps" onKeyDown={onKey}>
+  return <ol className="tl space-y-0.5" aria-label="Journey steps" onKeyDown={onKey}>
     {visible.map(section => {
       const Icon = ACTOR_ICON[section.actor];
       const isSel = section === selectedSection;
@@ -58,40 +59,40 @@ export function JourneyList({ run, sections, selected, eventLevel, revealed, liv
       const summary = sectionSummary(section, run, revealed, sections);
       const main = section.main.filter(s => s.index <= revealed);
       const technical = section.technical.filter(s => s.index <= revealed);
-      const count = main.length + technical.length;
       const open = expanded.has(section.key) || (eventLevel && isSel && technical.some(s => s.index === selected));
-      return <li key={section.key} data-section={section.key} className={cn("journey-section", `is-${section.actor}`, isSel && "is-selected")}>
+      const toggle = () => setExpanded(prev => {
+        const next = new Set(prev);
+        if (next.has(section.key)) next.delete(section.key); else next.add(section.key);
+        return next;
+      });
+      return <li key={section.key} data-section={section.key}
+        className={cn("tl-item", `is-${section.actor}`, isSel && "is-selected", isSel && eventLevel && "has-event")}>
         <button type="button" data-journey-head onClick={() => onSelectSection(section)}
-          aria-current={isSel && !eventLevel ? "step" : undefined} aria-expanded={isSel}
-          className={cn("journey-head", isSel && "is-current")}>
-          <span className="journey-icon" aria-hidden><Icon className="size-3.5" /></span>
+          aria-current={isSel && !eventLevel ? "step" : undefined} aria-expanded={isSel} className="tl-head">
+          <span className="tl-node" aria-hidden><Icon className="size-3.5" /></span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[13px] leading-snug font-semibold">
-              {section.title}<span className="font-normal text-muted-foreground"> — {section.purpose}</span>
-            </span>
-            {summary && <span className={cn("mt-0.5 block truncate font-mono text-[11px]", TONE[summary.tone])}>{summary.text}</span>}
-            {live && liveText && <span className="mt-0.5 flex items-center gap-1.5 truncate text-[11.5px] text-primary">
-              <span className="studio-dot bg-primary animate-pulse" aria-hidden />{liveText}</span>}
+            <span className="tl-title">{section.title} <span className="tl-purpose">· {section.purpose}</span></span>
+            {summary && <span className={cn("tl-summary", TONE[summary.tone])}>{summary.text}</span>}
+            {live && <span className="tl-live"><span className="studio-dot bg-primary animate-pulse" aria-hidden />
+              <span className="font-semibold">Now</span><span className="min-w-0 truncate">{liveText || "in progress"}</span></span>}
           </span>
-          {!isSel && count > 0 && <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground" title="Recorded events in this step">
-            {count} event{count === 1 ? "" : "s"}</span>}
         </button>
-        {isSel && count > 0 && <div className="journey-rows" aria-label={`Recorded events in ${section.title}`}>
+        {isSel && (main.length + technical.length) > 0 && <div className="tl-events" role="group" aria-label={`Recorded events in ${section.title}`}>
+          <p className="tl-events-label eyebrow" title="Select an event to see the state at that moment">Recorded events</p>
           {main.map(s => <Row key={s.key} step={s} selected={eventLevel && s.index === selected} onSelect={onSelectEvent} />)}
           {technical.length > 0 && <>
-            <button type="button" aria-expanded={open} className="journey-more"
-              onClick={() => setExpanded(prev => { const next = new Set(prev); if (next.has(section.key)) next.delete(section.key); else next.add(section.key); return next; })}>
-              <ChevronRight className={cn("size-3 transition-transform", open && "rotate-90")} />
+            <button type="button" aria-expanded={open} className="tl-more" onClick={toggle}>
+              <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} aria-hidden />
               {open ? "Hide" : "Show"} {technical.length} technical event{technical.length === 1 ? "" : "s"}
               {section.formatRetries > 0 && <span className="text-warning"> · resent after invalid JSON</span>}
             </button>
             {open && technical.map(s => <Row key={s.key} step={s} technical selected={eventLevel && s.index === selected} onSelect={onSelectEvent} />)}
           </>}
         </div>}
-        {isSel && inline && <div className="journey-inline">{inline}</div>}
+        {isSel && inline && <div className="tl-inline">{inline}</div>}
       </li>;
     })}
-    {hidden > 0 && <li className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+    {hidden > 0 && <li className="ml-[34px] px-3 py-2 text-[12.5px] text-muted-foreground">
       {hidden} more recorded event{hidden === 1 ? "" : "s"} · not played yet</li>}
   </ol>;
 }
@@ -100,10 +101,10 @@ function Row({ step, selected, technical, onSelect }: { step: StudioStep; select
   const feedback = step.beat === "send" && (step.intent === "fix" || step.intent === "review");
   return <button type="button" data-step={step.index} onClick={() => onSelect(step.index)}
     aria-current={selected ? "true" : undefined}
-    className={cn("journey-row", selected && "is-current", technical && "is-technical",
+    className={cn("tl-row", selected && "is-current", technical && "is-technical",
       step.level === "ERROR" && "is-error", step.level === "WARN" && step.beat !== "send" && "is-warn", feedback && `is-feedback tone-${step.intent}`)}>
-    {feedback ? <CornerDownRight className="size-3 shrink-0" aria-hidden /> : <span className="journey-dot" aria-hidden />}
-    <span className="min-w-0 flex-1 truncate">{step.title}</span>
-    <time dateTime={step.ts} className="shrink-0 font-mono text-[10.5px] text-muted-foreground">{stepTime(step.ts).slice(0, 8)}</time>
+    {feedback ? <CornerDownRight className="size-3 shrink-0" aria-hidden /> : <span className="tl-dot" aria-hidden />}
+    <span className="min-w-0 flex-1 break-words">{step.title}</span>
+    <time dateTime={step.ts} className="shrink-0 font-mono text-[11px] font-normal text-muted-foreground">{stepTime(step.ts).slice(0, 8)}</time>
   </button>;
 }

@@ -187,7 +187,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
   }
 
   return (
-    <div className="rounded-xl border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+    <div className="surface">
       <div className="p-4 pb-3 sm:p-5 sm:pb-3">
         <Label htmlFor="prompt" className="mb-2 text-sm font-semibold">
           What should the agent do?

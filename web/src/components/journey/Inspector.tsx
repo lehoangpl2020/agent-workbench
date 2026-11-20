@@ -30,34 +30,40 @@ interface Props {
   liveEdge: boolean;
   now: number;
   onSelectEvent: (index: number) => void;
+  /** The flow diagram, shown as a band right under the step's header (wide layouts). */
+  stage?: React.ReactNode;
 }
 
 const TONE = { ok: "text-success", bad: "text-destructive", warn: "text-warning", muted: "text-muted-foreground" } as const;
 
 export function Inspector(props: Props) {
   const { run, step, section, upto, eventLevel, revealed, onSelectEvent } = props;
-  if (!step || !section) return <Empty text={run.status === "running" || run.status === "pending"
-    ? "Waiting for the first event from the backend." : "No recorded activity for this run."} />;
+  if (!step || !section) return <div className="space-y-4">
+    {props.stage && <div className="inspector-bleed">{props.stage}</div>}
+    <Empty text={run.status === "running" || run.status === "pending"
+      ? "Waiting for the first event from the backend." : "No recorded activity for this run."} />
+  </div>;
   const summary = sectionSummary(section, run, upto, props.sections);
   const events = section.steps.filter(s => s.index <= revealed);
   const k = events.indexOf(step);
-  return <div className="space-y-4 [overflow-wrap:anywhere]">
-    <header className="space-y-1.5">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+  return <div className="divide-y [overflow-wrap:anywhere] [&>*]:py-4 [&>*:first-child]:pt-0 [&>*:last-child]:pb-0">
+    <header className="space-y-2">
+      <p className="eyebrow">{eventLevel ? "Selected event" : "Selected step"} · evidence recorded up to this point</p>
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
         <ActorChip actor={section.actor} />
-        <h3 className="text-base leading-snug font-semibold">{section.title}
-          <span className="font-normal text-muted-foreground"> — {section.purpose}</span></h3>
-        {summary && <span className={cn("ml-auto font-mono text-xs", TONE[summary.tone])}>{summary.text}</span>}
+        <h3 className="text-lg leading-snug font-semibold tracking-tight">{section.title}
+          <span className="font-normal text-muted-foreground"> · {section.purpose}</span></h3>
+        {summary && <span className={cn("ml-auto font-mono text-[13px]", TONE[summary.tone])}>{summary.text}</span>}
       </div>
-      <p className="text-[13px] leading-relaxed text-muted-foreground">{sectionLead(section, run)}</p>
-      {eventLevel && <div className="flex items-start gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+      <p className="text-sm leading-relaxed text-muted-foreground">{sectionLead(section, run)}</p>
+      {eventLevel && <div className="flex items-start gap-2 rounded-lg border border-primary/25 bg-accent/50 px-3 py-2">
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-muted-foreground">
             <span className="font-semibold tracking-wide uppercase">Event {k + 1} of {events.length} in this step</span>
             <time dateTime={step.ts} className="font-mono">{stepTime(step.ts)}</time>
           </p>
-          <p className={cn("text-[13px] font-medium", step.level === "ERROR" && "text-destructive", step.level === "WARN" && step.beat !== "send" && "text-warning")}>{step.title}</p>
-          <p className="text-xs text-muted-foreground">{explain(step, run)}</p>
+          <p className={cn("text-sm font-medium", step.level === "ERROR" && "text-destructive", step.level === "WARN" && step.beat !== "send" && "text-warning")}>{step.title}</p>
+          <p className="text-[13px] leading-relaxed text-muted-foreground">{explain(step, run)}</p>
         </div>
         <div className="flex shrink-0 gap-0.5">
           <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
@@ -69,9 +75,10 @@ export function Inspector(props: Props) {
       {step.synthetic && <p className="flex gap-1.5 text-[11.5px] text-muted-foreground"><Info className="mt-px size-3 shrink-0" />
         Rebuilt from the run record; no detailed log entry exists for this event (partial history).</p>}
     </header>
+    {props.stage && <div className="inspector-bleed py-0!">{props.stage}</div>}
     <Body {...props} step={step} section={section} n={section.iteration} />
-    {section.kind !== "end" && <Block icon={ArrowRight} label="What happens next">
-      <p className="text-[13px] leading-relaxed">{nextTransition(section, props.sections, run, upto)}</p>
+    {section.kind !== "end" && <Block icon={ArrowRight} label="Next · why the loop moves on">
+      <p className="text-sm leading-relaxed">{nextTransition(section, props.sections, run, upto)}</p>
     </Block>}
     {eventLevel && step.log && <RecordedEntry step={step} />}
   </div>;
@@ -87,8 +94,8 @@ function Body({ run, steps, section, upto, seen, liveEdge, now, onSelectEvent, n
     case "setup": {
       const d = section.steps[0]?.log?.data ?? {};
       return <Block icon={LogIn} label="Input">
-        <p className="mb-1 text-xs text-muted-foreground">Your task</p>
-        <p className="rounded-md bg-muted/60 px-2.5 py-2 text-[13px] break-words whitespace-pre-wrap">{run.prompt}</p>
+        <p className="text-xs text-muted-foreground">Your task</p>
+        <p className="rounded-md bg-muted/60 px-3 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap">{run.prompt}</p>
         <Meta rows={[["Provider", String(d.provider ?? run.provider_name ?? run.provider ?? "not recorded")],
           ["Model", String(d.model ?? run.model ?? "—")], ["Sandbox", String(d.executor ?? run.executor ?? "—")],
           ["Max code runs", String(d.max_iterations ?? run.max_iterations)], ["Timeout", `${d.timeout_seconds ?? run.timeout_seconds}s per code run`]]} />
@@ -109,7 +116,7 @@ function Body({ run, steps, section, upto, seen, liveEdge, now, onSelectEvent, n
           <ModelInput key={section.key} run={run} section={section} upto={upto} onSelect={onSelectEvent} />
         </Block>
         <Block icon={LogOut} label="Output · what the model returned">
-          {done ? <p className="rounded-md bg-success-soft px-3 py-2 text-[13px] text-success">Replied <strong>DONE</strong>: no code was returned, so nothing more runs.</p>
+          {done ? <p className="rounded-md bg-success-soft px-3 py-2 text-sm text-success">Replied <strong>DONE</strong>: no code was returned, so nothing more runs.</p>
           : returned && it ? <>
             {it.explanation && <Quote text={it.explanation} />}
             {it.code ? <CodeView code={it.code} language={it.language} title={`${iterFile(n)}${section.finalReview ? " · not executed" : ""}`} />
@@ -141,7 +148,7 @@ function Body({ run, steps, section, upto, seen, liveEdge, now, onSelectEvent, n
       const installs = reached.filter(s => s.beat === "install");
       return <>
         <Block icon={LogIn} label="Input · the code to run">
-          <p className="mb-2 text-xs text-muted-foreground">Written by the model in Model call {n}; the runtime saved it as <code className="font-mono">code/{iterFile(n)}</code>.</p>
+          <p className="text-[13px] text-muted-foreground">Written by the model in Model call {n}; the runtime saved it as <code className="font-mono">code/{iterFile(n)}</code>.</p>
           {it?.code ? <Collapsible label={`${iterFile(n)} · ${it.code.split("\n").length} lines`}>
             <CodeView code={it.code} language={it.language} title={iterFile(n)} /></Collapsible>
             : <Empty text="No code is recorded for this code run." />}
@@ -175,11 +182,11 @@ function Body({ run, steps, section, upto, seen, liveEdge, now, onSelectEvent, n
         </Block>
         <Block icon={Scale} label="Rule applied · by the runtime, not the model">
           {done && it ? <>
-            <p className={cn("rounded-md px-3 py-2 text-[13px]", it.exit_code === 0 ? "bg-success-soft text-success" : "bg-danger-soft text-destructive")}>
+            <p className={cn("rounded-md px-3 py-2 text-sm", it.exit_code === 0 ? "bg-success-soft text-success" : "bg-danger-soft text-destructive")}>
               {decision}</p>
             {it.false_success && <p className="text-xs leading-relaxed text-warning">{FALSE_SUCCESS_NOTE}</p>}
           </> : <Waiting text="Not recorded yet at this event." />}
-          <p className="text-xs text-muted-foreground">Code runs used: {used} of {run.max_iterations}.</p>
+          <p className="text-[13px] text-muted-foreground">Code runs used: {used} of {run.max_iterations}.</p>
           <details className="group text-xs">
             <summary className="inline-flex cursor-pointer list-none items-center gap-1 font-medium text-primary hover:underline">
               <ChevronRight className="size-3 transition-transform group-open:rotate-90" />The full rule</summary>
@@ -204,16 +211,16 @@ function EndBody({ run, steps }: { run: RunDetail; steps: StudioStep[] }) {
   const kept = [...run.iterations].reverse().find(i => i.exit_code === 0);
   return <>
     <Block icon={LogOut} label="Why the run stopped">
-      <div className={cn("max-h-48 overflow-auto rounded-lg border px-3 py-2.5 text-[13px]", TONE_CLASSES[meta.tone])}>
+      <div className={cn("max-h-48 overflow-auto rounded-lg border px-3 py-2.5 text-sm leading-relaxed whitespace-pre-wrap", TONE_CLASSES[meta.tone])}>
         <strong className="font-semibold">{meta.label}.</strong> {run.message || "No reason was recorded."}
       </div>
-      {finished && <p className="text-[13px] leading-relaxed">{explain(finished, run)}</p>}
+      {finished && <p className="text-sm leading-relaxed">{explain(finished, run)}</p>}
     </Block>
     <Block icon={ArrowRight} label="Result">
-      <p className="text-[13px] leading-relaxed">
+      <p className="text-sm leading-relaxed">
         {kept ? <>The kept output is the stdout of code run {codeRunNumber(run, kept.number)}{run.status === "success" ? "" : " (a partial result)"}.</>
           : <>No code run succeeded, so no output was kept.</>}{" "}
-        <button type="button" className="font-medium text-primary hover:underline"
+        <button type="button" className="text-link"
           onClick={() => document.getElementById("run-result")?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}>
           Show it in Run result</button>
       </p>
@@ -224,13 +231,13 @@ function EndBody({ run, steps }: { run: RunDetail; steps: StudioStep[] }) {
 function RecordedEntry({ step }: { step: StudioStep }) {
   const log = step.log!;
   const data = Object.entries(log.data).filter(([k]) => k !== "request");
-  return <details className="group rounded-lg border bg-muted/30 text-xs">
-    <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 font-medium text-muted-foreground hover:text-foreground">
+  return <details className="group text-[13px]">
+    <summary className="flex cursor-pointer list-none flex-wrap items-center gap-1.5 rounded py-1 font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
       <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />Recorded log entry
-      <span className="ml-auto font-mono font-normal">#{log.id} · {log.source} · {log.level}</span>
+      <span className="ml-auto font-mono text-xs font-normal">#{log.id} · {log.source} · {log.level}</span>
     </summary>
-    <div className="space-y-1.5 border-t px-3 py-2">
-      <p className="font-mono break-words">{log.message}</p>
+    <div className="mt-2 space-y-2 rounded-lg border bg-muted/30 px-3 py-2.5">
+      <p className="font-mono text-[12.5px] break-words">{log.message}</p>
       {data.length > 0 && <Meta rows={data.map(([k, v]) => [k, typeof v === "object" ? JSON.stringify(v) : String(v)])} />}
       {"request" in log.data && <p className="text-muted-foreground">request: shown above under Input.</p>}
     </div>
@@ -252,21 +259,21 @@ export function FileGallery({ files }: { files: VisibleFile[] }) {
       </figcaption>
     </figure>)}
     {others.length > 0 && <ArtifactList files={others.map(f => ({ ...f, download_url: f.download }))} caption="Files saved by this code run" />}
-    <p className="text-[11.5px] text-muted-foreground">A model only sees what its recorded input contains: file names and sizes, never the pixels.</p>
+    <p className="text-xs text-muted-foreground">A model only sees
+ what its recorded input contains: file names and sizes, never the pixels.</p>
   </div>;
 }
 
 function Block({ icon: Icon, label, children }: { icon: typeof Info; label: string; children: React.ReactNode }) {
-  return <section className="space-y-2">
-    <h4 className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-      <Icon className="size-3.5" />{label}</h4>
+  return <section className="space-y-2.5">
+    <h4 className="eyebrow flex items-center gap-1.5"><Icon className="size-3.5" aria-hidden />{label}</h4>
     {children}
   </section>;
 }
 
 function Collapsible({ label, children }: { label: string; children: React.ReactNode }) {
   return <details className="group">
-    <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md border px-3 py-2 font-mono text-xs hover:bg-muted/50">
+    <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md border px-3 py-2 font-mono text-[13px] hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring">
       <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />{label}</summary>
     <div className="mt-2">{children}</div>
   </details>;
@@ -274,25 +281,25 @@ function Collapsible({ label, children }: { label: string; children: React.React
 
 function Quote({ text, streaming }: { text: string; streaming?: boolean }) {
   return <figure className="space-y-1">
-    <figcaption className="text-[11px] text-muted-foreground">The model’s short explanation (its <code className="font-mono">thinking</code> field){streaming ? " · streaming" : ""}, not its hidden reasoning</figcaption>
-    <blockquote className="border-l-2 border-[var(--model)]/40 pl-2.5 text-[13px] leading-relaxed">{text}</blockquote>
+    <figcaption className="text-xs text-muted-foreground">The model’s short explanation (its <code className="font-mono">thinking</code> field){streaming ? " · streaming" : ""}, not its hidden reasoning</figcaption>
+    <blockquote className="border-l-2 border-[var(--model)]/40 pl-3 text-sm leading-relaxed">{text}</blockquote>
   </figure>;
 }
 
 function Meta({ rows }: { rows: [string, string][] }) {
   if (!rows.length) return null;
-  return <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
-    {rows.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="truncate font-mono" title={v}>{v}</dd></div>)}
+  return <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-1 text-[13px]">
+    {rows.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="font-mono text-[12.5px] break-words">{v}</dd></div>)}
   </dl>;
 }
 
 function Waiting({ text }: { text: string }) {
-  return <p className="flex items-start gap-2 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-    <span className="studio-dot mt-1 bg-primary" aria-hidden />{text}</p>;
+  return <p className="flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2 text-[13px] text-muted-foreground">
+    <span className="studio-dot mt-1.5 bg-primary" aria-hidden />{text}</p>;
 }
 
 function Empty({ text }: { text: string }) {
-  return <p className="rounded-lg border border-dashed px-3 py-2.5 text-[13px] text-muted-foreground">{text}</p>;
+  return <p className="rounded-lg bg-muted/60 px-3 py-2.5 text-[13px] text-muted-foreground">{text}</p>;
 }
 
 function num(v: unknown): number | null {

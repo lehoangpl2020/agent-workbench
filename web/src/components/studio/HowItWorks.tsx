@@ -8,7 +8,7 @@ export function HowItWorks() {
     { Icon: SquareTerminal, title: "Python sandbox", file: "execution/", text: "Runs each iter_NN.py with a timeout and returns stdout, stderr and the exit code. Missing packages may be installed and the code re-run." },
     { Icon: FolderOutput, title: "Artifacts", file: "storage/workspace.py", text: "Files written to /workspace/output are collected after each execution and kept per iteration, so replay shows the version that existed at that step." },
   ];
-  return <details className="studio-card group">
+  return <details className="surface group">
     <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold sm:px-5">
       How it works
       <span className="text-xs font-normal text-muted-foreground">one agent · one loop · four parts</span>
@@ -16,10 +16,10 @@ export function HowItWorks() {
     </summary>
     <div className="grid gap-4 border-t px-4 py-4 sm:grid-cols-2 sm:px-5">
       {items.map(({ Icon, title, file, text }) => <div key={title} className="flex gap-3">
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent text-primary"><Icon className="size-4" /></span>
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-foreground/70"><Icon className="size-4" /></span>
         <div>
           <p className="text-sm font-semibold">{title} <span className="font-mono text-[11px] font-normal text-muted-foreground">{file}</span></p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{text}</p>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{text}</p>
         </div>
       </div>)}
       <p className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">

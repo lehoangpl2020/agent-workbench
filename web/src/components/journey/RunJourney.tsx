@@ -34,6 +34,8 @@ interface Props {
   stopping: boolean;
   onStop: () => void;
   onIterationChange?: (iteration: number | null) => void;
+  /** Replay started or ended: the run-level result is then concealed so later output does not leak in. */
+  onReplayChange?: (replaying: boolean) => void;
   ref?: Ref<JourneyHandle>;
 }
 
@@ -71,7 +73,7 @@ function useWidth<T extends HTMLElement>() {
  * list visit; its evidence covers everything recorded in it. An *event* (one log entry inside a step) is chosen by
  * clicking a row, and is what Replay plays through. Both keep one selected index, so list, diagram and inspector agree.
  */
-export function RunJourney({ run, logs, connected, logError, historyLoaded, retryLogs, stopping, onStop, onIterationChange, ref }: Props) {
+export function RunJourney({ run, logs, connected, logError, historyLoaded, retryLogs, stopping, onStop, onIterationChange, onReplayChange, ref }: Props) {
   const { steps, partial } = useMemo(() => historyLoaded ? buildSteps(run, logs) : EMPTY, [historyLoaded, run, logs]);
   const sections = useMemo(() => buildJourney(run, steps), [run, steps]);
   const bySection = useMemo(() => sectionIndex(sections), [sections]);
@@ -174,33 +176,55 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
   const liveText = running ? run.activity || undefined : undefined;
   const stepPos = section ? visible.indexOf(section) + 1 : 0;
   const eventPos = order.indexOf(selected) + 1;
-  const position = !step ? (historyLoaded ? "No steps yet" : "Loading recorded activity…")
-    : replay ? `Recorded event ${eventPos || "–"} of ${order.length}${section ? ` · ${section.title}` : ""}`
-    : `Step ${stepPos} of ${visible.length}${section ? ` · ${section.title}` : ""}${eventLevel ? " · one event selected" : ""}`;
+  // The step's name leads; positions are secondary (replay moves by recorded event, explore by step)
+  const where = !step ? null : section ? <><span className="font-semibold text-foreground">{section.title}</span>
+    <span className="text-muted-foreground"> · {section.purpose}</span></> : null;
+  const count = !step ? (historyLoaded ? "No steps yet" : "Loading recorded activity…")
+    : replay ? `event ${eventPos || "–"} of ${order.length}` : `step ${stepPos} of ${visible.length}${eventLevel ? " · one event selected" : ""}`;
   const unit = replay ? "event" : "step";
 
-  const stage = <div className={cn("studio-card overflow-hidden", replay && !clock.playing && "is-paused")}>
-    <div className="flex items-center gap-2 border-b px-4 py-1.5">
-      <h3 className="text-xs font-semibold">Flow</h3>
+  useEffect(() => { onReplayChange?.(replay); }, [replay, onReplayChange]);
+
+  // Only after the user picks a step (never during live follow or replay playback): keep its evidence in view.
+  // Wide: bring the inspector's top back when the page has scrolled past it. Narrow: the previous step collapses
+  // when another opens, so put the chosen step near the top when it moved out of the upper half of the screen.
+  const evidence = useRef<HTMLDivElement>(null);
+  const picking = useRef(false);
+  useEffect(() => {
+    if (!picking.current) return;
+    picking.current = false;
+    const el = wide ? evidence.current : section ? box.current?.querySelector<HTMLElement>(`[data-section="${section.key}"]`) : null;
+    if (!el) return;
+    const top = el.getBoundingClientRect().top;
+    if (top < 56 || (!wide && top > window.innerHeight * 0.5)) el.scrollIntoView({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" });
+  }, [selected, wide, section]);
+
+  const stage = <div className={cn(replay && !clock.playing && "is-paused")}>
+    <div className="flex items-center gap-2 border-b bg-[#fafbfc] px-4 py-1.5">
+      <h3 className="eyebrow">Flow</h3>
       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">who holds the data at the selected point</span>
       <button type="button" aria-pressed={panels} onClick={() => { setPanels(!panels); writePref("journey-panels", !panels); }}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+        className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
         {panels ? <PanelTopClose className="size-3.5" /> : <PanelTopOpen className="size-3.5" />}{panels ? "Hide actor panels" : "Actor panels"}</button>
     </div>
     <StudioStage run={run} steps={steps} step={stageStep} seen={seen} animate={animate} speed={replay ? clock.speed : 1}
       liveEdge={liveEdge} now={now} detailed={panels} />
   </div>;
 
+  // The step's identity comes first and the diagram sits right under it, so the evidence stays beside the journey
+  // (wide: its own column; narrow: opened inside the list under the selected step).
   const inspector = <Inspector run={run} steps={steps} sections={sections} section={section} step={step} upto={upto}
-    eventLevel={eventLevel} revealed={revealed} seen={seen} liveEdge={liveEdge} now={now} onSelectEvent={selectEvent} />;
+    eventLevel={eventLevel} revealed={revealed} seen={seen} liveEdge={liveEdge} now={now} onSelectEvent={selectEvent}
+    stage={stage} />;
 
   const list = <JourneyList run={run} sections={sections} selected={selected} eventLevel={eventLevel} revealed={revealed}
-    liveIndex={running ? last : null} liveText={liveText} onSelectSection={selectSection} onSelectEvent={selectEvent}
-    inline={wide ? undefined : <div className="p-3 sm:p-4">{inspector}</div>} />;
+    liveIndex={running ? last : null} liveText={liveText}
+    onSelectSection={s => { picking.current = true; selectSection(s); }} onSelectEvent={i => { picking.current = true; selectEvent(i); }}
+    inline={wide ? undefined : inspector} />;
 
   return <section ref={box} aria-label="Agent journey" className="scroll-mt-2 space-y-3">
     {/* ── Toolbar ── */}
-    <div className="studio-card z-10 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 lg:sticky lg:top-2">
+    <div className="surface z-10 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 lg:sticky lg:top-2">
       {running ? <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold">
         <Radio className={cn("size-4", connected ? "text-destructive" : "text-muted-foreground")} />Live
         {!connected && <span className="text-xs font-normal text-warning">· reconnecting…</span>}
@@ -210,16 +234,16 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
           onClick={() => { if (!replay) { setMode("replay"); clock.restart(); } }}><RotateCcw className="size-3.5" />Replay</button>
       </div>}
 
-      <p className="min-w-0 flex-1 basis-48 truncate text-[13px] text-muted-foreground" aria-live={replay || following ? "polite" : "off"}>
-        {replay && <span className="mr-1.5 rounded bg-accent px-1.5 py-0.5 text-[11px] font-medium text-accent-foreground">Replay · read-only</span>}
-        {following && <span className="mr-1.5 rounded bg-accent px-1.5 py-0.5 text-[11px] font-medium text-accent-foreground">Following live</span>}
-        {position}
+      <p className="min-w-0 flex-1 basis-56 truncate text-[13.5px]" aria-live={replay || following ? "polite" : "off"}>
+        {replay && <span className="mr-2 rounded bg-accent px-1.5 py-0.5 text-[11.5px] font-medium text-accent-foreground">Replay · read-only</span>}
+        {following && <span className="mr-2 rounded bg-accent px-1.5 py-0.5 text-[11.5px] font-medium text-accent-foreground">Following live</span>}
+        {where}{where && <span className="text-muted-foreground"> — </span>}<span className="text-[12.5px] text-muted-foreground tabular-nums">{count}</span>
       </p>
 
       <div className="flex flex-wrap items-center gap-1.5">
         {running && !follow && <Button size="sm" onClick={() => { setFollow(true); setPicked(null); setLevel("step"); }}><LocateFixed />Follow live</Button>}
-        <Button variant="outline" size="sm" onClick={() => goPrev?.()} disabled={!goPrev} aria-label={`Previous ${unit}`}><ChevronLeft />Prev</Button>
-        <Button variant="outline" size="sm" onClick={() => goNext?.()} disabled={!goNext} aria-label={`Next ${unit}`}>Next<ChevronRight /></Button>
+        <Button variant="outline" size="sm" onClick={() => { picking.current = true; goPrev?.(); }} disabled={!goPrev} aria-label={`Previous ${unit}`}><ChevronLeft />Prev</Button>
+        <Button variant="outline" size="sm" onClick={() => { picking.current = true; goNext?.(); }} disabled={!goNext} aria-label={`Next ${unit}`}>Next<ChevronRight /></Button>
         {replay && <>
           <Button size="sm" onClick={clock.toggle} className="w-[104px]">{clock.playing ? <Pause /> : <Play />}{clock.playing ? "Pause" : clock.atEnd ? "Play again" : "Play"}</Button>
           <div className="studio-segment" role="group" aria-label="Playback speed">
@@ -244,24 +268,22 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
       </div>
     </div>
 
-    {logError && <p className="text-xs text-warning">Activity history could not be loaded. <button className="underline" onClick={retryLogs}>Retry</button></p>}
-    {partial && <p className="text-xs text-muted-foreground"><strong className="font-semibold text-foreground">Partial history:</strong> this run was stored with fewer
+    {logError && <p className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning-soft px-3 py-2 text-[13px] text-warning">
+      Activity history could not be loaded. <button className="text-link" onClick={retryLogs}>Retry</button></p>}
+    {partial && <p className="rounded-lg border bg-card px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
+      <strong className="font-semibold text-foreground">Partial history:</strong> this run was stored with fewer
       recorded events (older version, or the end was not logged). Events marked “rebuilt” come from the run record.</p>}
 
     <div ref={area} className="@container">
-      {wide ? <div className="grid grid-cols-[minmax(300px,380px)_minmax(0,1fr)] items-start gap-3">
-        <div ref={scroller} className="studio-card sticky top-16 max-h-[calc(100vh-5rem)] overflow-y-auto p-3">
+      {wide ? <div className="grid grid-cols-[minmax(300px,360px)_minmax(0,1fr)] items-start gap-3">
+        <nav ref={scroller} aria-label="Journey" className="surface sticky top-16 max-h-[calc(100vh-5rem)] overflow-y-auto p-2">
           <JourneyHeader />
           {list}
+        </nav>
+        <div ref={evidence} className="surface min-w-0 scroll-mt-16 overflow-hidden">
+          <aside className="px-5 py-5" aria-label="Selected step">{inspector}</aside>
         </div>
-        <div className="min-w-0 space-y-3">
-          {stage}
-          <aside className="studio-card p-4 sm:p-5" aria-label="Step inspector">{inspector}</aside>
-        </div>
-      </div> : <div className="space-y-3">
-        {stage}
-        <div className="studio-card p-3"><JourneyHeader />{list}</div>
-      </div>}
+      </div> : <nav aria-label="Journey" className="surface p-2"><JourneyHeader />{list}</nav>}
     </div>
 
     <HowItWorks />
@@ -269,8 +291,8 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
 }
 
 function JourneyHeader() {
-  return <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 px-1">
-    <h2 className="text-sm font-semibold">Journey <span className="font-normal text-muted-foreground">· select a step</span></h2>
+  return <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 pt-1.5 pb-2">
+    <h2 className="eyebrow">Journey</h2>
     <ActorLegend />
   </div>;
 }

@@ -87,7 +87,7 @@ export default function App() {
 
   return (
     <div className="flex h-full">
-      {historyOpen && <aside className="hidden w-72 shrink-0 border-r lg:block">{sidebar(true)}</aside>}
+      {historyOpen && <aside className="hidden w-72 shrink-0 border-r bg-sidebar lg:block">{sidebar(true)}</aside>}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left" className="w-72 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
@@ -103,7 +103,8 @@ export default function App() {
           <span className="text-sm font-semibold">Agent Workbench</span>
         </div>
 
-        {!historyOpen && <Button variant="outline" size="sm" className="fixed top-3 left-3 z-20 hidden shadow-sm lg:inline-flex"
+        {!historyOpen && <Button variant="outline" size="sm" className="fixed top-3 left-3 z-20 hidden lg:inline-flex"
+
           onClick={() => toggleHistory(true)} aria-label="Show run history"><PanelLeftOpen /> History</Button>}
         <div className={cn("mx-auto w-full px-4 py-4 sm:px-6 sm:py-6 lg:px-8", runId ? "max-w-[1480px]" : "max-w-5xl",
           !historyOpen && "lg:pt-14")}>
@@ -121,8 +122,8 @@ export default function App() {
           ) : (
             <div className="space-y-6">
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight">New run</h1>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h1 className="text-[26px] font-semibold tracking-tight">New run</h1>
+                <p className="mt-1.5 max-w-[68ch] text-[15px] leading-relaxed text-muted-foreground">
                   The agent writes Python, runs it, reads the result and keeps iterating until the model
                   confirms the task is done.
                 </p>
@@ -167,17 +168,17 @@ function EmptyState({ sandboxed }: { sandboxed: boolean }) {
   const steps = [
     { icon: BrainCircuit, who: "Model", cls: "bg-[var(--model-soft)] text-[var(--model)]",
       text: "Decides what Python to write for your task, how to fix it after an error, and when to reply DONE." },
-    { icon: Workflow, who: "Runtime", cls: "bg-accent text-primary",
+    { icon: Workflow, who: "Runtime", cls: "bg-[var(--runtime-soft)] text-[var(--runtime)]",
       text: "Application code that runs the loop: sends the task and every result to the model, and applies the stop rules." },
     { icon: SquareTerminal, who: "Sandbox", cls: "bg-[var(--sandbox-soft)] text-[var(--sandbox)]",
       text: sandboxed ? "Runs each script in Docker with a real timeout and returns stdout, stderr, the exit code and files."
         : "Runs each script as a local process (not isolated) with a real timeout and returns stdout, stderr, the exit code and files." },
   ];
   return (
-    <div className="rounded-xl border border-dashed bg-card/50 p-5 sm:p-6">
-      <div className="text-sm font-medium">Who does what in a run</div>
-      <p className="mt-1 text-xs text-muted-foreground">After you press Run, the run page shows every recorded step, who performed it, and what was passed between them.</p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+    <section className="border-t pt-6" aria-labelledby="who-does-what">
+      <h2 id="who-does-what" className="eyebrow">Who does what in a run</h2>
+      <p className="mt-1.5 text-sm text-muted-foreground">After you press Run, the run page shows every recorded step, who performed it, and what was passed between them.</p>
+      <div className="mt-4 grid gap-5 sm:grid-cols-3">
         {steps.map((s) => (
           <div key={s.who} className="flex gap-3">
             <div className={cn("grid size-8 shrink-0 place-items-center rounded-lg", s.cls)}>
@@ -185,11 +186,11 @@ function EmptyState({ sandboxed }: { sandboxed: boolean }) {
             </div>
             <div>
               <div className="text-sm font-semibold">{s.who}</div>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{s.text}</p>
+              <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{s.text}</p>
             </div>
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }

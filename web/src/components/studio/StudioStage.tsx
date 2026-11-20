@@ -119,6 +119,7 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
         title="Sandbox" sub={run.executor || "executor"} />
     </div>
     <p className="studio-caption-line" aria-live="off">{caption}</p>
+    {!detailed && n != null && <LoopChecklist run={run} steps={steps} n={n} upto={seen.index} row />}
 
     {detailed && <div className="studio-panes">
       {/* Model */}
@@ -224,9 +225,9 @@ const STATE_TEXT: Record<TurnState, string> = {
 };
 
 /** The four parts of this turn of the loop. Parts that do not apply (DONE, final review) say so instead of looking unfinished. */
-function LoopChecklist({ run, steps, n, upto }: { run: RunDetail; steps: StudioStep[]; n: number; upto: number }) {
+function LoopChecklist({ run, steps, n, upto, row }: { run: RunDetail; steps: StudioStep[]; n: number; upto: number; row?: boolean }) {
   const items = turnChecklist(run, steps, n, upto);
-  return <ol className="space-y-1" aria-label="This turn of the loop">
+  return <ol className={row ? "studio-checks-row" : "space-y-1"} aria-label={`Model call ${n}: parts of this turn of the loop`}>
     {items.map(item => <li key={item.key} className={cn("studio-check", `is-${item.state}`)}>
       <span className="studio-check-mark" aria-hidden>{item.state === "done" ? <Check className="size-2.5" strokeWidth={3} />
         : item.state === "failed" ? <X className="size-2.5" strokeWidth={3} />

@@ -82,6 +82,6 @@ function Message({ title, hint, text, tone, defaultOpen = false }: {
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-lg border border-dashed px-3 py-2.5 text-[13px] text-muted-foreground">{children}</p>;
+  return <p className="rounded-lg bg-muted/60 px-3 py-2.5 text-[13px] leading-relaxed text-muted-foreground">{children}</p>;
 }
 
