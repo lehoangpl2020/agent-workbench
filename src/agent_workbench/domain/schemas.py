@@ -78,6 +78,8 @@ class AgentState(BaseModel):
     model: str = ""
     # The user ticked "Image tool" for this run: the prompt mentions it and its endpoint accepts this run's calls
     image_tool: bool = False
+    # The user ticked "Reasoning": the model is asked to think first and its reasoning is streamed and stored
+    reasoning: bool = False
     status: ExecutionStatus = ExecutionStatus.PENDING
     final_answer: str = ""
     # Short explanation of why the run ended (shown in the UI)
@@ -98,6 +100,9 @@ class AgentRequest(BaseModel):
     model: Optional[str] = Field(default=None, max_length=128)
     # Opt-in per run (default off): lets the code of this run ask the OpenAI image model for pictures. Billed by OpenAI.
     image_tool: Optional[bool] = None
+    # Opt-in per run (default off): show the model's reasoning. Only for models with reasoning in llm/catalog.py
+    # (422 otherwise). Slower, and the reasoning tokens count toward the output limit.
+    reasoning: Optional[bool] = None
 
 
 class AgentResponse(BaseModel):

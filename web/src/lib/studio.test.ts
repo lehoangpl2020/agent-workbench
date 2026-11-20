@@ -222,3 +222,22 @@ describe("artifactFor", () => {
     expect(file.size).toBe(10);
   });
 });
+
+describe("a run with reasoning", () => {
+  // The recorded run with a reasoning entry inserted where the backend writes it: after the call, before the first token
+  const run = clone(fix.run);
+  const logs = clone(fix.logs);
+  const at = logs.findIndex(l => l.data.flow === "first_token");
+  logs.splice(at, 0, { ...logs[at], id: 9999, message: "Model is reasoning (first reasoning token after 0.1s)",
+    data: { flow: "reasoning" } });
+  const { steps } = buildSteps(run, logs);
+  const step = steps.find(s => s.beat === "reasoning")!;
+
+  it("places the reasoning entry as a model step before the answer starts", () => {
+    expect(step).toBeDefined();
+    expect(step.actor).toBe("model");
+    expect(step.title).toBe("Model is reasoning");
+    expect(firstIndex(steps, "reasoning", 1)).toBeLessThan(firstIndex(steps, "first_token", 1));
+    expect(explain(step, run)).toMatch(/never sends it back to the model/);
+  });
+});

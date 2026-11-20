@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Box, ImagePlus, PanelLeftClose, Plus, Search, Terminal, TriangleAlert, X } from "lucide-react";
+import { Box, Brain, ImagePlus, PanelLeftClose, Plus, Search, Terminal, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { AppConfig, RunSummary } from "@/lib/api";
@@ -101,6 +101,7 @@ export function Sidebar({ runs, selectedId, activeRunId, config, error, onNewRun
                   <span className="shrink-0">{meta?.label ?? r.status}</span>
                   <span>·</span>
                   <span className="truncate" title={`${r.provider ?? "provider not recorded"} / ${r.model || "—"}`}>{modelLabel(r)}</span>
+                  {r.reasoning && <Brain className="size-3 shrink-0" aria-label="Reasoning" />}
                   {r.image_tool && <ImagePlus className="size-3 shrink-0" aria-label="Image tool" />}
                 </span>
                 <span className="flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">

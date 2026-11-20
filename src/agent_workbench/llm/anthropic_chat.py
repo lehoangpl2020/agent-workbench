@@ -21,6 +21,8 @@ from agent_workbench.llm.base import (
 # Anthropic SDK behavior, same as its defaults (checked in anthropic 2.10: DEFAULT_MAX_RETRIES = 2, 10 min timeout)
 ANTHROPIC_MAX_RETRIES = 2
 ANTHROPIC_TIMEOUT_SECONDS = 600.0
+# Separates thinking blocks in the reasoning text, as paragraphs
+PARAGRAPH = "\n\n"
 
 
 class AnthropicChat:
@@ -30,7 +32,7 @@ class AnthropicChat:
         self.spec = spec
         self.client = client   # AsyncAnthropic (tests inject a fake client)
 
-    async def stream(self, system, messages, max_tokens, on_text) -> ChatResult:
+    async def stream(self, system, messages, max_tokens, on_text, on_reasoning=None) -> ChatResult:
         import anthropic
 
         params: dict[str, Any] = dict(model=self.spec.id, max_tokens=max_tokens,
@@ -42,12 +44,37 @@ class AnthropicChat:
             # Constrains the reply to the same {thinking, code, language} object OpenAI and Ollama already get.
             # Sent as extra_body so it also works with SDK versions that predate the output_config argument.
             output_config["format"] = {"type": "json_schema", "schema": RESPONSE_SCHEMA}
+        extra: dict[str, Any] = {}
         if output_config:
-            params["extra_body"] = {"output_config": output_config}
+            extra["output_config"] = output_config
+        if "thinking" in self.spec.options:
+            # Only a run with Reasoning on: adaptive thinking with display "summarized", so the thinking blocks carry a
+            # readable summary instead of empty text. Sent as extra_body like output_config, for older SDK versions.
+            extra["thinking"] = self.spec.options["thinking"]
+        if extra:
+            params["extra_body"] = extra
         try:
             async with self.client.messages.stream(**params) as stream:
-                async for chunk in stream.text_stream:
-                    await on_text(chunk)
+                if on_reasoning is None:
+                    async for chunk in stream.text_stream:
+                        await on_text(chunk)
+                else:
+                    # Raw events, so the thinking deltas can be passed on apart from the answer text
+                    thought = False
+                    async for event in stream:
+                        etype = getattr(event, "type", None)
+                        if etype == "content_block_start" and getattr(event.content_block, "type", None) == "thinking":
+                            if thought:   # a later thinking block: keep it apart as a paragraph
+                                await on_reasoning(PARAGRAPH)
+                            continue
+                        if etype != "content_block_delta":
+                            continue
+                        delta = event.delta
+                        if delta.type == "text_delta":
+                            await on_text(delta.text)
+                        elif delta.type == "thinking_delta" and delta.thinking:
+                            thought = True
+                            await on_reasoning(delta.thinking)
                 final = await stream.get_final_message()
         except anthropic.APIStatusError as e:
             raise self._status_error(e) from e
@@ -58,13 +85,16 @@ class AnthropicChat:
                                 f"Cannot reach the Anthropic API ({type(e).__name__}): {e}") from e
 
         text = "".join(b.text for b in final.content if getattr(b, "type", None) == "text")
+        # Thinking blocks are kept apart from the answer: the summary the API returns, never parsed or sent back
+        reasoning = PARAGRAPH.join(b.thinking for b in final.content
+                                if getattr(b, "type", None) == "thinking" and getattr(b, "thinking", ""))
         reason = getattr(final, "stop_reason", None)
         stop = {"end_turn": "end", "stop_sequence": "end", "max_tokens": "max_tokens",
                 "refusal": "refusal"}.get(reason, "other")
         u = getattr(final, "usage", None)
         usage = token_usage(**{f: getattr(u, f, None) for f in (
             "input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")}) if u else {}
-        return ChatResult(text, stop, reason, usage)
+        return ChatResult(text, stop, reason, usage, reasoning=reasoning if on_reasoning is not None else "")
 
     def _status_error(self, e) -> ProviderError:
         status = getattr(e, "status_code", None)

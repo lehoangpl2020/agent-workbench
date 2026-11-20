@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { AlertCircle, ArrowRight, BrainCircuit, CheckCircle2, ImagePlus, ListChecks, Loader2, Play, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
+import { AlertCircle, ArrowRight, Brain, BrainCircuit, CheckCircle2, ImagePlus, ListChecks, Loader2, Play, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ export interface ComposerDraft {
   provider?: string | null;
   model?: string;
   imageTool?: boolean;
+  reasoning?: boolean;
 }
 
 // One image call takes 20-120 s and the code is killed at the execution timeout, so a shorter one cannot work.
@@ -37,6 +38,8 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
   const [timeoutSeconds, setTimeoutSeconds] = useState<number | "">(draft?.timeoutSeconds ?? "");
   // Off by default: every image is billed by OpenAI, so each run has to ask for it
   const [imageTool, setImageTool] = useState<boolean>(draft?.imageTool ?? false);
+  // Off by default: reasoning makes every model call several times slower, so each run has to ask for it
+  const [reasoning, setReasoning] = useState<boolean>(draft?.reasoning ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<{ message: string; activeRunId?: string } | null>(null);
   // The catalog comes from the backend (llm/catalog.py); the frontend keeps no list of its own.
@@ -148,9 +151,12 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
   // "Edit & re-run" can carry a ticked box while the server no longer offers the tool: say so, never tick or drop it silently
   const imageBlocked = imageTool && imageCfg ? !imageCfg.available : false;
   const imageTimeoutTooShort = imageTool && timeoutSeconds !== "" && Number(timeoutSeconds) < IMAGE_TOOL_MIN_TIMEOUT;
+  const canReason = Boolean(modelInfo?.reasoning);
+  // A ticked box with a model that cannot show reasoning (another model chosen, or an old draft): say so, never drop it
+  const reasoningBlocked = reasoning && Boolean(modelInfo) && !canReason;
   const canSubmit =
     prompt.trim().length > 0 && !submitting && !busy && maxIterations !== "" && timeoutSeconds !== "" &&
-    Boolean(modelInfo?.ready) && !imageBlocked;
+    Boolean(modelInfo?.ready) && !imageBlocked && !reasoningBlocked;
 
   function chooseImageTool(on: boolean) {
     setImageTool(on);
@@ -172,6 +178,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
         provider,
         model,
         image_tool: imageTool,
+        reasoning,
       });
       onStarted(run);
     } catch (e) {
@@ -318,6 +325,35 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
           notReady={notReady}
           onRecheck={() => void loadCatalog()}
         />
+        <div className="mt-4 flex items-start gap-2.5 border-t pt-4">
+          <input
+            id="reasoning"
+            type="checkbox"
+            checked={reasoning}
+            // Unsupported and unticked: nothing to turn on. Unsupported but ticked: it must stay untickable.
+            disabled={!modelInfo || (!canReason && !reasoning)}
+            onChange={(e) => setReasoning(e.target.checked)}
+            aria-describedby="reasoning-help"
+            className="mt-0.5 size-4 shrink-0 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+          />
+          <div className="min-w-0 text-xs">
+            <Label htmlFor="reasoning" className="inline-flex items-center gap-1.5 text-sm font-medium">
+              <Brain className="size-4 text-muted-foreground" aria-hidden /> Reasoning
+            </Label>
+            <p id="reasoning-help" className="mt-1 leading-relaxed text-muted-foreground">
+              {modelInfo && !canReason
+                ? `${modelInfo.name} cannot show its reasoning in this app.`
+                : modelInfo?.reasoning_kind === "summary"
+                  ? `Shows, live under each model call, the summary ${providerInfo?.name ?? "the provider"} writes of the model's reasoning; the reasoning itself is never returned. Billed as output tokens. Off unless you tick it.`
+                  : "The model thinks before it answers, and you can read that reasoning live under each model call. Much slower, and the reasoning counts toward a larger output limit. Off unless you tick it."}
+            </p>
+            {reasoningBlocked && (
+              <p className="mt-1 flex items-start gap-1 font-medium text-warning">
+                <TriangleAlert className="mt-px size-3.5 shrink-0" /> This model cannot show reasoning. Untick it, or choose another model.
+              </p>
+            )}
+          </div>
+        </div>
       </Step>
 
       <Step n={3} title={<h2 className="text-[15px] font-semibold">Limits and tools</h2>} hint="Applied by the runtime, not the model.">

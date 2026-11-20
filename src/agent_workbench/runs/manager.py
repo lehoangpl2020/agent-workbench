@@ -89,6 +89,7 @@ class RunManager:
             self.agent.executor.describe(),
             provider=state.provider,
             image_tool=state.image_tool,
+            reasoning=state.reasoning,
         )
 
         active = ActiveRun(run_id=state.session_id, state=state)
@@ -178,6 +179,16 @@ class RunManager:
             run_id, n, "streaming", f"Model is writing code… {data['chars']:,} chars", touch=False
         )
 
+    def _on_reasoning_progress(self, run_id: str, data: dict) -> None:
+        # Stored while it streams, so a refresh (or a Stop mid-reasoning) still shows what arrived
+        n = data["iteration"]
+        self.store.update_iteration(run_id, n, reasoning=data["reasoning"])
+        if data["done"]:
+            # The reasoning is over and the answer is streaming; code_progress takes over once the code starts
+            self.store.set_activity(run_id, n, "streaming", "Model is writing its answer…", touch=False)
+        else:
+            self.store.set_activity(run_id, n, "reasoning", f"Model is reasoning… {data['chars']:,} chars", touch=False)
+
     def _on_code(self, run_id: str, data: dict) -> None:
         self.store.update_iteration(
             run_id, data["iteration"], code=data["code"], language=data["language"], explanation=data["explanation"]
@@ -218,6 +229,7 @@ class RunManager:
         Event.ITERATION: _on_iteration,
         Event.ACTIVITY: _on_activity,
         Event.CODE_PROGRESS: _on_code_progress,
+        Event.REASONING_PROGRESS: _on_reasoning_progress,
         Event.CODE: _on_code,
         Event.MODEL_DONE: _on_model_done,
         Event.RESULT: _on_result,

@@ -47,9 +47,9 @@ class OllamaChat:
             body["think"] = opts["think"]
         return body
 
-    async def stream(self, system, messages, max_tokens, on_text) -> ChatResult:
+    async def stream(self, system, messages, max_tokens, on_text, on_reasoning=None) -> ChatResult:
         body = self.build_body(system, messages, max_tokens)
-        text, last = "", {}
+        text, reasoning, last = "", "", {}
         try:
             async with self.http.stream("POST", f"{self.base_url}/api/chat", json=body) as resp:
                 if resp.status_code >= 400:
@@ -63,8 +63,14 @@ class OllamaChat:
                         continue
                     if chunk.get("error"):
                         raise ProviderError(PROVIDER_ERROR, self.provider, f"Ollama error: {chunk['error']}")
-                    # Take only the content; if the model has thinking, that part is NOT shown/appended
-                    delta = (chunk.get("message") or {}).get("content") or ""
+                    message = chunk.get("message") or {}
+                    # With think=True the model's thinking arrives in its own field, before the JSON answer. It is kept
+                    # apart from `text`, so the answer that gets parsed is exactly what it was without reasoning.
+                    thought = message.get("thinking") or ""
+                    if thought and on_reasoning is not None:
+                        reasoning += thought
+                        await on_reasoning(thought)
+                    delta = message.get("content") or ""
                     if delta:
                         text += delta
                         await on_text(delta)
@@ -84,7 +90,7 @@ class OllamaChat:
         reason = last.get("done_reason")
         stop = {"stop": "end", "length": "max_tokens"}.get(reason, "other" if last else "other")
         usage = token_usage(input_tokens=last.get("prompt_eval_count"), output_tokens=last.get("eval_count"))
-        return ChatResult(text, stop, reason, usage)
+        return ChatResult(text, stop, reason, usage, reasoning=reasoning)
 
     def _status_error(self, status: int, body: bytes) -> ProviderError:
         msg = error_text(body)

@@ -6,7 +6,7 @@ import { RUN_STATUS } from "./format";
 export type Actor = "model" | "runtime" | "sandbox";
 
 export type Beat =
-  | "start" | "iteration" | "send" | "calling" | "first_token" | "response" | "parsed"
+  | "start" | "iteration" | "send" | "calling" | "reasoning" | "first_token" | "response" | "parsed"
   | "accepted" | "done_reply" | "handoff" | "executing" | "install" | "exited" | "killed"
   | "artifact" | "no_files" | "checking" | "result" | "stop" | "finished" | "note"
   // Older runs without detailed logs: reconstructed from run/iteration rows.
@@ -97,6 +97,7 @@ function classify(log: LogEntry, run: RunDetail): Omit<StudioStep, "key" | "inde
         transfer: { from: "runtime", to: "model", label: s.label, tone: s.tone } };
     }
     case "calling": return { beat: "calling", actor: "model", title: `Calling ${run.model || "the model"}` };
+    case "reasoning": return { beat: "reasoning", actor: "model", title: "Model is reasoning" };
     case "first_token": return { beat: "first_token", actor: "model", title: "Model is generating" };
     case "response": return { beat: "response", actor: "model", title: log.message };
     case "parsed": return { beat: "parsed", actor: "model", title: log.message.replace(/^Parsed response: /, "Parsed: ") };
@@ -254,6 +255,7 @@ export function explain(step: StudioStep, run: RunDetail): string {
       : step.intent === "review" ? "The runtime sends the output back so the model can decide: DONE or another step."
       : "The runtime sends your task to the model.";
     case "calling": return "Waiting for the model’s response.";
+    case "reasoning": return "The model started reasoning before its answer. The provider streams this text separately; the runtime stores it and never sends it back to the model.";
     case "first_token": return "The model started streaming its answer.";
     case "response": return "The full response arrived from the model.";
     case "parsed": return "The runtime parsed the response into a code block.";

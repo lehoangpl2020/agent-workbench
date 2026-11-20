@@ -47,11 +47,14 @@ class OpenAIChat:
         # Reasoning models: do not send temperature; only adjust effort
         if "reasoning_effort" in self.spec.options:
             body["reasoning"] = {"effort": self.spec.options["reasoning_effort"]}
+        if "reasoning_summary" in self.spec.options:
+            # Only a run with Reasoning on: ask for the summary OpenAI writes of the reasoning (never the reasoning itself)
+            body.setdefault("reasoning", {})["summary"] = self.spec.options["reasoning_summary"]
         return body
 
-    async def stream(self, system, messages, max_tokens, on_text) -> ChatResult:
+    async def stream(self, system, messages, max_tokens, on_text, on_reasoning=None) -> ChatResult:
         body = self.build_body(system, messages, max_tokens)
-        text, refusal, final = "", "", None
+        text, refusal, final, reasoning = "", "", None, ""
         try:
             async with self.http.stream(
                 "POST", f"{self.base_url}/responses", json=body,
@@ -67,6 +70,15 @@ class OpenAIChat:
                         await on_text(delta)
                     elif etype == "response.refusal.delta":
                         refusal += event.get("delta") or ""
+                    elif etype in REASONING_DELTAS and on_reasoning is not None:
+                        delta = event.get("delta") or ""
+                        if delta:
+                            reasoning += delta
+                            await on_reasoning(delta)
+                    elif etype == "response.reasoning_summary_part.added" and on_reasoning is not None and reasoning:
+                        # A summary can come in several parts: keep them apart as paragraphs
+                        reasoning += PARAGRAPH
+                        await on_reasoning(PARAGRAPH)
                     elif etype in ("response.completed", "response.incomplete"):
                         final = event.get("response") or {}
                     elif etype == "response.failed":
@@ -86,6 +98,11 @@ class OpenAIChat:
                                 f"Cannot reach {self.base_url} ({type(e).__name__}): {e}") from e
 
         final = final or {}
+        if on_reasoning is not None and not reasoning:
+            # Nothing was streamed as deltas: take the summary from the completed response, if it has one
+            reasoning = _summary_from_output(final)
+            if reasoning:
+                await on_reasoning(reasoning)
         status = final.get("status")
         reason = (final.get("incomplete_details") or {}).get("reason")
         if refusal and not text:
@@ -102,7 +119,7 @@ class OpenAIChat:
         usage = token_usage(input_tokens=u.get("input_tokens"), output_tokens=u.get("output_tokens"),
                        reasoning_tokens=(u.get("output_tokens_details") or {}).get("reasoning_tokens"),
                        cache_read_input_tokens=(u.get("input_tokens_details") or {}).get("cached_tokens"))
-        return ChatResult(text, stop, stop_reason, usage)
+        return ChatResult(text, stop, stop_reason, usage, reasoning=reasoning)
 
     def _status_error(self, status: int, body: bytes) -> ProviderError:
         msg = error_text(body)
@@ -118,6 +135,19 @@ class OpenAIChat:
         if status == 400:
             return ProviderError(BAD_REQUEST, self.provider, f"Request rejected (HTTP 400): {msg}", status)
         return ProviderError(PROVIDER_ERROR, self.provider, f"HTTP {status}: {msg}", status)
+
+
+# Streamed reasoning text: the summary OpenAI's hosted models return, or reasoning text where a model streams it
+REASONING_DELTAS = ("response.reasoning_summary_text.delta", "response.reasoning_text.delta")
+# Separates the parts of a reasoning summary, as paragraphs
+PARAGRAPH = "\n\n"
+
+
+def _summary_from_output(response: dict) -> str:
+    """The reasoning summary in a completed response: output items of type "reasoning", their summary_text parts."""
+    parts = [p.get("text", "") for item in response.get("output") or [] if item.get("type") == "reasoning"
+             for p in item.get("summary") or [] if p.get("type") == "summary_text"]
+    return PARAGRAPH.join(p for p in parts if p)
 
 
 async def _sse_events(resp: httpx.Response):

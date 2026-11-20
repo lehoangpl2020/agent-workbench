@@ -28,7 +28,7 @@ from agent_workbench.domain.schemas import (
     ExecutionResult,
     ExecutionStatus,
 )
-from agent_workbench.llm.catalog import ModelSpec, resolve
+from agent_workbench.llm.catalog import ModelSpec, for_run, resolve
 from agent_workbench.core.planner import LLMPlanner
 from agent_workbench.execution import BaseExecutor, LocalExecutor
 from agent_workbench.storage.workspace import RunWorkspace
@@ -93,8 +93,8 @@ class CodeAgent:
         self.default_timeout = default_timeout
 
     def new_state(self, request: AgentRequest) -> AgentState:
-        """Raises InvalidModelSelection if the provider/model is not in the catalog."""
-        spec = resolve(request.provider, request.model)
+        """Raises InvalidModelSelection if the provider/model is not in the catalog, or cannot show requested reasoning."""
+        spec = for_run(resolve(request.provider, request.model), bool(request.reasoning))
         return AgentState(
             user_request=request.message,
             max_iterations=request.max_iterations or self.max_iterations,
@@ -102,13 +102,14 @@ class CodeAgent:
             provider=spec.provider,
             model=spec.id,
             image_tool=bool(request.image_tool),
+            reasoning=spec.reasoning,
         )
 
     def planner_for(self, state: AgentState):
         """The planner used for the WHOLE run: created once, never changed between iterations."""
         if self.planner is not None:
             return self.planner
-        return self.planner_factory(resolve(state.provider, state.model))
+        return self.planner_factory(for_run(resolve(state.provider, state.model), state.reasoning))
 
     async def run(
         self,
@@ -145,6 +146,7 @@ class CodeAgent:
             executor=self.executor.describe(),
             max_iterations=state.max_iterations,
             timeout_seconds=state.timeout_seconds,
+            **({"reasoning": True} if state.reasoning else {}),
         )
 
         try:
@@ -261,8 +263,15 @@ class CodeAgent:
                 "chars": len(partial_code),
             })
 
+        async def on_reasoning(reasoning: str, done: bool) -> None:
+            await emit(Event.REASONING_PROGRESS, {
+                "iteration": n, "reasoning": reasoning, "chars": len(reasoning), "done": done,
+            })
+
+        # Only a run that asked for reasoning passes the callback (planners without the parameter keep working)
+        extra = {"on_reasoning": on_reasoning} if state.reasoning else {}
         try:
-            block = await planner.generate_code(state, on_progress=on_progress, on_log=log)
+            block = await planner.generate_code(state, on_progress=on_progress, on_log=log, **extra)
         except Exception as e:
             logger.error(f"[{state.session_id}] Planner error: {e}")
             await log(ERROR, "runtime", f"Planner failed: {e}")

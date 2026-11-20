@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import {
-  AlertCircle, Box, BrainCircuit, Clock, FolderOpen, ImagePlus, ListChecks, Loader2, Pencil, RefreshCw, Repeat,
+  AlertCircle, Box, Brain, BrainCircuit, Clock, FolderOpen, ImagePlus, ListChecks, Loader2, Pencil, RefreshCw, Repeat,
   Route, ScrollText, Square, TriangleAlert,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -78,7 +78,7 @@ export function RunView({ runId, onChanged, onEdit }: Props) {
         stopping={stopping}
         onStop={stop}
         onEdit={() => onEdit({ prompt: run.prompt, maxIterations: run.max_iterations, timeoutSeconds: run.timeout_seconds,
-          provider: run.provider, model: run.model, imageTool: run.image_tool })}
+          provider: run.provider, model: run.model, imageTool: run.image_tool, reasoning: run.reasoning })}
       />
       {stopError && (
         <Alert variant="destructive">
@@ -183,6 +183,8 @@ function RunHeader({ run, stopping, onStop, onEdit }: { run: RunDetail; stopping
           sub="used of allowed"><span className="tabular-nums">{codeRuns} / {run.max_iterations}</span></Meta>
         <Meta label="Timeout" icon={<Clock className="size-3.5 text-muted-foreground" aria-hidden />} sub="per code run">
           <span className="tabular-nums">{run.timeout_seconds} s</span></Meta>
+        {run.reasoning && <Meta label="Reasoning" title="The model was asked to think first; its reasoning is shown under each model call"
+          icon={<Brain className="size-3.5 text-model" aria-hidden />} sub="shown per model call">On</Meta>}
         {run.image_tool && <Meta label="Image tool" title="The agent could ask the OpenAI image model for images in this run"
           icon={<ImagePlus className="size-3.5 text-muted-foreground" aria-hidden />} sub="opted in for this run">On</Meta>}
       </dl>

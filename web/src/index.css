@@ -266,6 +266,12 @@
   font: 11.5px/1.55 var(--font-mono); -webkit-mask-image: linear-gradient(to bottom, transparent, #000 35%);
   mask-image: linear-gradient(to bottom, transparent, #000 35%);
 }
+/* The last lines of the model's reasoning while it streams: prose, not code, so a quiet model-colored column */
+.studio-reasoningtail {
+  overflow: hidden; padding: 6px 0 6px 10px; border-left: 2px solid var(--model); color: var(--muted-foreground);
+  font: 12px/1.5 var(--font-sans); -webkit-mask-image: linear-gradient(to bottom, transparent, #000 40%);
+  mask-image: linear-gradient(to bottom, transparent, #000 40%);
+}
 .studio-term {
   min-height: 84px; padding: 9px 11px; border-radius: 2px; background: var(--code-bg); color: var(--code-fg);
   font: 11.5px/1.6 var(--font-mono);

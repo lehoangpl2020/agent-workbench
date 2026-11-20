@@ -8,7 +8,7 @@ Interactive Swagger docs are served at <http://localhost:8668/docs> when the ser
 |---|---|---|
 | POST | `/api/runs` | Create a run and execute it in the background (`409` if a run is active) |
 | GET | `/api/runs`, `/api/runs/{id}` | History / details of a run + iterations + artifacts. The details also have `summary`: model calls, tokens, model and sandbox time, estimated cost ([below](#usage-and-cost-of-a-run)) |
-| GET | `/api/runs/{id}/events` | SSE progress (`activity`, `code_progress`, `iteration`, `code`, `result`, `done`, ...) |
+| GET | `/api/runs/{id}/events` | SSE progress (`activity`, `code_progress`, `reasoning_progress`, `iteration`, `code`, `result`, `done`, ...) |
 | POST | `/api/runs/{id}/stop` | Stop the run and kill the running process |
 | GET | `/api/runs/{id}/artifacts/{path}` | View/download a file (`?iteration=N`, `?download=1`) |
 | GET | `/api/runs/{id}/logs` | Activity log (`?after=<id>` returns only newer entries, `?iteration=N`). The `calling` entry of each model call carries `data.request` (`{system, messages}`) in full |
@@ -61,6 +61,24 @@ The numbers above are only an example of the format; check the provider's curren
 - A trivial task such as "2 + 2" costs **two model calls**: one to write the code and one to confirm `DONE`.
 
 The full status table is in [architecture.md](architecture.md#run-status).
+
+### Reasoning
+
+A run can ask to see the model's reasoning: the *Reasoning* checkbox in the UI, or `"reasoning": true` in `POST /api/runs` / `/api/execute*`. It is **off by default** and only available for models that declare `reasoning_options` in `llm/catalog.py` (currently every catalog model). `GET /api/providers` reports this per model as `reasoning: true|false` and `reasoning_kind`; the run and its history carry `reasoning_kind` too. A request for a model without it returns `422` with `detail.code = "reasoning_unsupported"`; no run is created and nothing is silently turned off.
+
+For such a run the model is called with its reasoning options and, where set, a larger output limit (`reasoning_max_output_tokens`), because reasoning tokens count toward it. What the providers stream differs, and `reasoning_kind` says which one a model gives:
+
+| Provider | Request | `reasoning_kind` | What arrives |
+|---|---|---|---|
+| Ollama | `think: true`, output limit 16384 | `text` | The model's own reasoning text (`message.thinking`). Calls get several times slower |
+| Anthropic | `thinking: {type: "adaptive", display: "summarized"}`; Sonnet 4.6 output limit 32000 | `summary` | A summary Anthropic writes of the thinking (`thinking_delta`). The raw reasoning is never returned |
+| OpenAI | `reasoning.summary: "auto"` | `summary` | A summary OpenAI writes of the reasoning (`response.reasoning_summary_text.delta`). The raw reasoning is never returned |
+
+Claude and the OpenAI models decide per call whether to reason at all: for a task they find simple they often answer directly, and then there is no summary (checked 2026-11-20: Claude Haiku 5.5 thought on one call of the pi example and not on an identical one; GPT-6.1 Terra returned a 466-character summary for it). Whatever arrives is streamed apart from the JSON answer: it is never parsed, never used by the runtime and never sent back to the model.
+
+- `reasoning_progress` (SSE) carries `{iteration, reasoning, chars, done}`: the full text so far, at most every 0.4 s, and once with `done: true` when the answer starts. The run's `activity_phase` is `reasoning` meanwhile.
+- The text is stored per model call in `iterations.reasoning` (returned as `reasoning` in each iteration; partial after Stop, the last attempt after a format retry) and the run in `runs.reasoning` (returned as `reasoning`). Runs stored before the option read as `false` / `""`.
+- The log gets one `flow: "reasoning"` entry at the first reasoning token, and the call's response entry adds `reasoning_chars` and `first_reasoning_ms`.
 
 ### Image tool
 

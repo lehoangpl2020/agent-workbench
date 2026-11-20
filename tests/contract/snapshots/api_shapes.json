@@ -99,6 +99,7 @@
         "intent_detail": "str",
         "language": "str",
         "number": "int",
+        "reasoning": "str",
         "run_id": "str",
         "started_at": "str",
         "status": "str",
@@ -114,6 +115,8 @@
     "prompt": "str",
     "provider": "str",
     "provider_name": "str",
+    "reasoning": "bool",
+    "reasoning_kind": "str",
     "status": "str",
     "summary": {
       "cost": {
@@ -154,6 +157,8 @@
         "prompt": "str",
         "provider": "str",
         "provider_name": "str",
+        "reasoning": "bool",
+        "reasoning_kind": "str",
         "status": "str",
         "timeout_seconds": "int"
       }

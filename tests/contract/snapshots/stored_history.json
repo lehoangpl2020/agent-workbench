@@ -16,6 +16,7 @@
       "intent_detail": "",
       "language": "python",
       "number": 1,
+      "reasoning": "",
       "run_id": "<uuid>",
       "status": "failed",
       "stderr": "NameError: name 'undefined_name' is not defined",
@@ -38,6 +39,7 @@
       "intent_detail": "NameError: name 'undefined_name' is not defined",
       "language": "python",
       "number": 2,
+      "reasoning": "",
       "run_id": "<uuid>",
       "status": "succeeded",
       "stderr": "",
@@ -55,6 +57,7 @@
       "intent_detail": "",
       "language": "python",
       "number": 3,
+      "reasoning": "",
       "run_id": "<uuid>",
       "status": "done",
       "stderr": "",
@@ -334,6 +337,7 @@
       "model": "qwen3.5:4b",
       "prompt": "persist me",
       "provider": "ollama",
+      "reasoning": 0,
       "status": "success",
       "timeout_seconds": 30
     }

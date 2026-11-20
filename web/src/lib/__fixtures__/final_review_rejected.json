@@ -366,6 +366,7 @@
         "intent_detail": "",
         "language": "python",
         "number": 1,
+        "reasoning": "",
         "run_id": "00000000-0000-4000-8000-000000000001",
         "started_at": "2026-01-01T12:00:00.150+00:00",
         "status": "succeeded",
@@ -385,6 +386,7 @@
         "intent_detail": "final review: no code runs left",
         "language": "python",
         "number": 2,
+        "reasoning": "",
         "run_id": "00000000-0000-4000-8000-000000000001",
         "started_at": "2026-01-01T12:00:01.950+00:00",
         "status": "max_retries",
@@ -400,6 +402,8 @@
     "prompt": "demo",
     "provider": "ollama",
     "provider_name": "Ollama (local)",
+    "reasoning": false,
+    "reasoning_kind": "text",
     "status": "max_retries",
     "summary": {
       "cost": {

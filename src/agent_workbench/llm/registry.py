@@ -126,7 +126,8 @@ class ProviderRegistry:
                     model_ready = False
                     model_msg = f"Not pulled yet. Run `ollama pull {m.id}` on the Ollama machine."
                 entry["models"].append({"id": m.id, "name": m.name, "provider_default": m.provider_default,
-                                        "note": m.note, "ready": model_ready,
+                                        "note": m.note, "ready": model_ready, "reasoning": m.supports_reasoning,
+                                        "reasoning_kind": m.reasoning_kind,
                                         "status": MODEL_NOT_PULLED if model_msg else entry["status"],
                                         "message": model_msg})
             out.append(entry)

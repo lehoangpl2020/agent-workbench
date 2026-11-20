@@ -1,6 +1,6 @@
-import { ArrowRight, ChevronLeft, ChevronRight, Download, ExternalLink, FileImage, Info, LogIn, LogOut, Scale } from "lucide-react";
+import { ArrowRight, Brain, ChevronLeft, ChevronRight, Download, ExternalLink, FileImage, Info, LogIn, LogOut, Scale } from "lucide-react";
 import type { RunDetail } from "@/lib/api";
-import { formatMs, isImage, RUN_STATUS, TONE_CLASSES } from "@/lib/format";
+import { formatMs, isImage, providerLabel, RUN_STATUS, TONE_CLASSES } from "@/lib/format";
 import {
   CHECK_RULE, checkDecision, FALSE_SUCCESS_NOTE, nextTransition, sectionLead, sectionSummary, type JourneySection,
 } from "@/lib/journey";
@@ -12,6 +12,7 @@ import { ArtifactList, ProcessOutputPanel } from "../ResultPanels";
 import { FILE_ACTION, NOTE } from "../styles";
 import { ActorChip } from "./ActorChip";
 import { ModelInput } from "./ModelInput";
+import { Reasoning, type ReasoningState } from "./Reasoning";
 
 interface Props {
   run: RunDetail;
@@ -111,11 +112,29 @@ function Body({ run, steps, section, upto, seen, liveEdge, now, onSelectEvent, n
       const done = has("done_reply") || (has("snapshot") && it?.status === "done");
       const returned = has("accepted") || !!modelNote || (has("snapshot") && !!it?.code);
       const waited = atLiveEdge && run.activity_at ? Math.max(0, Math.floor((now - Date.parse(run.activity_at)) / 1000)) : null;
+      // The call is still running at the live edge (no response yet)
+      const calling = atLiveEdge && run.status === "running" && it?.status === "planning" && !response;
+      // The call never got a response (Stop or an error ended it), so whatever streamed before that is partial
+      const unanswered = !calling && !section.steps.some(s => s.beat === "response");
+      const reasoningStarted = has("reasoning");
+      const reasoningState: ReasoningState = calling
+        ? run.activity_phase === "reasoning" ? "live" : reasoningStarted || it?.reasoning ? "complete" : "waiting"
+        : response ? "complete"
+        : !reasoningStarted ? "waiting"
+        : unanswered ? "partial" : "later";
+      const partialCode = unanswered && has("first_token") && !returned && !streaming && !!it?.code;
       return <>
         <Block icon={LogIn} label="Input · what the model received">
           {section.formatRetries > 0 && <p className="mb-2 text-xs text-warning">The first reply was not valid JSON, so the runtime asked again in the same model call.</p>}
           <ModelInput key={section.key} run={run} section={section} upto={upto} onSelect={onSelectEvent} />
         </Block>
+        {run.reasoning && <Block icon={Brain} label={run.reasoning_kind === "summary"
+            ? `Reasoning summary · written by ${providerLabel(run)}` : "Reasoning · streamed before the answer"}>
+          <Reasoning state={reasoningState} text={it?.reasoning ?? ""} calling={calling} retried={section.formatRetries > 0}
+            kind={run.reasoning_kind ?? "text"}
+            provider={providerLabel(run)} firstReasoningMs={num(response?.log?.data.first_reasoning_ms)}
+            firstAnswerMs={num(response?.log?.data.first_token_ms)} />
+        </Block>}
         <Block icon={LogOut} label="Output · what the model returned">
           {done ? <p className="rounded-xs border-l-[3px] border-success bg-success-soft px-3 py-2 text-sm text-success">Replied <strong>DONE</strong>: no code was returned, so nothing more runs.</p>
           : returned && it ? <>
@@ -126,14 +145,22 @@ function Body({ run, steps, section, upto, seen, liveEdge, now, onSelectEvent, n
             {it.explanation && <Quote text={it.explanation} streaming />}
             <CodeView code={it.code} language={it.language} title={`${iterFile(n)} · streaming…`} follow />
             <p className="text-[11.5px] text-muted-foreground">Streamed text is shown live but not stored per event; the runtime only uses it after the full reply is parsed.</p>
+          </> : partialCode && it ? <>
+            <p className="rounded-xs border-l-[3px] border-warning bg-warning-soft px-3 py-2 text-[13px] leading-relaxed text-warning">
+              Partial code: this is what streamed before the call ended. It was never parsed and never ran.</p>
+            {it.explanation && <Quote text={it.explanation} streaming />}
+            <CodeView code={it.code} language={it.language} title={`${iterFile(n)} · partial, not run`} />
           </> : errors.length ? null : <Waiting text={atLiveEdge && run.status === "running"
-            ? `Waiting for the model${waited != null ? ` · ${waited}s` : ""}. Code appears as soon as the model starts writing it.`
+            ? run.activity_phase === "reasoning" ? `The model is reasoning first${waited != null ? ` · ${waited}s` : ""}. Code appears when it starts writing its answer.`
+            : `Waiting for the model${waited != null ? ` · ${waited}s` : ""}. Code appears as soon as the model starts writing it.`
             : section.steps.some(s => s.index > upto && (s.beat === "accepted" || s.beat === "done_reply"))
               ? "Not returned yet at this event." : "No reply was recorded for this call."} />}
           {errors.map(e => <p key={e.key} className="rounded-xs border-l-[3px] border-destructive bg-danger-soft px-2.5 py-1.5 font-mono text-xs text-destructive">{e.title}</p>)}
           {response && <Meta rows={[
             ["Response time", formatMs(num(response.log?.data.duration_ms))],
-            ["First token", formatMs(num(response.log?.data.first_token_ms))],
+            ...(num(response.log?.data.first_reasoning_ms) != null
+              ? [["First reasoning token", formatMs(num(response.log?.data.first_reasoning_ms))] as [string, string]] : []),
+            [run.reasoning ? "First answer token" : "First token", formatMs(num(response.log?.data.first_token_ms))],
             ["Stop reason", String(response.log?.data.stop_reason ?? "—")],
             ["Tokens in / out", `${num(response.log?.data.input_tokens) ?? "—"} / ${num(response.log?.data.output_tokens) ?? "—"}`],
           ]} />}
@@ -281,7 +308,7 @@ function Collapsible({ label, children }: { label: string; children: React.React
 
 function Quote({ text, streaming }: { text: string; streaming?: boolean }) {
   return <figure className="space-y-1">
-    <figcaption className="text-xs text-muted-foreground">The model’s short explanation (its <code className="font-mono">thinking</code> field){streaming ? " · streaming" : ""}, not its hidden reasoning</figcaption>
+    <figcaption className="text-xs text-muted-foreground">The model’s short explanation (the <code className="font-mono">thinking</code> field of its JSON answer){streaming ? " · streaming" : ""}, not its reasoning</figcaption>
     <blockquote className="border-l-2 border-model pl-3 text-sm leading-relaxed">{text}</blockquote>
   </figure>;
 }

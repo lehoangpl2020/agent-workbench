@@ -62,11 +62,15 @@ class ChatResult:
     stop: str                      # end | max_tokens | refusal | other
     stop_reason: str | None        # original value
     usage: dict[str, int] = field(default_factory=dict)
+    # The model's reasoning as the provider streamed it, separate from `text`. Empty unless reasoning was requested
+    # (ModelSpec.reasoning) and the adapter supports it; never parsed and never sent back to the model.
+    reasoning: str = ""
 
 
 class ChatClient(Protocol):
+    # on_reasoning is passed only for a run that asked for reasoning, so adapters (and test fakes) without it keep working
     async def stream(self, system: str, messages: list[dict], max_tokens: int,
-                     on_text: TextFn) -> ChatResult: ...
+                     on_text: TextFn, on_reasoning: TextFn | None = None) -> ChatResult: ...
 
 
 def token_usage(**values: Any) -> dict[str, int]:

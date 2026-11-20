@@ -253,6 +253,8 @@ def test_old_database_is_migrated(data_dir):
     with TestClient(make_app(data_dir, SCRIPT)) as client:
         old = client.get("/api/runs/22222222-2222-2222-2222-222222222222").json()
         assert old["prompt"] == "old" and "activity" in old
+        # Columns added later default to the truth for an old run: no image tool, no reasoning requested
+        assert old["image_tool"] is False and old["reasoning"] is False
         assert client.post("/api/execute", json={"message": "new"}).json()["status"] == "success"
 
 

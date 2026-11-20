@@ -5,7 +5,7 @@ from fastapi import HTTPException, Request
 from agent_workbench.config import Settings
 from agent_workbench.domain.schemas import AgentRequest
 from agent_workbench.llm import ProviderError
-from agent_workbench.llm.catalog import InvalidModelSelection, resolve
+from agent_workbench.llm.catalog import InvalidModelSelection, for_run, resolve
 from agent_workbench.runs.detail import build_run_detail
 from agent_workbench.runs.manager import RunBusyError, RunManager
 from agent_workbench.storage.run_store import RunStore
@@ -40,12 +40,12 @@ def require_run(request: Request, run_id: str) -> dict:
 
 async def start_run(request: Request, body: AgentRequest, subscribe: bool = False):
     """
-    Validates provider/model against the catalog (422) → one run at a time (409) → checks provider
-    readiness (400: missing key, Ollama unreachable, model not pulled). No fallback.
+    Validates provider/model against the catalog, and Reasoning against that model (422) → one run at a time (409)
+    → checks provider readiness (400: missing key, Ollama unreachable, model not pulled). No fallback.
     """
     state = request.app.state
     try:
-        spec = resolve(body.provider, body.model)
+        spec = for_run(resolve(body.provider, body.model), bool(body.reasoning))
     except InvalidModelSelection as e:
         raise HTTPException(status_code=422, detail={"code": e.code, "message": str(e)})
     if body.image_tool and state.image_tool is None:

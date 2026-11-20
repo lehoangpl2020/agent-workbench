@@ -10,6 +10,7 @@ The user picks a **provider** and a **model** when creating a run. That choice i
 | Change the model preselected when the user switches provider | Set `provider_default=True` (exactly one model per provider) |
 | Change the app-wide default | `DEFAULT_PROVIDER`, `DEFAULT_MODEL` |
 | Set per-model parameters | `max_output_tokens`, `options` (`reasoning_effort` for OpenAI; `num_ctx`, `think` for Ollama) |
+| Let a run show the model's reasoning | `reasoning_options` (merged into `options` for a run with *Reasoning* on) and `reasoning_max_output_tokens`; `reasoning_kind` (`text` or `summary`, how the UI labels it); the adapter must pass the provider's reasoning stream to `on_reasoning` (all three adapters do) |
 | Add a new provider | `PROVIDERS` here, a new `llm/<name>_chat.py` that implements `ChatClient` (`llm/base.py`), its key in `ProviderSettings.missing_config()`, and one entry in the factory table of `ProviderRegistry.create()` (`llm/registry.py`). See [project-structure.md](project-structure.md#add-a-model-provider) |
 
 After editing, rebuild the server image (see section 4). The UI reads the list from `GET /api/providers`; the frontend keeps no list of its own. `tests/integration/test_providers.py::test_catalog_is_consistent` checks that the catalog is valid.
@@ -101,9 +102,9 @@ There is no fallback: an error is reported for the provider/model that failed, a
 | System prompt | `system` | `instructions` | a message with `role: system` |
 | Output limit | `max_tokens` | `max_output_tokens` (includes reasoning tokens) | `options.num_predict` |
 | Forcing JSON | `output_config.format` json_schema (catalog option `structured_output`; sent as `extra_body`), plus system prompt + parsing + one format retry as a safety net. Not yet checked against the real API | `text.format` json_schema `strict` | `format` = JSON schema |
-| Specifics | Does not send `thinking` / `temperature`; the SDK client is created with explicit `max_retries=2` and a 600 s timeout (the SDK defaults), so a transient error may be retried inside one model call without a log entry | `reasoning.effort`, `store: false`, no `temperature` | `think: false`, `options.num_ctx` |
+| Specifics | Sends `thinking` only for a run with *Reasoning* (adaptive, display `summarized`), never `temperature`; the SDK client is created with explicit `max_retries=2` and a 600 s timeout (the SDK defaults), so a transient error may be retried inside one model call without a log entry | `reasoning.effort` (plus `reasoning.summary: "auto"` for a run with *Reasoning*), `store: false`, no `temperature` | `think: false` (`true` for a run with *Reasoning*), `options.num_ctx` |
 | Tokens logged | `usage` of the response | `usage` in `response.completed` | `prompt_eval_count`, `eval_count` |
 
-Tokens are logged only when the provider actually returns them. The model's thinking content (if any) is not shown.
+Tokens are logged only when the provider actually returns them. The model's reasoning is shown only for a run that asks for it (*Reasoning*, see [api.md](api.md#reasoning)), and every adapter keeps it apart from the JSON answer. Ollama with `think: true` streams the model's own reasoning in `message.thinking` (checked with Ollama 0.40.16 and the JSON `format` on `qwen3.5:4b`, `qwen3.8:latest` and `gemma4:12b`). Anthropic and OpenAI return only a summary they write of it: Anthropic `thinking_delta` events with display `summarized` (checked on `claude-haiku-5-5` together with `output_config.format`), OpenAI `response.reasoning_summary_text.delta` events (checked on `gpt-6.1-terra` with the strict JSON schema and `store: false`).
 
 Old runs (created before multi-provider support) keep the stored model and have no provider (*provider not recorded*); the app does not assign a default to them. Replay only reads stored data and never calls a model.

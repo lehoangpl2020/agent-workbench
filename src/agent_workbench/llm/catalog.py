@@ -7,7 +7,7 @@ and keeps no list of its own. Do not put API keys/secrets here — keys come fro
 (see llm_providers.ProviderSettings).
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 
@@ -20,14 +20,28 @@ class ModelSpec:
     note: str = ""                # short hint shown in the UI (price, speed...)
     max_output_tokens: int = 16000
     # Per-model/provider parameters, read by the adapters in llm/*_chat.py:
-    #   anthropic: structured_output (bool: constrain the reply to the JSON schema, API output_config.format)
-    #   openai:  reasoning_effort ("none" | "low" | "medium" | ...)
+    #   anthropic: structured_output (bool: constrain the reply to the JSON schema, API output_config.format),
+    #              thinking (dict sent as the API's `thinking` parameter)
+    #   openai:  reasoning_effort ("none" | "low" | "medium" | ...), reasoning_summary ("auto" | "concise" | "detailed")
     #   ollama:  num_ctx (context window), think (enable/disable thinking)
     options: dict[str, Any] = field(default_factory=dict)
+    # Per-run opt-in "Reasoning": the options merged in when a run asks to see the model's reasoning, and the output cap
+    # for such a run (reasoning tokens count toward it). None = this model cannot show reasoning in this app.
+    reasoning_options: dict[str, Any] | None = None
+    reasoning_max_output_tokens: int | None = None
+    # What the provider streams as "reasoning": "text" = the model's own reasoning text (Ollama `thinking`),
+    # "summary" = a summary the provider writes of reasoning it never returns (Anthropic, OpenAI). The UI labels it so.
+    reasoning_kind: str | None = None
+    # True only on the spec of a run that asked for reasoning (see for_run); catalog rows are always False
+    reasoning: bool = False
 
     @property
     def key(self) -> str:
         return f"{self.provider}/{self.id}"
+
+    @property
+    def supports_reasoning(self) -> bool:
+        return self.reasoning_options is not None
 
 
 @dataclass(frozen=True)
@@ -46,35 +60,45 @@ PROVIDERS: dict[str, ProviderInfo] = {
     ]
 }
 
+# Merged into a model's options for a run with Reasoning on (see ModelSpec.reasoning_options)
+ANTHROPIC_REASONING = {"thinking": {"type": "adaptive", "display": "summarized"}}
+OPENAI_REASONING = {"reasoning_summary": "auto"}
+
 CATALOG: list[ModelSpec] = [
     # ── Anthropic Claude ─────────────────────────────
-    # Sonnet 4.6: no `thinking` is sent → runs without thinking (as before).
-    ModelSpec("anthropic", "claude-sonnet-4-6", "Claude Sonnet 4.6", provider_default=True,
-              note="Preselected for Anthropic · $3 / $15 per 1M tokens", options={"structured_output": True}),
-    # The 5.5 models always use adaptive thinking; thinking tokens count toward max_tokens
-    # → leave enough headroom so the code is not truncated.
-    ModelSpec("anthropic", "claude-sonnet-5-5", "Claude Sonnet 5.5",
-              note="Newer Sonnet · $2 / $10 per 1M tokens", max_output_tokens=32000,
-              options={"structured_output": True}),
+    # Without Reasoning: Sonnet 4.6 gets no `thinking` (runs without it); the 5.5 models always think (adaptive) and
+    # the API returns those thinking blocks empty by default (display "omitted"); thinking tokens count toward
+    # max_tokens, hence 32000. With Reasoning: `thinking` = adaptive with display "summarized", so the stream carries
+    # a readable summary of the reasoning. The raw reasoning is never returned by the API.
+    ModelSpec("anthropic", "claude-sonnet-4-6", "Claude Sonnet 4.6",
+              note="Older Sonnet · $3 / $15 per 1M tokens", options={"structured_output": True},
+              reasoning_options=ANTHROPIC_REASONING, reasoning_max_output_tokens=32000, reasoning_kind="summary"),
+    ModelSpec("anthropic", "claude-sonnet-5-5", "Claude Sonnet 5.5", provider_default=True,
+              note="Preselected for Anthropic · $2 / $10 per 1M tokens", max_output_tokens=32000,
+              options={"structured_output": True}, reasoning_options=ANTHROPIC_REASONING, reasoning_kind="summary"),
     ModelSpec("anthropic", "claude-opus-5-5", "Claude Opus 5.5",
               note="Most capable Opus · $4 / $20 per 1M tokens", max_output_tokens=32000,
-              options={"structured_output": True}),
+              options={"structured_output": True}, reasoning_options=ANTHROPIC_REASONING, reasoning_kind="summary"),
     ModelSpec("anthropic", "claude-haiku-5-5", "Claude Haiku 5.5",
               note="Fast and cheap · $0.10 / $0.50 per 1M tokens", max_output_tokens=32000,
-              options={"structured_output": True}),
+              options={"structured_output": True}, reasoning_options=ANTHROPIC_REASONING, reasoning_kind="summary"),
 
     # ── OpenAI (Responses API) ───────────────────────
-    # IDs and reasoning-effort levels checked against developers.openai.com/api/docs/models (2026-11).
-    # All are reasoning models; "low" exists on all three.
+    # IDs, prices and reasoning-effort levels checked against developers.openai.com/api/docs/models and /pricing
+    # (2026-11-20). All are reasoning models; "low" exists on all four. With Reasoning: `reasoning.summary` asks for
+    # the summary OpenAI writes of the model's reasoning (the reasoning itself is never returned).
     ModelSpec("openai", "gpt-6.2-sol", "GPT-6.2 Sol", provider_default=True,
               note="Everyday coding/agents · $2 / $10 per 1M tokens",
-              options={"reasoning_effort": "low"}),
+              options={"reasoning_effort": "low"}, reasoning_options=OPENAI_REASONING, reasoning_kind="summary"),
+    ModelSpec("openai", "gpt-6.1-terra", "GPT-6.1 Terra",
+              note="Mid-range · $1 / $5 per 1M tokens",
+              options={"reasoning_effort": "low"}, reasoning_options=OPENAI_REASONING, reasoning_kind="summary"),
     ModelSpec("openai", "gpt-6-luna", "GPT-6 Luna",
               note="Cheapest, high volume · $0.10 / $0.50 per 1M tokens",
-              options={"reasoning_effort": "low"}),
+              options={"reasoning_effort": "low"}, reasoning_options=OPENAI_REASONING, reasoning_kind="summary"),
     ModelSpec("openai", "gpt-6.2-astra", "GPT-6.2 Astra",
               note="Flagship, expensive · $8 / $40 per 1M tokens",
-              options={"reasoning_effort": "low"}),
+              options={"reasoning_effort": "low"}, reasoning_options=OPENAI_REASONING, reasoning_kind="summary"),
 
     # ── Ollama (runs locally; `ollama pull` the model first) ─
     # IDs are the exact tags shown by `ollama list` (sent verbatim, including ":latest").
@@ -83,15 +107,21 @@ CATALOG: list[ModelSpec] = [
     # num_ctx: Ollama's default context is small; a history of many iterations needs room. 32768 is an
     #   application setting, below the 262144 context length `ollama show` reports for these models.
     # max_output_tokens: an application-side cap per model call, not a statement about what the model supports.
+    # Reasoning (opt-in per run): think=True makes Ollama stream the model's thinking in `message.thinking`, separate
+    #   from the JSON answer. Checked with Ollama 0.40.16 and the JSON `format` on all three models (2026-11-20).
+    #   Thinking tokens count toward num_predict, so such a run gets a larger cap.
     ModelSpec("ollama", "qwen3.5:4b", "Qwen 3.5 4B", provider_default=True,
               note="Local · free · app default · needs `ollama pull qwen3.5:4b`",
-              max_output_tokens=8192, options={"num_ctx": 32768, "think": False}),
+              max_output_tokens=8192, options={"num_ctx": 32768, "think": False},
+              reasoning_options={"think": True}, reasoning_max_output_tokens=16384, reasoning_kind="text"),
     ModelSpec("ollama", "qwen3.8:latest", "Qwen 3.8 (latest)",
               note="Local · free · needs `ollama pull qwen3.8:latest`",
-              max_output_tokens=8192, options={"num_ctx": 32768, "think": False}),
+              max_output_tokens=8192, options={"num_ctx": 32768, "think": False},
+              reasoning_options={"think": True}, reasoning_max_output_tokens=16384, reasoning_kind="text"),
     ModelSpec("ollama", "gemma4:12b", "Gemma 4 12B",
               note="Local · free · needs `ollama pull gemma4:12b`",
-              max_output_tokens=8192, options={"num_ctx": 32768, "think": False}),
+              max_output_tokens=8192, options={"num_ctx": 32768, "think": False},
+              reasoning_options={"think": True}, reasoning_max_output_tokens=16384, reasoning_kind="text"),
 ]
 
 # App-wide default: used only when a request names neither provider nor model. A run still keeps whatever
@@ -165,6 +195,18 @@ def resolve(provider: str | None, model: str | None) -> ModelSpec:
     return spec
 
 
+def for_run(spec: ModelSpec, reasoning: bool) -> ModelSpec:
+    """The spec one run calls: the catalog row, plus the reasoning options when the run asked to see reasoning.
+    Raises InvalidModelSelection if the model cannot show reasoning (never silently runs without it)."""
+    if not reasoning:
+        return spec
+    if spec.reasoning_options is None:
+        raise InvalidModelSelection(
+            "reasoning_unsupported", f"{spec.name} ({spec.key}) cannot show its reasoning in this app.")
+    return replace(spec, options={**spec.options, **spec.reasoning_options}, reasoning=True,
+                   max_output_tokens=spec.reasoning_max_output_tokens or spec.max_output_tokens)
+
+
 def describe(provider: str | None, model: str | None) -> dict:
     """Display name for a stored run. Old runs (provider NULL) keep the stored model and get no default."""
     spec = find(provider, model)
@@ -172,4 +214,6 @@ def describe(provider: str | None, model: str | None) -> dict:
     return {
         "provider_name": info.name if info else None,
         "model_name": spec.name if spec else None,
+        # "text" | "summary" | None: how to label the reasoning this model streams (see ModelSpec.reasoning_kind)
+        "reasoning_kind": spec.reasoning_kind if spec else None,
     }

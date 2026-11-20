@@ -27,6 +27,8 @@ CONTEXT_WARN_RATIO = 0.9
 
 # Callback while the model is streaming: (code_so_far, explanation_so_far)
 ProgressFn = Callable[[str, str], Awaitable[None]]
+# Callback for a run that asked for reasoning: (reasoning_so_far, done). done=True once, with the complete text.
+ReasoningFn = Callable[[str, bool], Awaitable[None]]
 # Do not report progress more often than this (seconds), so the UI/SQLite are not flooded with events
 PROGRESS_INTERVAL = 0.4
 
@@ -72,6 +74,7 @@ class LLMPlanner:
         state: AgentState,
         on_progress: ProgressFn | None = None,
         on_log: LogFn | None = None,
+        on_reasoning: ReasoningFn | None = None,
     ) -> CodeBlock:
         """
         Generates code from the user request + execution history.
@@ -105,7 +108,8 @@ class LLMPlanner:
             timing: dict[str, int] = {}   # _stream fills first_token_ms when the first token arrives
             # `metric` marks this entry as the measurement of ONE model call (events.METRIC_LLM_CALL)
             try:
-                response = await self._stream(messages, on_progress, log, started, timing=timing, system=system)
+                response = await self._stream(messages, on_progress, log, started, timing=timing, system=system,
+                                              on_reasoning=on_reasoning)
             except ProviderError as e:
                 await log(ERROR, "llm", f"Model call failed after {time.monotonic() - started:.1f}s: {e}",
                           provider=self.provider, model=self.model, error_kind=e.kind, http_status=e.status,
@@ -117,10 +121,12 @@ class LLMPlanner:
                           metric=METRIC_LLM_CALL, ok=False, attempt=attempt, **_call_timing(started, timing))
                 raise
             content = response.text
+            # reasoning_chars only for a run that asked for reasoning: 0 there means the model streamed none
+            reasoning = {"reasoning_chars": len(response.reasoning)} if self.spec.reasoning else {}
             await log(INFO, "llm", f"Response received in {time.monotonic() - started:.1f}s",
                       stop_reason=response.stop_reason, chars=len(content), flow=Flow.RESPONSE,
                       metric=METRIC_LLM_CALL, ok=True, attempt=attempt, **_call_timing(started, timing),
-                      **response.usage)
+                      **reasoning, **response.usage)
             await self._warn_if_context_nearly_full(response.usage, log)
 
             if response.stop == "refusal":
@@ -134,7 +140,9 @@ class LLMPlanner:
                 await log(ERROR, "llm", f"Response truncated at max_tokens={self.max_tokens}")
                 raise PlannerOutputError(
                     f"LLM response truncated at max_tokens={self.max_tokens}. "
-                    "Raise MAX_OUTPUT_TOKENS or ask for a simpler task."
+                    + ("The model's reasoning counts toward this limit; run without Reasoning, " if self.spec.reasoning
+                       else "")
+                    + "Raise MAX_OUTPUT_TOKENS or ask for a simpler task."
                 )
 
             try:
@@ -188,18 +196,31 @@ class LLMPlanner:
     async def _stream(self, messages: list[dict], on_progress: ProgressFn | None,
                       log: LogFn = no_log, started: float | None = None, timeout_seconds: int = 30,
                       timing: dict[str, int] | None = None, image_tool_max: int | None = None,
-                      system: str | None = None):
-        """Calls the provider in streaming mode; on_progress receives code that is still being written (extracted from unclosed JSON)."""
+                      system: str | None = None, on_reasoning: ReasoningFn | None = None):
+        """Calls the provider in streaming mode; on_progress receives code that is still being written (extracted from unclosed JSON).
+        For a run that asked for reasoning, on_reasoning receives the reasoning so far (throttled), then the full text."""
         text = ""
         last_sent = 0.0
+        reasoning = ""
+        reasoning_sent = 0.0
+        reasoning_closed = 0   # length of the reasoning already reported as complete (done=True)
         started = started or time.monotonic()
         timing = timing if timing is not None else {}
+
+        async def close_reasoning() -> None:
+            nonlocal reasoning_closed
+            if on_reasoning and reasoning and len(reasoning) != reasoning_closed:
+                reasoning_closed = len(reasoning)
+                await on_reasoning(reasoning, True)
 
         async def on_text(chunk: str) -> None:
             nonlocal text, last_sent
             if not text:
                 timing["first_token_ms"] = round((time.monotonic() - started) * 1000)
                 await log(INFO, "llm", f"First token after {time.monotonic() - started:.1f}s", flow=Flow.FIRST_TOKEN)
+                # The answer starts once the reasoning is over: report it complete now, not when the whole reply ends,
+                # so the live view stops saying "reasoning" while the model writes its JSON
+                await close_reasoning()
             text += chunk
             now = time.monotonic()
             if on_progress and now - last_sent >= PROGRESS_INTERVAL:
@@ -209,6 +230,22 @@ class LLMPlanner:
                     explanation = extract_partial_json_string(text, "thinking") or ""
                     await on_progress(code, explanation)
 
+        async def on_thought(chunk: str) -> None:
+            nonlocal reasoning, reasoning_sent
+            if not reasoning:
+                timing["first_reasoning_ms"] = round((time.monotonic() - started) * 1000)
+                await log(INFO, "llm", f"Model is reasoning (first reasoning token after {time.monotonic() - started:.1f}s)",
+                          flow=Flow.REASONING)
+            reasoning += chunk
+            now = time.monotonic()
+            if on_reasoning and now - reasoning_sent >= PROGRESS_INTERVAL:
+                reasoning_sent = now
+                await on_reasoning(reasoning, False)
+
         if system is None:
             system = system_prompt(image_tool_max=image_tool_max, timeout_seconds=timeout_seconds)
-        return await self.chat.stream(system, messages, self.max_tokens, on_text)
+        # Only a run that asked for reasoning passes the callback, so adapters without it are called exactly as before
+        extra = {"on_reasoning": on_thought} if self.spec.reasoning else {}
+        result = await self.chat.stream(system, messages, self.max_tokens, on_text, **extra)
+        await close_reasoning()   # a reply with no answer text, or reasoning that kept coming after the first token
+        return result

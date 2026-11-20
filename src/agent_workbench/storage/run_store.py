@@ -73,10 +73,15 @@ MIGRATIONS = {
         "provider": "TEXT",
         # 1 = the user enabled the image tool for this run. Older runs get 0, which is true: they could not use it.
         "image_tool": "INTEGER DEFAULT 0",
+        # 1 = the user asked to see the model's reasoning. Older runs get 0, which is true: none was requested.
+        "reasoning": "INTEGER DEFAULT 0",
     },
     "iterations": {
         "intent": "TEXT DEFAULT 'write'",         # write | fix | review
         "intent_detail": "TEXT DEFAULT ''",       # e.g. the error being fixed
+        # The model's reasoning in this model call as streamed (partial while streaming or after Stop). For a format
+        # retry it holds the last attempt. Empty when reasoning was off, or the model streamed none.
+        "reasoning": "TEXT DEFAULT ''",
     },
 }
 
@@ -125,11 +130,12 @@ class RunStore:
 
     # ── Runs ───────────────────────────────────────
     def create_run(self, run_id, prompt, max_iterations, timeout_seconds, model, executor,
-                   provider: str | None = None, image_tool: bool = False) -> None:
+                   provider: str | None = None, image_tool: bool = False, reasoning: bool = False) -> None:
         self._exec(
             "INSERT INTO runs (id, prompt, status, max_iterations, timeout_seconds, model, "
-            "executor, provider, image_tool, created_at) VALUES (?, ?, 'running', ?, ?, ?, ?, ?, ?, ?)",
-            (run_id, prompt, max_iterations, timeout_seconds, model, executor, provider, int(image_tool), now_iso()),
+            "executor, provider, image_tool, reasoning, created_at) VALUES (?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?)",
+            (run_id, prompt, max_iterations, timeout_seconds, model, executor, provider, int(image_tool),
+             int(reasoning), now_iso()),
         )
 
     def finish_run(self, run_id, status, answer, message, iteration_count) -> None:
@@ -164,10 +170,10 @@ class RunStore:
     def list_runs(self, limit: int = 100) -> list[dict]:
         rows = self._query(
             "SELECT id, prompt, status, max_iterations, timeout_seconds, message, iteration_count, "
-            "provider, model, image_tool, created_at, finished_at FROM runs ORDER BY created_at DESC LIMIT ?",
+            "provider, model, image_tool, reasoning, created_at, finished_at FROM runs ORDER BY created_at DESC LIMIT ?",
             (limit,),
         )
-        return [{**dict(r), "image_tool": bool(r["image_tool"])} for r in rows]
+        return [{**dict(r), "image_tool": bool(r["image_tool"]), "reasoning": bool(r["reasoning"])} for r in rows]
 
     def get_run(self, run_id) -> dict | None:
         rows = self._query("SELECT * FROM runs WHERE id=?", (run_id,))
@@ -175,6 +181,7 @@ class RunStore:
             return None
         run = dict(rows[0])
         run["image_tool"] = bool(run["image_tool"])
+        run["reasoning"] = bool(run["reasoning"])
         run["iterations"] = [self._iteration_dict(r) for r in self._query(
             "SELECT * FROM iterations WHERE run_id=? ORDER BY number", (run_id,)
         )]

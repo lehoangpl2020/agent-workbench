@@ -32,7 +32,7 @@ export interface JourneySection {
   formatRetries: number;
 }
 
-const MODEL_BEATS = new Set<Beat>(["iteration", "send", "calling", "first_token", "response", "parsed", "accepted", "done_reply"]);
+const MODEL_BEATS = new Set<Beat>(["iteration", "send", "calling", "reasoning", "first_token", "response", "parsed", "accepted", "done_reply"]);
 const CODE_BEATS = new Set<Beat>(["handoff", "executing", "install", "exited", "killed", "artifact", "no_files"]);
 const CHECK_BEATS = new Set<Beat>(["checking", "result"]);
 const TECHNICAL_BEATS = new Set<Beat>(["iteration", "calling", "first_token", "response", "parsed", "executing", "no_files"]);
@@ -257,7 +257,7 @@ export function turnChecklist(run: RunDetail, steps: StudioStep[], n: number | n
       ...(done ? { state: "done" as const, note: "DONE" }
         : has("accepted") || (snapshot && it?.code) ? { state: "done" as const, note: iterFile(n) }
         : modelReply ? { state: "done" as const, note: finalReview ? "asked for another step" : undefined }
-        : at("send", "iteration", "calling", "first_token", "response", "parsed") && !modelFailed ? inProgress()
+        : at("send", "iteration", "calling", "reasoning", "first_token", "response", "parsed") && !modelFailed ? inProgress()
         : modelFailed ? { state: "failed" as const, note: "call failed" }
         : pending()) },
     { key: "run", label: "Run in sandbox",

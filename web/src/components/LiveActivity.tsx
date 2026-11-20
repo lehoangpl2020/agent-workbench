@@ -1,18 +1,18 @@
 import { useEffect, useState } from "react";
-import { Brain, ClipboardCheck, Cog, FileSearch, Package, PenLine, RotateCw, Wrench } from "lucide-react";
+import { Brain, ClipboardCheck, Cog, FileSearch, Lightbulb, Package, PenLine, RotateCw, Wrench } from "lucide-react";
 import type { RunDetail } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // Who is working: the model (waiting for the LLM) or the runtime (the application running/checking by itself).
 // Shows only observable actions + data, never the model's reasoning.
 const ICONS: Record<string, typeof Brain> = {
-  write: Brain, fix: Wrench, review: FileSearch, streaming: PenLine,
+  write: Brain, fix: Wrench, review: FileSearch, streaming: PenLine, reasoning: Lightbulb,
   executing: Cog, installing: Package, install_failed: Package,
   rerunning: RotateCw, collecting: FileSearch, checking: ClipboardCheck,
 };
 
 const ACTOR: Record<string, "model" | "sandbox"> = {
-  write: "model", fix: "model", review: "model", streaming: "model",
+  write: "model", fix: "model", review: "model", streaming: "model", reasoning: "model",
   executing: "sandbox", installing: "sandbox", install_failed: "sandbox", rerunning: "sandbox", collecting: "sandbox",
 };
 

@@ -124,7 +124,7 @@ How to read them:
 
 ## SSE events
 
-`session`, `iteration`, `code`, `result`, `model_done`, `error` and `done` are the legacy events and old clients keep working. The newer events are `activity` (the current action), `code_progress` (code being streamed), `log` (an activity-log entry) and `status`.
+`session`, `iteration`, `code`, `result`, `model_done`, `error` and `done` are the legacy events and old clients keep working. The newer events are `activity` (the current action), `code_progress` (code being streamed), `reasoning_progress` (the model's reasoning, only for a run with *Reasoning* on), `log` (an activity-log entry) and `status`.
 
 The names, the `flow` tags of log entries and the payload of each event are declared in `domain/events.py` (TypedDicts); `web/src/lib/api.ts` mirrors the names, and `tests/contract/test_event_contract.py` checks both sides and the payloads the agent actually emits. `RunManager._persist` is a table from event to the SQLite update it causes.
 

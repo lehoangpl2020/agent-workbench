@@ -106,8 +106,8 @@ def test_catalog_is_consistent():
 def test_existing_cloud_models_are_preserved():
     assert [m.id for m in models_for("anthropic")] == [
         "claude-sonnet-4-6", "claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"]
-    assert [m.id for m in models_for("openai")] == ["gpt-6.2-sol", "gpt-6-luna", "gpt-6.2-astra"]
-    assert resolve("anthropic", None).id == "claude-sonnet-4-6"      # still the Anthropic preselection
+    assert [m.id for m in models_for("openai")] == ["gpt-6.2-sol", "gpt-6.1-terra", "gpt-6-luna", "gpt-6.2-astra"]
+    assert resolve("anthropic", None).id == "claude-sonnet-5-5"      # the Anthropic preselection
 
 
 @pytest.mark.parametrize("provider,model,code", [

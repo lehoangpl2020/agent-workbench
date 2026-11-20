@@ -22,7 +22,7 @@ interface Props {
 }
 
 const LIVE_ACTOR: Record<string, Actor> = {
-  write: "model", fix: "model", review: "model", streaming: "model",
+  write: "model", fix: "model", review: "model", streaming: "model", reasoning: "model",
   executing: "sandbox", installing: "sandbox", rerunning: "sandbox", install_failed: "sandbox", collecting: "sandbox",
   checking: "runtime",
 };
@@ -44,6 +44,7 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
   let active: Actor | null = step && step.beat !== "finished" ? step.transfer?.to ?? step.actor : null;
   if (live && LIVE_ACTOR[run.activity_phase]) active = LIVE_ACTOR[run.activity_phase];
   const streaming = live && run.activity_phase === "streaming" && it?.status === "planning";
+  const reasoningNow = live && run.activity_phase === "reasoning" && it?.status === "planning";
   const sinceActivity = live && run.activity_at ? now - Date.parse(run.activity_at) : null;
 
   // ── Station geometry, measured so packets travel between the real icon edges ──
@@ -78,11 +79,12 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
   const modelDone = n != null && seen.done.has(n);
   let modelStatus = "Idle";
   if (streaming) modelStatus = run.activity || "Writing code…";
+  else if (reasoningNow) modelStatus = run.activity || "Reasoning…";
   else if (lastModel) modelStatus = ({
-    send: "Request on its way", calling: "Waiting for the response", first_token: "Generating the answer",
+    send: "Request on its way", calling: "Waiting for the response", reasoning: "Reasoning", first_token: "Generating the answer",
     accepted: `Returned ${iterFile(lastModel.iteration)}`, done_reply: "Replied DONE",
   } as Partial<Record<string, string>>)[lastModel.beat] ?? lastModel.title;
-  const modelWaiting = (live && ["write", "fix", "review"].includes(run.activity_phase)) ||
+  const modelWaiting = (live && ["write", "fix", "review", "reasoning"].includes(run.activity_phase)) ||
     (!live && active === "model" && (lastModel?.beat === "calling" || lastModel?.beat === "send"));
 
   // ── Sandbox pane ──
@@ -102,7 +104,8 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
       <span className="text-muted-foreground"> · carries </span><span className="font-mono">{step.transfer.label}</span></>
     : seen.finished ? <span className="text-muted-foreground">Run ended · {RUN_STATUS[run.status].label} · nothing is in transit</span>
     : active ? <><b className="font-semibold">{ACTOR_NAME[active]}</b><span className="text-muted-foreground"> · {
-        streaming ? "writing code" : active === "sandbox" && runningNow ? "running the code" : step?.title ?? "working"}</span></>
+        streaming ? "writing code" : reasoningNow ? "reasoning before its answer"
+          : active === "sandbox" && runningNow ? "running the code" : step?.title ?? "working"}</span></>
     : <span className="text-muted-foreground">Waiting to start</span>;
 
   return <div className={cn("studio-stage", !detailed && "is-compact")} data-active={active ?? "none"}>
@@ -131,6 +134,9 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
         </p>
         {streaming && it?.code ? <pre className="studio-codetail" aria-label="Code being written">
             {tail(it.code, 6).map((line, i) => <span key={i} className="block truncate">{line}</span>)}
+          </pre>
+          : reasoningNow && it?.reasoning ? <pre className="studio-reasoningtail" aria-label="Reasoning so far">
+            {tail(it.reasoning, 4).map((line, i) => <span key={i} className="block truncate">{line}</span>)}
           </pre>
           : modelDone ? <p className="studio-quote">Replied DONE (the model’s own judgement of the output).</p>
           : accepted ? <figure className="space-y-1">

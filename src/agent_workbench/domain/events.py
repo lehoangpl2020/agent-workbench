@@ -31,12 +31,13 @@ class Event:
     ACTIVITY = "activity"
     CODE_PROGRESS = "code_progress"
     LOG = "log"
+    REASONING_PROGRESS = "reasoning_progress"
 
 
 # Same order as SSE_EVENTS in web/src/lib/api.ts
 EVENTS = (
     Event.SESSION, Event.STATUS, Event.ITERATION, Event.CODE, Event.RESULT, Event.MODEL_DONE,
-    Event.ACTIVITY, Event.CODE_PROGRESS, Event.LOG, Event.ERROR, Event.DONE,
+    Event.ACTIVITY, Event.CODE_PROGRESS, Event.LOG, Event.ERROR, Event.DONE, Event.REASONING_PROGRESS,
 )
 
 
@@ -69,6 +70,8 @@ class Flow:
     KILLED = "killed"
     NO_FILES = "no_files"
     STOP = "stop"
+    # The first reasoning token of a model call (only for a run that asked to see reasoning)
+    REASONING = "reasoning"
 
 
 # Same order as FLOWS in web/src/lib/api.ts
@@ -76,7 +79,7 @@ FLOWS = (
     Flow.STARTED, Flow.WRITE, Flow.FIX, Flow.REVIEW, Flow.CODE, Flow.DONE_REPLY, Flow.EXECUTING,
     Flow.INSTALLING, Flow.RERUNNING, Flow.INSTALL_FAILED, Flow.ARTIFACTS, Flow.CHECKING, Flow.RESULT,
     Flow.FINISHED, Flow.ITERATION, Flow.CALLING, Flow.FIRST_TOKEN, Flow.RESPONSE, Flow.PARSED, Flow.HANDOFF,
-    Flow.EXITED, Flow.KILLED, Flow.NO_FILES, Flow.STOP,
+    Flow.EXITED, Flow.KILLED, Flow.NO_FILES, Flow.STOP, Flow.REASONING,
 )
 
 
@@ -127,6 +130,16 @@ class CodeProgressEvent(TypedDict):
     code: str
     explanation: str
     chars: int
+
+
+class ReasoningProgressEvent(TypedDict):
+    """The model's reasoning so far in this model call, as the provider streamed it (the full text, not a delta).
+    Sent at most every few hundred ms, and once more with the complete text when the call ends."""
+
+    iteration: int
+    reasoning: str
+    chars: int
+    done: bool                      # True = the call ended; this is all the reasoning it produced
 
 
 class CodeEvent(TypedDict):
@@ -192,7 +205,7 @@ PAYLOADS: dict[str, type] = {
     Event.SESSION: SessionEvent, Event.ITERATION: IterationEvent, Event.ACTIVITY: ActivityEvent,
     Event.CODE_PROGRESS: CodeProgressEvent, Event.CODE: CodeEvent, Event.RESULT: ResultEvent,
     Event.MODEL_DONE: ModelDoneEvent, Event.ERROR: ErrorEvent, Event.LOG: LogEvent,
-    Event.STATUS: StatusEvent, Event.DONE: DoneEvent,
+    Event.STATUS: StatusEvent, Event.DONE: DoneEvent, Event.REASONING_PROGRESS: ReasoningProgressEvent,
 }
 
 

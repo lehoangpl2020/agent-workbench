@@ -28,6 +28,9 @@ export interface IterationArtifact {
 
 export type Intent = "write" | "fix" | "review";
 
+/** "text" = the model's own reasoning text; "summary" = a summary the provider writes of reasoning it never returns */
+export type ReasoningKind = "text" | "summary";
+
 export interface Iteration {
   number: number;
   status: IterationStatus;
@@ -35,7 +38,13 @@ export interface Iteration {
   intent: Intent;
   /** For intent "fix": the error being fixed */
   intent_detail: string;
+  /** The model's short explanation (the `thinking` field of its JSON reply). Not its reasoning. */
   explanation: string;
+  /**
+   * The model's reasoning in this call as the provider streamed it, for a run with `reasoning` on. Partial while it
+   * streams or after Stop; the last attempt after a format retry. Empty when off, or the model streamed none.
+   */
+  reasoning?: string;
   language: string;
   code: string;
   stdout: string;
@@ -72,8 +81,12 @@ export interface RunSummary {
   /** Display name looked up from the backend catalog; null if the model is no longer in the catalog */
   provider_name: string | null;
   model_name: string | null;
+  /** How the model's reasoning is labeled: its own text (Ollama) or the provider's summary of it. Null: not in the catalog. */
+  reasoning_kind?: ReasoningKind | null;
   /** The user ticked "Image tool" for this run (OpenAI image model, billed by OpenAI). Runs from before the option are false. */
   image_tool: boolean;
+  /** The user ticked "Reasoning" for this run (the model thinks first; its reasoning is streamed and stored). Older runs are false. */
+  reasoning?: boolean;
   created_at: string;
   finished_at: string | null;
 }
@@ -161,6 +174,9 @@ export interface CatalogModel {
   provider_default: boolean;
   note: string;
   ready: boolean;
+  /** The model can show its reasoning in this app (the "Reasoning" option of a run) */
+  reasoning?: boolean;
+  reasoning_kind?: ReasoningKind | null;
   status: string;
   message: string;
 }
@@ -238,6 +254,7 @@ export const api = {
     provider: string;
     model: string;
     image_tool: boolean;
+    reasoning: boolean;
   }) =>
     request<RunDetail>("/api/runs", { method: "POST", body: JSON.stringify(body) }),
   stopRun: (id: string) => request<RunDetail>(`/api/runs/${id}/stop`, { method: "POST" }),
@@ -260,6 +277,7 @@ export const SSE_EVENTS = [
   "log",
   "error",
   "done",
+  "reasoning_progress",
 ] as const;
 
 /**
@@ -291,5 +309,6 @@ export const FLOWS = [
   "killed",
   "no_files",
   "stop",
+  "reasoning",
 ] as const;
 export type Flow = (typeof FLOWS)[number];
