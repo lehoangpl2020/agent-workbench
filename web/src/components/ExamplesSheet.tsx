@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { CONCEPT_LABELS, EXAMPLES, OUTPUT_LABELS, type PromptExample } from "@/lib/examples";
@@ -20,45 +21,42 @@ export function ExamplesSheet({ trigger, open, onOpenChange, onUse, onCloseAutoF
       {/* A real trigger is what lets Radix return focus to the opener on close */}
       <SheetTrigger asChild>{trigger}</SheetTrigger>
       <SheetContent side="right" className="w-full gap-0 sm:max-w-md" onCloseAutoFocus={onCloseAutoFocus}>
-        <SheetHeader className="border-b pr-12">
-          <SheetTitle>Examples</SheetTitle>
-          <SheetDescription>
+        <SheetHeader className="gap-2 border-b-2 border-rule px-5 pt-5 pr-14 pb-4">
+          <p className="eyebrow flex items-center gap-2"><span className="mark bg-brand" aria-hidden />{EXAMPLES.length} prompts</p>
+          <SheetTitle className="text-2xl">Examples</SheetTitle>
+          <SheetDescription className="leading-relaxed">
             {onUse
               ? "Each example shows one part of the agent loop. Choosing one only fills the prompt box; nothing runs until you press Run, and a model may behave differently each time."
               : "Reference only. Open New run to load an example into the prompt box."}
           </SheetDescription>
         </SheetHeader>
-        <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          {EXAMPLES.map((example) => (
-            <li key={example.id} className="rounded-lg border bg-card p-3.5">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <h3 className="text-sm font-semibold">{example.title}</h3>
-                <span className="rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+        <ul className="min-h-0 flex-1 divide-y overflow-y-auto bg-card">
+          {EXAMPLES.map((example, i) => (
+            <li key={example.id} className="px-5 py-4">
+              <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                <span className="idx">{String(i + 1).padStart(2, "0")}</span>
+                <h3 className="text-[15px] font-semibold tracking-tight">{example.title}</h3>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                <span className="tag text-foreground">
                   <span className="sr-only">Concept:</span>{CONCEPT_LABELS[example.concept]}
                 </span>
-                <span className="flex gap-1">
-                  <span className="sr-only">Output:</span>
-                  {example.outputs.map((kind) => (
-                    <span
-                      key={kind}
-                      className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground"
-                    >
-                      {OUTPUT_LABELS[kind]}
-                    </span>
-                  ))}
-                </span>
+                <span className="sr-only">Output:</span>
+                {example.outputs.map((kind) => (
+                  <span key={kind} className="tag">{OUTPUT_LABELS[kind]}</span>
+                ))}
               </div>
-              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{example.summary}</p>
-              <p className="mt-1.5 text-xs leading-relaxed">
-                <span className="font-medium">What to watch: </span>
-                <span className="text-foreground/80">{example.observe}</span>
+              <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{example.summary}</p>
+              <p className="mt-2 border-l-2 border-rule pl-2.5 text-xs leading-relaxed">
+                <span className="font-semibold">What to watch: </span>
+                <span>{example.observe}</span>
               </p>
-              <details className="mt-2 text-[13px]">
-                <summary className="cursor-pointer rounded-sm text-xs font-medium text-primary outline-none select-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-                  Prompt and how to check
+              <details className="group mt-2.5 text-[13px]">
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-xs text-xs font-medium select-none hover:text-primary">
+                  <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" aria-hidden />Prompt and how to check
                 </summary>
                 <div className="mt-2 space-y-2">
-                  <p className="rounded-md bg-muted/60 px-2.5 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                  <p className="rounded-xs bg-muted px-3 py-2 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
                     {example.prompt}
                   </p>
                   <ul className="list-disc space-y-1 pl-4 text-xs leading-relaxed text-foreground/80">

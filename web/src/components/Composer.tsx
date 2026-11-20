@@ -187,11 +187,9 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
   }
 
   return (
-    <div className="surface">
-      <div className="p-4 pb-3 sm:p-5 sm:pb-3">
-        <Label htmlFor="prompt" className="mb-2 text-sm font-semibold">
-          What should the agent do?
-        </Label>
+    <div className="surface-strong">
+      <Step n={1} title={<Label htmlFor="prompt" className="text-[15px] leading-snug font-semibold">What should the agent do?</Label>}
+        hint="Plain language. Ctrl + Enter runs it.">
         <Textarea
           id="prompt"
           ref={promptRef}
@@ -207,11 +205,11 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
             }
           }}
           placeholder="Describe a task. The agent writes Python, runs it in the sandbox, reads the output and iterates until done."
-          className="min-h-28 resize-y border-input bg-background text-[15px] leading-relaxed"
+          className="min-h-32 resize-y px-3.5 py-3 text-[15px] leading-relaxed md:text-[15px]"
         />
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Sparkles className="size-3.5" /> Try:
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 flex items-center gap-1 text-xs font-medium text-muted-foreground">
+            <Sparkles className="size-3.5" aria-hidden /> Try
           </span>
           {QUICK_EXAMPLES.map((ex) => (
             <button
@@ -256,7 +254,7 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
                 <button
                   type="button"
                   onClick={undoExample}
-                  className="rounded-sm font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  className="text-link"
                 >
                   Undo
                 </button>
@@ -264,11 +262,11 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
             </p>
           )}
         </div>
-        {loaded && <p className="mt-1.5 rounded-md bg-accent/60 px-2.5 py-1.5 text-xs leading-relaxed text-accent-foreground">
+        {loaded && <p className="mt-2 border-l-2 border-rule bg-muted px-3 py-2 text-xs leading-relaxed">
           <span className="font-semibold">What to watch: </span>{loaded.observe}</p>}
-      </div>
+      </Step>
 
-      <div className="space-y-2 border-t px-4 py-3 sm:px-5">
+      <Step n={2} title={<h2 className="text-[15px] font-semibold">Model</h2>} hint="Fixed for the whole run.">
         <div className="grid gap-3 sm:grid-cols-[minmax(0,200px)_minmax(0,1fr)]">
           <div className="space-y-1">
             <Label htmlFor="provider" className="text-xs text-muted-foreground">
@@ -320,7 +318,43 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
           notReady={notReady}
           onRecheck={() => void loadCatalog()}
         />
-        <div className="flex items-start gap-2.5 pt-1">
+      </Step>
+
+      <Step n={3} title={<h2 className="text-[15px] font-semibold">Limits and tools</h2>} hint="Applied by the runtime, not the model.">
+        <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+          <div className="space-y-1.5">
+            <Label htmlFor="max-iter" className="text-xs text-muted-foreground"
+              title="Maximum number of code executions. If the last run succeeds, the model gets one more call to review the output and reply DONE (no code runs in that call).">
+              Max code runs
+            </Label>
+            <Input
+              id="max-iter"
+              type="number"
+              min={minIter}
+              max={maxIter}
+              value={maxIterations}
+              onChange={(e) => setMaxIterations(e.target.value === "" ? "" : clamp(+e.target.value, minIter, maxIter))}
+              className="h-9 font-mono tabular-nums"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="timeout" className="text-xs text-muted-foreground">
+              Execution timeout (s)
+            </Label>
+            <Input
+              id="timeout"
+              type="number"
+              min={minTimeout}
+              max={maxTimeout}
+              value={timeoutSeconds}
+              onChange={(e) =>
+                setTimeoutSeconds(e.target.value === "" ? "" : clamp(+e.target.value, minTimeout, maxTimeout))
+              }
+              className="h-9 font-mono tabular-nums"
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex items-start gap-2.5 border-t pt-4">
           <input
             id="image-tool"
             type="checkbox"
@@ -332,11 +366,11 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
             className="mt-0.5 size-4 shrink-0 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50"
           />
           <div className="min-w-0 text-xs">
-            <Label htmlFor="image-tool" className="inline-flex items-center gap-1.5 text-sm font-medium">
-              <ImagePlus className="size-4 text-muted-foreground" /> Image tool
-              <span className="font-mono text-xs font-normal text-muted-foreground">{imageCfg?.model}</span>
+            <Label htmlFor="image-tool" className="inline-flex flex-wrap items-center gap-1.5 text-sm font-medium">
+              <ImagePlus className="size-4 text-muted-foreground" aria-hidden /> Image tool
+              {imageCfg?.model && <span className="tag font-mono">{imageCfg.model}</span>}
             </Label>
-            <p id="image-tool-help" className="mt-0.5 text-muted-foreground">
+            <p id="image-tool-help" className="mt-1 leading-relaxed text-muted-foreground">
               {imageCfg && !imageCfg.available
                 ? imageCfg.reason
                 : `Lets the agent make photos and illustrations that code cannot draw. Billed per image by OpenAI, at most ${
@@ -356,55 +390,25 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
             )}
           </div>
         </div>
-      </div>
+      </Step>
 
-      <div className="flex flex-col gap-3 border-t bg-muted/40 px-4 py-3 sm:flex-row sm:items-end sm:px-5">
-        <div className="grid flex-1 grid-cols-2 gap-3 sm:max-w-md">
-          <div className="space-y-1">
-            <Label htmlFor="max-iter" className="text-xs text-muted-foreground"
-              title="Maximum number of code executions. If the last run succeeds, the model gets one more call to review the output and reply DONE (no code runs in that call).">
-              Max code runs
-            </Label>
-            <Input
-              id="max-iter"
-              type="number"
-              min={minIter}
-              max={maxIter}
-              value={maxIterations}
-              onChange={(e) => setMaxIterations(e.target.value === "" ? "" : clamp(+e.target.value, minIter, maxIter))}
-              className="h-9 bg-background"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="timeout" className="text-xs text-muted-foreground">
-              Execution timeout (s)
-            </Label>
-            <Input
-              id="timeout"
-              type="number"
-              min={minTimeout}
-              max={maxTimeout}
-              value={timeoutSeconds}
-              onChange={(e) =>
-                setTimeoutSeconds(e.target.value === "" ? "" : clamp(+e.target.value, minTimeout, maxTimeout))
-              }
-              className="h-9 bg-background"
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-3 sm:ml-auto">
-          <span className="hidden text-xs text-muted-foreground lg:inline">Ctrl + Enter</span>
-          <Button size="lg" onClick={submit} disabled={!canSubmit} className="w-full sm:w-auto">
-            {submitting ? <Loader2 className="animate-spin" /> : <Play />}
+      <div className="flex flex-col gap-3 bg-background px-4 py-4 sm:flex-row sm:items-center sm:px-6">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+          Nothing runs until you press Run. The model, the limits and the image tool cannot change during the run.
+        </p>
+        <div className="flex items-center gap-3">
+          <kbd className="hidden rounded-xs border border-input bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground lg:inline">Ctrl + Enter</kbd>
+          <Button size="lg" onClick={submit} disabled={!canSubmit} className="w-full px-8 sm:w-auto">
+            {submitting ? <Loader2 className="animate-spin" /> : <Play className="fill-current" />}
             Run
           </Button>
         </div>
       </div>
 
       {(busy || error) && (
-        <div className="border-t px-4 py-3 sm:px-5">
+        <div className="border-t px-4 py-3 sm:px-6">
           {error ? (
-            <Alert variant="destructive" className="border-destructive/30 bg-danger-soft">
+            <Alert variant="destructive">
               <AlertCircle />
               <AlertDescription className="flex flex-wrap items-center gap-x-3 text-destructive">
                 {error.message}
@@ -417,10 +421,10 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
             </Alert>
           ) : (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin text-primary" />
+              <Loader2 className="size-4 animate-spin text-brand" aria-hidden />
               One run at a time — another run is in progress.
               <button
-                className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                className="text-link inline-flex items-center gap-1"
                 onClick={() => onOpenRun(activeRunId!)}
               >
                 View it <ArrowRight className="size-3.5" />
@@ -433,11 +437,25 @@ export function Composer({ config, activeRunId, draft, onStarted, onOpenRun }: P
   );
 }
 
+/** One numbered part of the form: number and title in a label column on wide screens, stacked on phones. */
+function Step({ n, title, hint, children }: { n: number; title: React.ReactNode; hint: string; children: React.ReactNode }) {
+  return <section className="grid gap-3 border-b px-4 py-5 sm:grid-cols-[176px_minmax(0,1fr)] sm:gap-6 sm:px-6 sm:py-6">
+    <div className="flex items-baseline gap-2.5 sm:block">
+      <span className="idx text-brand sm:block">{String(n).padStart(2, "0")}</span>
+      <div className="sm:mt-1.5">
+        {title}
+        <p className="mt-1 hidden text-xs leading-relaxed text-muted-foreground sm:block">{hint}</p>
+      </div>
+    </div>
+    <div className="min-w-0">{children}</div>
+  </section>;
+}
+
 const PILL =
-  "rounded-full border bg-background px-3 py-1 text-xs font-medium text-foreground/80 transition outline-none hover:border-primary/40 hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50";
+  "h-7 rounded-xs border border-input bg-card px-2.5 text-xs font-medium text-foreground transition-colors hover:border-foreground hover:bg-accent";
 
 const SELECT =
-  "h-9 w-full min-w-0 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
+  "h-9 w-full min-w-0 rounded-md border border-field bg-card px-2.5 text-sm transition-colors focus-visible:border-foreground focus-visible:outline-offset-1 disabled:cursor-not-allowed disabled:opacity-50";
 
 /** The model that will be used for the run (shown BEFORE pressing Run) + the real readiness status from the backend. */
 function ModelStatus({
@@ -468,8 +486,8 @@ function ModelStatus({
   return (
     <div
       className={cn(
-        "flex items-start gap-2 rounded-md px-2.5 py-2 text-xs",
-        warn ? "bg-warning-soft text-warning" : "bg-muted/60 text-muted-foreground",
+        "mt-3 flex items-start gap-2 rounded-xs border-l-2 px-3 py-2 text-xs leading-relaxed",
+        warn ? "border-warning bg-warning-soft text-warning" : "border-model bg-muted text-muted-foreground",
       )}
     >
       {warn ? <TriangleAlert className="mt-px size-3.5 shrink-0" /> : <BrainCircuit className="mt-px size-3.5 shrink-0" />}
@@ -498,7 +516,7 @@ function ModelStatus({
         onClick={onRecheck}
         disabled={checking}
         title="Check provider status again (does not download models)"
-        className="inline-flex shrink-0 items-center gap-1 font-medium hover:underline disabled:opacity-50"
+        className="inline-flex shrink-0 items-center gap-1 rounded-xs font-medium text-foreground underline decoration-brand underline-offset-3 hover:text-primary disabled:opacity-50"
       >
         <RefreshCw className={cn("size-3", checking && "animate-spin")} /> Re-check
       </button>

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from "react";
-import { ChevronLeft, ChevronRight, CircleHelp, Compass, Loader2, LocateFixed, PanelTopClose, PanelTopOpen, Pause, Play, Radio, RotateCcw, Square } from "lucide-react";
+import {
+  ChevronLeft, ChevronRight, CircleHelp, Compass, History, Loader2, LocateFixed, PanelTopClose, PanelTopOpen, Pause, Play, Radio, RotateCcw, Square,
+  TriangleAlert,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LogEntry, RunDetail } from "@/lib/api";
@@ -199,12 +202,12 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
     if (top < 56 || (!wide && top > window.innerHeight * 0.5)) el.scrollIntoView({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" });
   }, [selected, wide, section]);
 
-  const stage = <div className={cn(replay && !clock.playing && "is-paused")}>
-    <div className="flex items-center gap-2 border-b bg-[#fafbfc] px-4 py-1.5">
-      <h3 className="eyebrow">Flow</h3>
+  const stage = <div className={cn("bg-background", replay && !clock.playing && "is-paused")}>
+    <div className="flex items-center gap-2 border-b px-4 py-1.5">
+      <h3 className="eyebrow text-foreground">Flow</h3>
       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">who holds the data at the selected point</span>
       <button type="button" aria-pressed={panels} onClick={() => { setPanels(!panels); writePref("journey-panels", !panels); }}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+        className="inline-flex shrink-0 items-center gap-1 rounded-xs px-1.5 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
         {panels ? <PanelTopClose className="size-3.5" /> : <PanelTopOpen className="size-3.5" />}{panels ? "Hide actor panels" : "Actor panels"}</button>
     </div>
     <StudioStage run={run} steps={steps} step={stageStep} seen={seen} animate={animate} speed={replay ? clock.speed : 1}
@@ -224,9 +227,9 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
 
   return <section ref={box} aria-label="Agent journey" className="scroll-mt-2 space-y-3">
     {/* ── Toolbar ── */}
-    <div className="surface z-10 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 lg:sticky lg:top-2">
+    <div className="surface z-10 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 shadow-[0_1px_0_var(--border)] lg:sticky lg:top-2">
       {running ? <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold">
-        <Radio className={cn("size-4", connected ? "text-destructive" : "text-muted-foreground")} />Live
+        <Radio className={cn("size-4", connected ? "text-brand" : "text-muted-foreground")} aria-hidden />Live
         {!connected && <span className="text-xs font-normal text-warning">· reconnecting…</span>}
       </span> : <div className="studio-segment" role="group" aria-label="View mode">
         <button type="button" aria-pressed={!replay} onClick={() => { setMode("explore"); clock.pause(); setLevel("step"); }}><Compass className="size-3.5" />Explore</button>
@@ -235,8 +238,8 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
       </div>}
 
       <p className="min-w-0 flex-1 basis-56 truncate text-[13.5px]" aria-live={replay || following ? "polite" : "off"}>
-        {replay && <span className="mr-2 rounded bg-accent px-1.5 py-0.5 text-[11.5px] font-medium text-accent-foreground">Replay · read-only</span>}
-        {following && <span className="mr-2 rounded bg-accent px-1.5 py-0.5 text-[11.5px] font-medium text-accent-foreground">Following live</span>}
+        {replay && <span className="tag tag-ink mr-2 align-[1px]">Replay · read-only</span>}
+        {following && <span className="tag mr-2 border-brand align-[1px] text-foreground"><span className="mark size-1.5 animate-pulse bg-brand" aria-hidden />Following live</span>}
         {where}{where && <span className="text-muted-foreground"> — </span>}<span className="text-[12.5px] text-muted-foreground tabular-nums">{count}</span>
       </p>
 
@@ -252,7 +255,7 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
           <TooltipProvider delayDuration={150}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button type="button" className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="About replay">
+                <button type="button" className="rounded-xs p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="About replay">
                   <CircleHelp className="size-4" /></button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-72 text-left">
@@ -268,20 +271,21 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
       </div>
     </div>
 
-    {logError && <p className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning-soft px-3 py-2 text-[13px] text-warning">
-      Activity history could not be loaded. <button className="text-link" onClick={retryLogs}>Retry</button></p>}
-    {partial && <p className="rounded-lg border bg-card px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
-      <strong className="font-semibold text-foreground">Partial history:</strong> this run was stored with fewer
-      recorded events (older version, or the end was not logged). Events marked “rebuilt” come from the run record.</p>}
+    {logError && <p className="flex items-center gap-2 rounded-xs border border-l-[3px] border-warning/30 border-l-warning bg-warning-soft px-3 py-2 text-[13px] text-warning">
+      <TriangleAlert className="size-4 shrink-0" aria-hidden />Activity history could not be loaded. <button className="text-link" onClick={retryLogs}>Retry</button></p>}
+    {partial && <p className="flex gap-2 rounded-xs border border-l-[3px] border-l-info bg-info-soft px-3 py-2 text-[13px] leading-relaxed text-foreground">
+      <History className="mt-0.5 size-4 shrink-0 text-info" aria-hidden /><span>
+      <strong className="font-semibold">Partial history:</strong> this run was stored with fewer
+      recorded events (older version, or the end was not logged). Events marked “rebuilt” come from the run record.</span></p>}
 
     <div ref={area} className="@container">
-      {wide ? <div className="grid grid-cols-[minmax(300px,360px)_minmax(0,1fr)] items-start gap-3">
+      {wide ? <div className="grid grid-cols-[minmax(300px,360px)_minmax(0,1fr)] items-start gap-4">
         <nav ref={scroller} aria-label="Journey" className="surface sticky top-16 max-h-[calc(100vh-5rem)] overflow-y-auto p-2">
           <JourneyHeader />
           {list}
         </nav>
-        <div ref={evidence} className="surface min-w-0 scroll-mt-16 overflow-hidden">
-          <aside className="px-5 py-5" aria-label="Selected step">{inspector}</aside>
+        <div ref={evidence} className="surface-strong min-w-0 scroll-mt-16 overflow-hidden">
+          <aside className="px-5 py-5 xl:px-6" aria-label="Selected step">{inspector}</aside>
         </div>
       </div> : <nav aria-label="Journey" className="surface p-2"><JourneyHeader />{list}</nav>}
     </div>
@@ -291,8 +295,8 @@ export function RunJourney({ run, logs, connected, logError, historyLoaded, retr
 }
 
 function JourneyHeader() {
-  return <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 pt-1.5 pb-2">
-    <h2 className="eyebrow">Journey</h2>
+  return <div className="mb-1 flex flex-wrap items-center justify-between gap-2 border-b px-2 pt-1 pb-2.5">
+    <h2 className="eyebrow text-foreground">Journey</h2>
     <ActorLegend />
   </div>;
 }

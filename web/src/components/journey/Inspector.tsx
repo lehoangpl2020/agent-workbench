@@ -9,6 +9,7 @@ import { explain, iterFile, stepTime, type Seen, type StudioStep, type VisibleFi
 import { cn } from "@/lib/utils";
 import { CodeView, TerminalBlock } from "../CodeView";
 import { ArtifactList, ProcessOutputPanel } from "../ResultPanels";
+import { FILE_ACTION, NOTE } from "../styles";
 import { ActorChip } from "./ActorChip";
 import { ModelInput } from "./ModelInput";
 
@@ -51,12 +52,12 @@ export function Inspector(props: Props) {
       <p className="eyebrow">{eventLevel ? "Selected event" : "Selected step"} · evidence recorded up to this point</p>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
         <ActorChip actor={section.actor} />
-        <h3 className="text-lg leading-snug font-semibold tracking-tight">{section.title}
+        <h3 className="text-xl leading-snug font-semibold tracking-[-0.015em]">{section.title}
           <span className="font-normal text-muted-foreground"> · {section.purpose}</span></h3>
         {summary && <span className={cn("ml-auto font-mono text-[13px]", TONE[summary.tone])}>{summary.text}</span>}
       </div>
-      <p className="text-sm leading-relaxed text-muted-foreground">{sectionLead(section, run)}</p>
-      {eventLevel && <div className="flex items-start gap-2 rounded-lg border border-primary/25 bg-accent/50 px-3 py-2">
+      <p className="max-w-[78ch] text-sm leading-relaxed text-muted-foreground">{sectionLead(section, run)}</p>
+      {eventLevel && <div className="flex items-start gap-2 rounded-xs border border-l-[3px] border-border border-l-brand bg-brand-soft px-3 py-2">
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-muted-foreground">
             <span className="font-semibold tracking-wide uppercase">Event {k + 1} of {events.length} in this step</span>
@@ -66,9 +67,9 @@ export function Inspector(props: Props) {
           <p className="text-[13px] leading-relaxed text-muted-foreground">{explain(step, run)}</p>
         </div>
         <div className="flex shrink-0 gap-0.5">
-          <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+          <button type="button" className="rounded-xs p-1 text-muted-foreground hover:bg-card hover:text-foreground disabled:opacity-40"
             disabled={k <= 0} onClick={() => onSelectEvent(events[k - 1].index)} aria-label="Previous event in this step"><ChevronLeft className="size-4" /></button>
-          <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+          <button type="button" className="rounded-xs p-1 text-muted-foreground hover:bg-card hover:text-foreground disabled:opacity-40"
             disabled={k >= events.length - 1} onClick={() => onSelectEvent(events[k + 1].index)} aria-label="Next event in this step"><ChevronRight className="size-4" /></button>
         </div>
       </div>}
@@ -95,7 +96,7 @@ function Body({ run, steps, section, upto, seen, liveEdge, now, onSelectEvent, n
       const d = section.steps[0]?.log?.data ?? {};
       return <Block icon={LogIn} label="Input">
         <p className="text-xs text-muted-foreground">Your task</p>
-        <p className="rounded-md bg-muted/60 px-3 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap">{run.prompt}</p>
+        <p className="rounded-xs border-l-2 border-rule bg-muted px-3 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap">{run.prompt}</p>
         <Meta rows={[["Provider", String(d.provider ?? run.provider_name ?? run.provider ?? "not recorded")],
           ["Model", String(d.model ?? run.model ?? "—")], ["Sandbox", String(d.executor ?? run.executor ?? "—")],
           ["Max code runs", String(d.max_iterations ?? run.max_iterations)], ["Timeout", `${d.timeout_seconds ?? run.timeout_seconds}s per code run`]]} />
@@ -116,7 +117,7 @@ function Body({ run, steps, section, upto, seen, liveEdge, now, onSelectEvent, n
           <ModelInput key={section.key} run={run} section={section} upto={upto} onSelect={onSelectEvent} />
         </Block>
         <Block icon={LogOut} label="Output · what the model returned">
-          {done ? <p className="rounded-md bg-success-soft px-3 py-2 text-sm text-success">Replied <strong>DONE</strong>: no code was returned, so nothing more runs.</p>
+          {done ? <p className="rounded-xs border-l-[3px] border-success bg-success-soft px-3 py-2 text-sm text-success">Replied <strong>DONE</strong>: no code was returned, so nothing more runs.</p>
           : returned && it ? <>
             {it.explanation && <Quote text={it.explanation} />}
             {it.code ? <CodeView code={it.code} language={it.language} title={`${iterFile(n)}${section.finalReview ? " · not executed" : ""}`} />
@@ -129,7 +130,7 @@ function Body({ run, steps, section, upto, seen, liveEdge, now, onSelectEvent, n
             ? `Waiting for the model${waited != null ? ` · ${waited}s` : ""}. Code appears as soon as the model starts writing it.`
             : section.steps.some(s => s.index > upto && (s.beat === "accepted" || s.beat === "done_reply"))
               ? "Not returned yet at this event." : "No reply was recorded for this call."} />}
-          {errors.map(e => <p key={e.key} className="rounded-md bg-danger-soft px-2.5 py-1.5 font-mono text-xs text-destructive">{e.title}</p>)}
+          {errors.map(e => <p key={e.key} className="rounded-xs border-l-[3px] border-destructive bg-danger-soft px-2.5 py-1.5 font-mono text-xs text-destructive">{e.title}</p>)}
           {response && <Meta rows={[
             ["Response time", formatMs(num(response.log?.data.duration_ms))],
             ["First token", formatMs(num(response.log?.data.first_token_ms))],
@@ -182,13 +183,13 @@ function Body({ run, steps, section, upto, seen, liveEdge, now, onSelectEvent, n
         </Block>
         <Block icon={Scale} label="Rule applied · by the runtime, not the model">
           {done && it ? <>
-            <p className={cn("rounded-md px-3 py-2 text-sm", it.exit_code === 0 ? "bg-success-soft text-success" : "bg-danger-soft text-destructive")}>
+            <p className={cn("rounded-xs border-l-[3px] px-3 py-2 text-sm leading-relaxed", it.exit_code === 0 ? "border-success bg-success-soft text-success" : "border-destructive bg-danger-soft text-destructive")}>
               {decision}</p>
             {it.false_success && <p className="text-xs leading-relaxed text-warning">{FALSE_SUCCESS_NOTE}</p>}
           </> : <Waiting text="Not recorded yet at this event." />}
           <p className="text-[13px] text-muted-foreground">Code runs used: {used} of {run.max_iterations}.</p>
           <details className="group text-xs">
-            <summary className="inline-flex cursor-pointer list-none items-center gap-1 font-medium text-primary hover:underline">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-xs font-medium hover:text-primary">
               <ChevronRight className="size-3 transition-transform group-open:rotate-90" />The full rule</summary>
             <p className="mt-1 leading-relaxed text-muted-foreground">{CHECK_RULE}</p>
           </details>
@@ -211,7 +212,7 @@ function EndBody({ run, steps }: { run: RunDetail; steps: StudioStep[] }) {
   const kept = [...run.iterations].reverse().find(i => i.exit_code === 0);
   return <>
     <Block icon={LogOut} label="Why the run stopped">
-      <div className={cn("max-h-48 overflow-auto rounded-lg border px-3 py-2.5 text-sm leading-relaxed whitespace-pre-wrap", TONE_CLASSES[meta.tone])}>
+      <div className={cn("max-h-48 overflow-auto rounded-xs border border-l-[3px] border-l-current px-3 py-2.5 text-sm leading-relaxed whitespace-pre-wrap", TONE_CLASSES[meta.tone])}>
         <strong className="font-semibold">{meta.label}.</strong> {run.message || "No reason was recorded."}
       </div>
       {finished && <p className="text-sm leading-relaxed">{explain(finished, run)}</p>}
@@ -232,11 +233,11 @@ function RecordedEntry({ step }: { step: StudioStep }) {
   const log = step.log!;
   const data = Object.entries(log.data).filter(([k]) => k !== "request");
   return <details className="group text-[13px]">
-    <summary className="flex cursor-pointer list-none flex-wrap items-center gap-1.5 rounded py-1 font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+    <summary className="flex cursor-pointer list-none flex-wrap items-center gap-1.5 rounded-xs py-1 font-medium text-muted-foreground hover:text-foreground">
       <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />Recorded log entry
       <span className="ml-auto font-mono text-xs font-normal">#{log.id} · {log.source} · {log.level}</span>
     </summary>
-    <div className="mt-2 space-y-2 rounded-lg border bg-muted/30 px-3 py-2.5">
+    <div className="mt-2 space-y-2 rounded-xs border bg-background px-3 py-2.5">
       <p className="font-mono text-[12.5px] break-words">{log.message}</p>
       {data.length > 0 && <Meta rows={data.map(([k, v]) => [k, typeof v === "object" ? JSON.stringify(v) : String(v)])} />}
       {"request" in log.data && <p className="text-muted-foreground">request: shown above under Input.</p>}
@@ -249,31 +250,30 @@ export function FileGallery({ files }: { files: VisibleFile[] }) {
   const images = files.filter(f => isImage(f.mime) && f.snapshot_available !== false);
   const others = files.filter(f => !images.includes(f));
   return <div className="space-y-3">
-    {images.map(f => <figure key={`${f.path}-${f.iteration}`} className="overflow-hidden rounded-lg border bg-card">
-      <div className="checker flex justify-center p-2"><img src={f.url} alt={f.path} className="max-h-80 max-w-full rounded object-contain" /></div>
+    {images.map(f => <figure key={`${f.path}-${f.iteration}`} className="overflow-hidden rounded-md border bg-card">
+      <div className="checker flex justify-center p-2"><img src={f.url} alt={f.path} className="max-h-80 max-w-full object-contain" /></div>
       <figcaption className="flex items-center gap-2 border-t px-3 py-2">
-        <FileImage className="size-4 shrink-0 text-primary" />
+        <FileImage className="size-4 shrink-0 text-sandbox" aria-hidden />
         <span className="min-w-0 flex-1 truncate font-mono text-xs">{f.path}<span className="text-muted-foreground"> · snapshot from this code run</span></span>
-        <a href={f.url} target="_blank" rel="noreferrer" aria-label={`Open ${f.path}`} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><ExternalLink className="size-3.5" /></a>
-        <a href={f.download} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted"><Download className="size-3.5" /> Download</a>
+        <a href={f.url} target="_blank" rel="noreferrer" aria-label={`Open ${f.path}`} className="rounded-xs p-1 text-muted-foreground hover:bg-accent hover:text-foreground"><ExternalLink className="size-3.5" /></a>
+        <a href={f.download} className={FILE_ACTION} aria-label={`Download ${f.path}`}><Download className="size-3.5" aria-hidden /> Download</a>
       </figcaption>
     </figure>)}
     {others.length > 0 && <ArtifactList files={others.map(f => ({ ...f, download_url: f.download }))} caption="Files saved by this code run" />}
-    <p className="text-xs text-muted-foreground">A model only sees
- what its recorded input contains: file names and sizes, never the pixels.</p>
+    <p className="text-xs text-muted-foreground">A model only sees what its recorded input contains: file names and sizes, never the pixels.</p>
   </div>;
 }
 
 function Block({ icon: Icon, label, children }: { icon: typeof Info; label: string; children: React.ReactNode }) {
   return <section className="space-y-2.5">
-    <h4 className="eyebrow flex items-center gap-1.5"><Icon className="size-3.5" aria-hidden />{label}</h4>
+    <h4 className="eyebrow flex items-center gap-1.5 text-foreground"><Icon className="size-3.5 text-muted-foreground" aria-hidden />{label}</h4>
     {children}
   </section>;
 }
 
 function Collapsible({ label, children }: { label: string; children: React.ReactNode }) {
   return <details className="group">
-    <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md border px-3 py-2 font-mono text-[13px] hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring">
+    <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-input bg-card px-3 py-2 font-mono text-[13px] hover:border-foreground">
       <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />{label}</summary>
     <div className="mt-2">{children}</div>
   </details>;
@@ -282,24 +282,24 @@ function Collapsible({ label, children }: { label: string; children: React.React
 function Quote({ text, streaming }: { text: string; streaming?: boolean }) {
   return <figure className="space-y-1">
     <figcaption className="text-xs text-muted-foreground">The model’s short explanation (its <code className="font-mono">thinking</code> field){streaming ? " · streaming" : ""}, not its hidden reasoning</figcaption>
-    <blockquote className="border-l-2 border-[var(--model)]/40 pl-3 text-sm leading-relaxed">{text}</blockquote>
+    <blockquote className="border-l-2 border-model pl-3 text-sm leading-relaxed">{text}</blockquote>
   </figure>;
 }
 
 function Meta({ rows }: { rows: [string, string][] }) {
   if (!rows.length) return null;
-  return <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-1 text-[13px]">
+  return <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 border-t pt-2 text-[13px]">
     {rows.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="font-mono text-[12.5px] break-words">{v}</dd></div>)}
   </dl>;
 }
 
 function Waiting({ text }: { text: string }) {
-  return <p className="flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2 text-[13px] text-muted-foreground">
-    <span className="studio-dot mt-1.5 bg-primary" aria-hidden />{text}</p>;
+  return <p className="flex items-start gap-2 rounded-xs border-l-2 border-brand bg-muted px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
+    <span className="studio-dot mt-1.5 animate-pulse bg-brand" aria-hidden />{text}</p>;
 }
 
 function Empty({ text }: { text: string }) {
-  return <p className="rounded-lg bg-muted/60 px-3 py-2.5 text-[13px] text-muted-foreground">{text}</p>;
+  return <p className={NOTE}>{text}</p>;
 }
 
 function num(v: unknown): number | null {

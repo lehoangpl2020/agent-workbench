@@ -9,16 +9,16 @@ export function HowItWorks() {
     { Icon: FolderOutput, title: "Artifacts", file: "storage/workspace.py", text: "Files written to /workspace/output are collected after each execution and kept per iteration, so replay shows the version that existed at that step." },
   ];
   return <details className="surface group">
-    <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold sm:px-5">
+    <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-md px-4 py-3 text-sm font-semibold hover:bg-accent focus-visible:outline-offset-[-2px] sm:px-5">
       How it works
       <span className="text-xs font-normal text-muted-foreground">one agent · one loop · four parts</span>
-      <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+      <ChevronDown className="ml-auto size-4 self-center text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
     </summary>
-    <div className="grid gap-4 border-t px-4 py-4 sm:grid-cols-2 sm:px-5">
-      {items.map(({ Icon, title, file, text }) => <div key={title} className="flex gap-3">
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-foreground/70"><Icon className="size-4" /></span>
+    <div className="grid gap-x-8 gap-y-5 border-t px-4 py-5 sm:grid-cols-2 sm:px-5">
+      {items.map(({ Icon, title, file, text }, i) => <div key={title} className="flex gap-3 border-t pt-3 first:border-t-0 first:pt-0 sm:[&:nth-child(2)]:border-t-0 sm:[&:nth-child(2)]:pt-0">
+        <span className="idx pt-0.5">{String(i + 1).padStart(2, "0")}</span>
         <div>
-          <p className="text-sm font-semibold">{title} <span className="font-mono text-[11px] font-normal text-muted-foreground">{file}</span></p>
+          <p className="flex flex-wrap items-center gap-x-2 text-sm font-semibold"><Icon className="size-4 text-muted-foreground" aria-hidden />{title} <span className="font-mono text-[11px] font-normal text-muted-foreground">{file}</span></p>
           <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{text}</p>
         </div>
       </div>)}

@@ -5,6 +5,7 @@ import { describeMessage, recordedRequests, type JourneySection } from "@/lib/jo
 import { providerLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "../CodeView";
+import { NOTE } from "../styles";
 
 interface Props {
   run: RunDetail;
@@ -26,7 +27,7 @@ export function ModelInput({ run, section, upto, onSelect }: Props) {
     const later = all.find(r => r.step.index > upto);
     if (later) return <Empty>
       The request is recorded when the call starts.{" "}
-      <button type="button" className="font-medium text-primary hover:underline" onClick={() => onSelect(later.step.index)}>
+      <button type="button" className="text-link" onClick={() => onSelect(later.step.index)}>
         Go to the call event</button>
     </Empty>;
     if (running && !calls.length) return <Empty>The runtime is preparing the request. It is recorded when the call starts.</Empty>;
@@ -35,7 +36,7 @@ export function ModelInput({ run, section, upto, onSelect }: Props) {
         <strong className="font-semibold text-foreground">Not recorded.</strong> This run was stored before model inputs were saved, so the
         exact system instructions and messages are unknown.</Empty>
       <p className="text-xs text-muted-foreground">Known from the run record (not the recorded request): the task was</p>
-      <p className="rounded-md bg-muted/60 px-2.5 py-2 text-[13px] break-words whitespace-pre-wrap">{run.prompt}</p>
+      <p className="rounded-xs border-l-2 border-rule bg-muted px-3 py-2 text-[13px] break-words whitespace-pre-wrap">{run.prompt}</p>
       {section.number != null && section.number > 1 && <p className="text-xs text-muted-foreground">
         Earlier code and execution feedback were also part of this call, but their exact text was not stored.</p>}
     </div>;
@@ -63,12 +64,12 @@ function Message({ title, hint, text, tone, defaultOpen = false }: {
   title: string; hint: string; text: string; tone: "system" | "user" | "assistant"; defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  return <div className={cn("overflow-hidden rounded-lg border", tone === "assistant" ? "border-[var(--model)]/25" : "")}>
+  return <div className={cn("overflow-hidden rounded-md border bg-card", tone === "assistant" && "border-l-2 border-l-model")}>
     <button type="button" aria-expanded={open} onClick={() => setOpen(v => !v)}
-      className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50">
+      className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent focus-visible:outline-offset-[-2px]">
       <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
-      <span className={cn("rounded px-1.5 font-mono text-[10.5px] font-semibold leading-[18px]",
-        tone === "system" ? "bg-muted text-muted-foreground" : tone === "assistant" ? "bg-[var(--model-soft)] text-[var(--model)]" : "bg-accent text-accent-foreground")}>
+      <span className={cn("rounded-xs border px-1.5 font-mono text-[10.5px] font-semibold leading-[16px]",
+        tone === "system" ? "border-border bg-muted text-muted-foreground" : tone === "assistant" ? "border-transparent bg-model-soft text-model" : "border-rule bg-card text-foreground")}>
         {title}</span>
       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{hint}</span>
       <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground">{text.length.toLocaleString()} chars</span>
@@ -82,6 +83,6 @@ function Message({ title, hint, text, tone, defaultOpen = false }: {
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-lg bg-muted/60 px-3 py-2.5 text-[13px] leading-relaxed text-muted-foreground">{children}</p>;
+  return <p className={NOTE}>{children}</p>;
 }
 

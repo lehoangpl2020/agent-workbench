@@ -8,16 +8,17 @@ import { ProcessOutputPanel } from "./ResultPanels";
 
 // Source of the entry: who did this (see observability/runlog.py in the backend)
 const SOURCES: Record<string, { label: string; cls: string; title: string }> = {
-  runtime: { label: "RUNTIME", cls: "bg-sky-500/15 text-sky-300", title: "Agent loop (application) action" },
-  llm: { label: "LLM CALL", cls: "bg-violet-500/15 text-violet-300", title: "Model API request/response" },
-  model: { label: "MODEL", cls: "bg-pink-500/15 text-pink-300", title: "Short explanation written by the model" },
-  sandbox: { label: "SANDBOX", cls: "bg-teal-500/15 text-teal-300", title: "Executor / sandbox action" },
+  // Dark-terminal versions of the actor colors: runtime graphite, model violet (the API call and its text), sandbox teal
+  runtime: { label: "RUNTIME", cls: "bg-white/10 text-stone-200", title: "Agent loop (application) action" },
+  llm: { label: "LLM CALL", cls: "bg-violet-400/15 text-violet-200", title: "Model API request/response" },
+  model: { label: "MODEL", cls: "border border-violet-300/40 text-violet-200", title: "Short explanation written by the model" },
+  sandbox: { label: "SANDBOX", cls: "bg-teal-400/15 text-teal-200", title: "Executor / sandbox action" },
 };
 
 const LEVEL_CLS: Record<string, string> = {
   INFO: "text-code-muted",
   WARN: "text-amber-300",
-  ERROR: "text-red-300",
+  ERROR: "text-[#f3a3b5]",
 };
 
 function time(ts: string) {
@@ -89,7 +90,7 @@ export function ActivityLog({ run, logs, selected, logError, onRetry }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-xl border border-code-border bg-code">
+      <div className="overflow-hidden rounded-md border border-code-border bg-code">
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-2 border-b border-code-border px-3 py-2">
           <div className="flex flex-wrap items-center gap-1">
@@ -107,27 +108,28 @@ export function ActivityLog({ run, logs, selected, logError, onRetry }: Props) {
           </div>
           <div className="ml-auto flex items-center gap-1.5">
             {running && (
-              <span className="mr-1 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300">
-                <Radio className="size-3.5 animate-pulse" /> live
+              <span className="mr-1 inline-flex items-center gap-1 text-[11px] font-semibold text-[#ff9a86]">
+                <Radio className="size-3.5 animate-pulse" aria-hidden /> live
               </span>
             )}
             <button
               type="button"
               onClick={() => setFollow((v) => !v)}
               className={cn(
-                "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition",
+                "inline-flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors",
                 follow
-                  ? "border-sky-400/40 bg-sky-400/10 text-sky-200"
-                  : "border-white/10 bg-white/5 text-code-foreground/80 hover:bg-white/10",
+                  ? "border-white bg-white text-[#191919]"
+                  : "border-white/15 text-code-foreground/80 hover:border-white/40",
               )}
               title="Auto-scroll to the newest entry"
+              aria-pressed={follow}
             >
               <ArrowDownToLine className="size-3.5" /> Auto-scroll
             </button>
             <CopyButton text={toText(visible)} label="Copy" />
             <a
               href={api.logsDownloadUrl(run.id, filter === "all" ? null : filter)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-code-foreground/90 transition hover:bg-white/10"
+              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/15 px-2 text-xs font-medium text-code-foreground/90 transition-colors hover:border-white/40 hover:bg-white/5"
             >
               <Download className="size-3.5" /> Download
             </a>
@@ -135,7 +137,7 @@ export function ActivityLog({ run, logs, selected, logError, onRetry }: Props) {
         </div>
 
         {logError && (
-          <div className="flex items-center gap-2 border-b border-code-border bg-red-500/10 px-3 py-1.5 text-xs text-red-200">
+          <div className="flex items-center gap-2 border-b border-code-border bg-[#b42347]/20 px-3 py-1.5 text-xs text-[#f6c3cf]">
             <AlertCircle className="size-3.5" /> Could not load part of the log.
             {onRetry && <button className="underline" onClick={onRetry}>Retry</button>}
           </div>
@@ -164,25 +166,25 @@ export function ActivityLog({ run, logs, selected, logError, onRetry }: Props) {
           ))}
           {running && visible.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1 text-code-muted/70">
-              <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" /> listening for events…
+              <span className="size-1.5 animate-pulse rounded-[1px] bg-[#ff9a86]" aria-hidden /> listening for events…
             </div>
           )}
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-code-border px-3 py-1.5 text-[10.5px] text-code-muted">
           {Object.entries(SOURCES).map(([k, s]) => (
             <span key={k} className="inline-flex items-center gap-1.5">
-              <span className={cn("rounded px-1 font-semibold", s.cls)}>{s.label}</span> {s.title}
+              <span className={cn("rounded-xs px-1 font-semibold", s.cls)}>{s.label}</span> {s.title}
             </span>
           ))}
         </div>
       </div>
 
       {/* Python stdout/stderr — a separate, collapsible area */}
-      <div className="rounded-xl border bg-card">
+      <div className="surface">
         <button
           type="button"
           onClick={() => setOutputOpen((v) => !v)}
-          className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium"
+          className="flex w-full items-center gap-2 rounded-md px-4 py-2.5 text-left text-sm font-semibold hover:bg-accent focus-visible:outline-offset-[-2px]"
           aria-expanded={outputOpen}
         >
           <ChevronRight className={cn("size-4 transition-transform", outputOpen && "rotate-90")} />
@@ -216,13 +218,14 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "rounded-md px-2 py-1 text-xs font-medium transition",
+        "h-7 rounded-xs px-2 text-xs font-medium transition-colors",
         active
           ? tone === "warn"
-            ? "bg-amber-400/20 text-amber-200"
-            : "bg-white/15 text-white"
-          : "text-code-muted hover:bg-white/5 hover:text-code-foreground",
+            ? "bg-amber-300 text-[#191919]"
+            : "bg-white text-[#191919]"
+          : "text-code-muted hover:bg-white/10 hover:text-code-foreground",
       )}
     >
       {children}
@@ -238,18 +241,18 @@ function LogRow({ entry: e }: { entry: LogEntry }) {
     <div
       className={cn(
         "grid grid-cols-[auto_auto_auto_auto_1fr] items-baseline gap-x-2.5 px-3 py-[3px] hover:bg-white/[0.03]",
-        e.level === "ERROR" && "bg-red-500/[0.08]",
+        e.level === "ERROR" && "bg-[#b42347]/15",
         e.level === "WARN" && "bg-amber-400/[0.05]",
       )}
     >
       <span className="text-code-muted/70 tabular-nums">{time(e.ts)}</span>
       <span className="w-11 text-code-muted">{e.iteration ? `it ${e.iteration}` : "run"}</span>
       <span className={cn("w-10 font-semibold", LEVEL_CLS[e.level])}>{e.level}</span>
-      <span className={cn("rounded px-1 text-[10.5px] font-semibold", src.cls)} title={src.title}>
+      <span className={cn("rounded-xs px-1 text-[10.5px] font-semibold", src.cls)} title={src.title}>
         {src.label}
       </span>
       <span className="min-w-0 break-words whitespace-pre-wrap">
-        <span className={cn(isModel ? "text-pink-100 italic" : "text-code-foreground", e.level === "ERROR" && "text-red-200")}>
+        <span className={cn(isModel ? "text-violet-100 italic" : "text-code-foreground", e.level === "ERROR" && "text-[#f6c3cf]")}>
           {isModel ? `“${e.message}”` : e.message}
         </span>
         {data && <span className="ml-2 text-code-muted">{data}</span>}

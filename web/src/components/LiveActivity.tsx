@@ -35,13 +35,9 @@ export function LiveActivity({ run }: { run: RunDetail }) {
   const iteration = run.activity_iteration ?? (run.iterations.length || null);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-accent/40 px-4 py-2.5 sm:px-5" aria-live="polite">
-      <span
-        className={cn(
-          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide uppercase",
-          actor === "model" ? "bg-[var(--model-soft)] text-[var(--model)]" : actor === "sandbox" ? "bg-[var(--sandbox-soft)] text-[var(--sandbox)]" : "bg-primary/10 text-primary",
-        )}
-      >
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 sm:px-5" aria-live="polite">
+      <span className="eyebrow flex items-center gap-1.5 text-foreground"><span className="mark animate-pulse bg-brand" aria-hidden />Now</span>
+      <span className={cn("studio-actor-chip", actor && `is-${actor}`)}>
         {actor === "model" ? "Model" : actor === "sandbox" ? "Sandbox" : "Runtime"}
       </span>
       {iteration && (
@@ -50,7 +46,7 @@ export function LiveActivity({ run }: { run: RunDetail }) {
         </span>
       )}
       <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-foreground">
-        <Icon className={cn("size-4 shrink-0 text-primary", run.activity_phase === "executing" && "animate-spin [animation-duration:2.5s]")} />
+        <Icon className={cn("size-4 shrink-0 text-muted-foreground", run.activity_phase === "executing" && "animate-spin [animation-duration:2.5s]")} aria-hidden />
         <span className="min-w-0 break-words">{run.activity || "Starting…"}</span>
       </span>
       {since !== null && <span className="font-mono text-xs text-muted-foreground tabular-nums">{since}s</span>}

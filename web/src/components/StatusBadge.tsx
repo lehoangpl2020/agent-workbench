@@ -19,12 +19,12 @@ export function StatusBadge({ status, className }: { status: RunStatus; classNam
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap",
+        "inline-flex h-6 items-center gap-1.5 rounded-xs border px-2 text-xs font-semibold whitespace-nowrap",
         TONE_CLASSES[meta.tone],
         className,
       )}
     >
-      <Icon className={cn("size-3.5", status === "running" && "animate-spin")} />
+      <Icon className={cn("size-3.5", status === "running" && "animate-spin text-brand")} aria-hidden />
       {meta.label}
     </span>
   );

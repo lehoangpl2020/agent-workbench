@@ -5,10 +5,10 @@ import { cn } from "@/lib/utils";
 
 export const ACTOR_ICON: Record<Actor, typeof BrainCircuit> = { model: BrainCircuit, runtime: Workflow, sandbox: SquareTerminal };
 
-/** The same label, icon and color for an actor everywhere: Model (violet), Runtime (cobalt), Sandbox (teal). */
+/** The same label, icon and color for an actor everywhere: Model (violet), Runtime (graphite), Sandbox (teal). */
 export function ActorChip({ actor, className }: { actor: Actor; className?: string }) {
   const Icon = ACTOR_ICON[actor];
-  return <span className={cn("studio-actor-chip inline-flex items-center gap-1", `is-${actor}`, className)} title={ACTOR_ROLE[actor]}>
+  return <span className={cn("studio-actor-chip", `is-${actor}`, className)} title={ACTOR_ROLE[actor]}>
     <Icon className="size-3" aria-hidden />{ACTOR_NAME[actor]}
   </span>;
 }

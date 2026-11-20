@@ -4,23 +4,25 @@ import type { Iteration, IterationArtifact, RunDetail } from "@/lib/api";
 import { formatBytes, formatMs, isImage, iterationStatus } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TerminalBlock } from "./CodeView";
+import { FILE_ACTION, NOTE } from "./styles";
 
 function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={cn("surface p-4 sm:p-5", className)}>{children}</div>;
 }
 
+// These states render inside other surfaces (inspector, process output), so they are quiet blocks, not more boxes.
 function Waiting({ text }: { text: string }) {
   return (
-    <Panel>
+    <div>
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin text-primary" /> {text}
+        <Loader2 className="size-4 animate-spin text-brand" aria-hidden /> {text}
       </div>
-      <div className="mt-4 space-y-2">
+      <div className="mt-3 space-y-2">
         <Skeleton className="h-4 w-3/4" />
         <Skeleton className="h-4 w-1/2" />
-        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-32 w-full" />
       </div>
-    </Panel>
+    </div>
   );
 }
 
@@ -33,7 +35,7 @@ function currentAction(run: RunDetail, iteration: Iteration, fallback: string) {
 
 function NoIteration() {
   return (
-    <Panel className="text-sm text-muted-foreground">Select a step in the journey to see its details.</Panel>
+    <p className={NOTE}>Select a step in the journey to see its details.</p>
   );
 }
 
@@ -46,7 +48,7 @@ export function ProcessOutputPanel({ run, iteration }: { run: RunDetail; iterati
     return <Waiting text={`${currentAction(run, iteration, "Running…")} — logs appear when the process exits.`} />;
   }
   if (iteration.exit_code === null) {
-    return <Panel className="text-sm text-muted-foreground">No process result was recorded for this iteration.</Panel>;
+    return <p className={NOTE}>No process result was recorded for this iteration.</p>;
   }
   const stats = [
     { label: "exit", value: String(iteration.exit_code), bad: iteration.exit_code !== 0 },
@@ -56,10 +58,10 @@ export function ProcessOutputPanel({ run, iteration }: { run: RunDetail; iterati
   ];
   return (
     <div className="space-y-2.5">
-      <dl className="flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
+      <dl className="flex flex-wrap gap-x-6 gap-y-1 border-y py-2 text-[13px]">
         {stats.map((s) => (
           <div key={s.label} className="flex items-baseline gap-1.5">
-            <dt className="text-muted-foreground">{s.label}</dt>
+            <dt className="text-[10.5px] font-semibold tracking-[.08em] text-muted-foreground uppercase">{s.label}</dt>
             <dd className={cn("font-mono font-medium", s.bad && "text-destructive")}>{s.value}</dd>
           </div>
         ))}
@@ -78,9 +80,9 @@ export function ProcessOutputPanel({ run, iteration }: { run: RunDetail; iterati
 export function FilesPanel({ run, iteration }: { run: RunDetail; iteration: Iteration | null }) {
   if (run.artifacts.length === 0) {
     return (
-      <Panel className="flex flex-col items-center gap-2 py-10 text-center">
-        <ImageOff className="size-6 text-muted-foreground" />
-        <div className="text-sm font-medium">No files yet</div>
+      <Panel className="flex flex-col items-start gap-2 py-8 sm:py-10">
+        <ImageOff className="size-6 text-muted-foreground" aria-hidden />
+        <div className="text-base font-semibold tracking-tight">No files yet</div>
         <p className="max-w-sm text-xs text-muted-foreground">
           Files the code saves to <code className="font-mono">/workspace/output</code> appear here, separate for each run.
         </p>
@@ -98,8 +100,9 @@ export function ArtifactList({ files, changed, iteration, caption, thumbnails }:
 }) {
   return (
     <div className="surface overflow-hidden">
-      <div className="border-b px-4 py-2.5 text-[13px] text-muted-foreground">
-        {caption}
+      <div className="flex items-baseline justify-between gap-3 border-b px-4 py-2.5">
+        <span className="text-[13px] font-semibold">{caption}</span>
+        <span className="idx">{files.length}</span>
       </div>
       <ul className="divide-y">
         {files.map((a) => {
@@ -108,9 +111,9 @@ export function ArtifactList({ files, changed, iteration, caption, thumbnails }:
             <li key={a.path} className="flex flex-wrap items-center gap-3 px-4 py-2.5 sm:flex-nowrap">
               {thumbnails && a.snapshot_available !== false && isImage(a.mime)
                 ? <a href={a.url} target="_blank" rel="noreferrer" aria-label={`Preview ${a.path}`}>
-                    <img src={a.url} alt={a.path} loading="lazy" className="checker size-16 rounded-md border object-contain" />
+                    <img src={a.url} alt={a.path} loading="lazy" className="checker size-16 rounded-xs border object-contain" />
                   </a>
-                : <Icon className="size-4 shrink-0 text-primary" />}
+                : <Icon className="size-4 shrink-0 text-sandbox" aria-hidden />}
               <div className="min-w-0 flex-1">
                 <div className="truncate font-mono text-[13px]">{a.path}</div>
                 <div className="text-xs text-muted-foreground">
@@ -119,18 +122,17 @@ export function ArtifactList({ files, changed, iteration, caption, thumbnails }:
                 </div>
               </div>
               {changed?.has(a.path) && (
-                <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground">
+                <span className="tag border-sandbox/40 text-sandbox">
                   changed in code run {iteration}
                 </span>
               )}
               <div className="ml-auto flex items-center gap-1">
-                {a.snapshot_available === false ? <span className="text-xs text-muted-foreground">Snapshot unavailable</span> : <>
-                <a href={a.url} target="_blank" rel="noreferrer" className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title="Open in a new tab" aria-label={`Open ${a.path} in a new tab`}>
+                {a.snapshot_available === false ? <span className="tag">Snapshot unavailable</span> : <>
+                <a href={a.url} target="_blank" rel="noreferrer" className="rounded-xs p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground" title="Open in a new tab" aria-label={`Open ${a.path} in a new tab`}>
                   <ExternalLink className="size-4" />
                 </a>
-                <a href={a.download_url ?? `${a.url}&download=1`} aria-label={`Download ${a.path}`} className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-muted">
-
-                  <Download className="size-3.5" /> Download
+                <a href={a.download_url ?? `${a.url}&download=1`} aria-label={`Download ${a.path}`} className={FILE_ACTION}>
+                  <Download className="size-3.5" aria-hidden /> Download
                 </a>
                 </>}
               </div>

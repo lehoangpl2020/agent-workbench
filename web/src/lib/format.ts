@@ -27,16 +27,17 @@ export function iterationStatus(s: IterationStatus) {
   return ITERATION_STATUS[s] ?? RUN_STATUS[s as RunStatus] ?? { label: s, tone: "neutral" as Tone };
 }
 
+// Running is ink on white with a vermilion mark (live, not an alarm); failures use the crimson danger tone.
 export const TONE_CLASSES: Record<Tone, string> = {
-  running: "bg-accent text-accent-foreground border-primary/20",
-  success: "bg-success-soft text-success border-success/20",
-  danger: "bg-danger-soft text-destructive border-destructive/20",
-  warning: "bg-warning-soft text-warning border-warning/25",
-  neutral: "bg-muted text-muted-foreground border-border",
+  running: "bg-card text-foreground border-foreground/30",
+  success: "bg-success-soft text-success border-success/25",
+  danger: "bg-danger-soft text-destructive border-destructive/25",
+  warning: "bg-warning-soft text-warning border-warning/30",
+  neutral: "bg-secondary text-muted-foreground border-border",
 };
 
 export const TONE_DOT: Record<Tone, string> = {
-  running: "bg-primary",
+  running: "bg-brand",
   success: "bg-success",
   danger: "bg-destructive",
   warning: "bg-warning",

@@ -7,10 +7,10 @@ import { cn } from "@/lib/utils";
 
 function Stat({ label, value, sub, title, muted }: { label: string; value: ReactNode; sub?: ReactNode; title?: string; muted?: boolean }) {
   return (
-    <div className="min-w-0" title={title}>
-      <dt className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</dt>
-      <dd className={cn("mt-0.5 text-sm font-semibold tabular-nums", muted && "font-normal text-muted-foreground")}>{value}</dd>
-      {sub && <dd className="text-[11px] text-muted-foreground tabular-nums">{sub}</dd>}
+    <div className="min-w-0 border-l pl-3" title={title}>
+      <dt className="text-[10.5px] font-semibold tracking-[.08em] text-muted-foreground uppercase">{label}</dt>
+      <dd className={cn("mt-1 font-mono text-[15px] font-semibold tabular-nums", muted && "font-sans text-sm font-normal text-muted-foreground")}>{value}</dd>
+      {sub && <dd className="mt-0.5 text-[11px] leading-snug text-muted-foreground tabular-nums">{sub}</dd>}
     </div>
   );
 }
@@ -22,7 +22,7 @@ export function RunUsage({ run }: { run: RunDetail }) {
 
   if (!llm && !sandbox) {
     return (
-      <p className="rounded-xl border bg-card px-4 py-3 text-xs text-muted-foreground">
+      <p className="surface px-4 py-3 text-xs text-muted-foreground">
         <span className="font-semibold text-foreground">Usage &amp; cost:</span>{" "}
         {running ? "waiting for the first model response…"
           : "no data. This run has no measured model calls (for example, it was stored before usage was tracked)."}
@@ -38,12 +38,12 @@ export function RunUsage({ run }: { run: RunDetail }) {
   const tokensUnknown = !llm || llm.calls_with_usage === 0;
 
   return (
-    <section className="rounded-xl border bg-card px-4 py-3 sm:px-5" aria-label="Usage and cost">
-      <h2 className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 text-sm font-semibold">
+    <section className="surface px-4 py-3.5 sm:px-5" aria-label="Usage and cost">
+      <h2 className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 text-sm font-semibold">
         Usage &amp; cost
         {running && <span className="text-xs font-normal text-muted-foreground">updating live</span>}
       </h2>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Model calls" value={llm ? llm.calls : NO_DATA} muted={!llm} sub={callsNote(llm)}
           title="Includes calls resent after invalid JSON, and failed calls" />
         <Stat label="Tokens in / out" value={tokens} muted={tokensUnknown}
@@ -70,7 +70,7 @@ export function UsageSummary({ run }: { run: RunDetail }) {
   const { llm, sandbox, wall_ms, cost } = run.summary;
   const running = run.status === "running" || run.status === "pending";
   const c = costLabel(cost);
-  const parts = !llm && !sandbox ? [running ? "Usage: waiting for the first model response" : "Usage: no data for this run"] : [
+  const parts = !llm && !sandbox ? [running ? "waiting for the first model response" : "no data for this run"] : [
     llm ? `${llm.calls} model call${llm.calls === 1 ? "" : "s"}` : `model calls: ${NO_DATA}`,
     `tokens ${tokensLabel(llm)}`,
     `model ${formatMs(llm?.duration_ms ?? null)}`,
@@ -79,11 +79,12 @@ export function UsageSummary({ run }: { run: RunDetail }) {
     `cost ${c.value}`,
   ];
   return <div className="text-xs text-muted-foreground">
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="min-w-0 tabular-nums">{parts.join(" · ")}</span>
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <span className="text-[10.5px] font-semibold tracking-[.08em] uppercase">Usage</span>
+      <span className="min-w-0 font-mono text-[11.5px] tabular-nums">{parts.join(" · ")}</span>
       <button type="button" aria-expanded={open} onClick={() => setOpen(v => !v)}
-        className="inline-flex items-center gap-0.5 rounded font-medium text-primary hover:underline">
-        {open ? "Hide usage details" : "Usage details"}<ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+        className="text-link inline-flex items-center gap-0.5">
+        {open ? "Hide usage details" : "Usage details"}<ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} aria-hidden />
       </button>
     </div>
     {open && <div className="mt-2"><RunUsage run={run} /></div>}

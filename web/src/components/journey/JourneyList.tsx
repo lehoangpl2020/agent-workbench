@@ -52,7 +52,7 @@ export function JourneyList({ run, sections, selected, eventLevel, revealed, liv
   }
 
   return <ol className="tl space-y-0.5" aria-label="Journey steps" onKeyDown={onKey}>
-    {visible.map(section => {
+    {visible.map((section, pos) => {
       const Icon = ACTOR_ICON[section.actor];
       const isSel = section === selectedSection;
       const live = liveIndex != null && section.steps.some(s => s.index === liveIndex) && section === visible.at(-1);
@@ -69,11 +69,12 @@ export function JourneyList({ run, sections, selected, eventLevel, revealed, liv
         className={cn("tl-item", `is-${section.actor}`, isSel && "is-selected", isSel && eventLevel && "has-event")}>
         <button type="button" data-journey-head onClick={() => onSelectSection(section)}
           aria-current={isSel && !eventLevel ? "step" : undefined} aria-expanded={isSel} className="tl-head">
+          <span className="tl-num" aria-hidden>{String(pos + 1).padStart(2, "0")}</span>
           <span className="tl-node" aria-hidden><Icon className="size-3.5" /></span>
           <span className="min-w-0 flex-1">
             <span className="tl-title">{section.title} <span className="tl-purpose">· {section.purpose}</span></span>
             {summary && <span className={cn("tl-summary", TONE[summary.tone])}>{summary.text}</span>}
-            {live && <span className="tl-live"><span className="studio-dot bg-primary animate-pulse" aria-hidden />
+            {live && <span className="tl-live"><span className="studio-dot animate-pulse bg-brand" aria-hidden />
               <span className="font-semibold">Now</span><span className="min-w-0 truncate">{liveText || "in progress"}</span></span>}
           </span>
         </button>
@@ -92,7 +93,7 @@ export function JourneyList({ run, sections, selected, eventLevel, revealed, liv
         {isSel && inline && <div className="tl-inline">{inline}</div>}
       </li>;
     })}
-    {hidden > 0 && <li className="ml-[34px] px-3 py-2 text-[12.5px] text-muted-foreground">
+    {hidden > 0 && <li className="ml-[45px] border-l border-dashed border-input px-3 py-2 text-[12.5px] text-muted-foreground">
       {hidden} more recorded event{hidden === 1 ? "" : "s"} · not played yet</li>}
   </ol>;
 }

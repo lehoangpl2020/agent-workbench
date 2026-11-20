@@ -125,7 +125,7 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
       {/* Model */}
       <section className={cn("studio-pane", active === "model" && "is-active")} aria-label="Model">
         <p className="studio-pane-status">
-          <span className={cn("studio-dot", active === "model" ? "bg-[var(--model)]" : "bg-muted-foreground/40")} />
+          <span className={cn("studio-dot", active === "model" ? "bg-model" : "bg-muted-foreground/40")} aria-hidden />
           <span className="min-w-0 truncate">{modelStatus}</span>
           {active === "model" && sinceActivity != null && <span className="ml-auto font-mono tabular-nums text-muted-foreground">{seconds(sinceActivity)}</span>}
         </p>
@@ -147,7 +147,7 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
 
       {/* Runtime: small coordinator with this iteration's loop */}
       <section className={cn("studio-pane studio-runtime", active === "runtime" && "is-active")} aria-label="Agent runtime">
-        {seen.finished ? <span className={cn("self-start rounded-full border px-2 py-0.5 text-[11px] font-medium", TONE_CLASSES[RUN_STATUS[run.status].tone])}>
+        {seen.finished ? <span className={cn("self-start rounded-xs border px-1.5 py-0.5 text-[11px] font-semibold", TONE_CLASSES[RUN_STATUS[run.status].tone])}>
             Run {RUN_STATUS[run.status].label.toLowerCase()}</span>
           : n != null ? <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             {seen.intent && <span className="studio-intent">{seen.intent}</span>}loop</span>
@@ -163,9 +163,9 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
             {sandboxSteps.filter(s => s.beat === "install").map(s => <span key={s.key} className="block truncate text-amber-300">… {s.title}</span>)}
             {runningNow && <span className="block text-teal-300">running{active === "sandbox" && sinceActivity != null ? ` · ${seconds(sinceActivity)}` : "…"}</span>}
             {exited && sit && tail(sit.stdout, 3).map((l, i) => <span key={`o${i}`} className="block truncate">{l}</span>)}
-            {exited && sit && sit.exit_code !== 0 && tail(sit.stderr, 2).map((l, i) => <span key={`e${i}`} className="block truncate text-red-300">{l}</span>)}
+            {exited && sit && sit.exit_code !== 0 && tail(sit.stderr, 2).map((l, i) => <span key={`e${i}`} className="block truncate text-[#f3a3b5]">{l}</span>)}
             {killed && !exited && <span className="block text-amber-300">process killed</span>}
-            {exited && sit && <span className={cn("block", sit.exit_code === 0 ? "text-emerald-300" : "text-red-300")}>
+            {exited && sit && <span className={cn("block", sit.exit_code === 0 ? "text-emerald-300" : "text-[#f3a3b5]")}>
               exit {sit.exit_code}{sit.execution_time_ms != null && ` · ${(sit.execution_time_ms / 1000).toFixed(2)}s`}</span>}
           </>}
         </div>
@@ -174,8 +174,8 @@ export function StudioStage({ run, steps, step, seen, animate, speed, liveEdge, 
             : seen.files.map(f => <a key={`${f.path}-${f.iteration}`} href={f.url} target="_blank" rel="noreferrer"
               title={`${f.path} · iteration ${f.iteration}`} className={cn("studio-file", seen.newFiles.has(f.path) && animate && "is-new")}>
               {isImage(f.mime) && f.snapshot_available !== false
-                ? <img src={f.url} alt={f.path} className="checker size-full rounded-[5px] object-contain" />
-                : <span className="flex size-full flex-col items-center justify-center gap-0.5 rounded-[5px] bg-muted px-1">
+                ? <img src={f.url} alt={f.path} className="checker size-full object-contain" />
+                : <span className="flex size-full flex-col items-center justify-center gap-0.5 bg-muted px-1">
                     <FileText className="size-4 text-muted-foreground" />
                     <span className="max-w-full truncate font-mono text-[9px]">{f.path}</span>
                   </span>}

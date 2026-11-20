@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Composer, type ComposerDraft } from "@/components/Composer";
 import { RunView } from "@/components/RunView";
-import { Sidebar } from "@/components/Sidebar";
+import { BrandMark, Sidebar } from "@/components/Sidebar";
 import { api, type AppConfig, type RunSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -95,18 +95,19 @@ export default function App() {
         </SheetContent>
       </Sheet>
 
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/90 px-4 py-2.5 backdrop-blur lg:hidden">
+      {/* relative: absolutely positioned descendants (sr-only labels) stay inside this scroller, not the page */}
+      <main className="relative min-w-0 flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-10 flex items-center gap-2.5 border-b bg-card px-3 py-2 lg:hidden">
           <Button variant="ghost" size="icon-sm" onClick={() => setMenuOpen(true)} aria-label="Open menu">
             <Menu />
           </Button>
-          <span className="text-sm font-semibold">Agent Workbench</span>
+          <BrandMark className="size-6" />
+          <span className="text-[15px] font-semibold tracking-tight">Agent Workbench</span>
         </div>
 
         {!historyOpen && <Button variant="outline" size="sm" className="fixed top-3 left-3 z-20 hidden lg:inline-flex"
-
           onClick={() => toggleHistory(true)} aria-label="Show run history"><PanelLeftOpen /> History</Button>}
-        <div className={cn("mx-auto w-full px-4 py-4 sm:px-6 sm:py-6 lg:px-8", runId ? "max-w-[1480px]" : "max-w-5xl",
+        <div className={cn("mx-auto w-full px-4 py-5 sm:px-6 sm:py-7 lg:px-10", runId ? "max-w-[1480px]" : "max-w-[1040px]",
           !historyOpen && "lg:pt-14")}>
           {runId ? (
             <RunView
@@ -120,14 +121,15 @@ export default function App() {
               }}
             />
           ) : (
-            <div className="space-y-6">
-              <div>
-                <h1 className="text-[26px] font-semibold tracking-tight">New run</h1>
-                <p className="mt-1.5 max-w-[68ch] text-[15px] leading-relaxed text-muted-foreground">
+            <div className="space-y-8 sm:space-y-10">
+              <header className="max-w-[62ch]">
+                <p className="eyebrow flex items-center gap-2"><span className="mark bg-brand" aria-hidden />Code execution agent</p>
+                <h1 className="mt-3 text-[36px] leading-[1.05] font-semibold tracking-[-0.025em] sm:text-[48px]">New run</h1>
+                <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground sm:text-base">
                   The agent writes Python, runs it, reads the result and keeps iterating until the model
                   confirms the task is done.
                 </p>
-              </div>
+              </header>
               {config?.sandboxed === false && <LocalModeWarning />}
               <Composer
                 key={draftKey}
@@ -152,7 +154,7 @@ export default function App() {
 
 function LocalModeWarning() {
   return (
-    <Alert className="border-warning/40 bg-warning-soft text-warning">
+    <Alert className="border-warning/35 bg-warning-soft text-warning">
       <TriangleAlert />
       <AlertTitle>Local mode: code is not isolated</AlertTitle>
       <AlertDescription className="text-foreground/80">
@@ -166,31 +168,32 @@ function LocalModeWarning() {
 
 function EmptyState({ sandboxed }: { sandboxed: boolean }) {
   const steps = [
-    { icon: BrainCircuit, who: "Model", cls: "bg-[var(--model-soft)] text-[var(--model)]",
+    { icon: BrainCircuit, who: "Model", cls: "text-model",
       text: "Decides what Python to write for your task, how to fix it after an error, and when to reply DONE." },
-    { icon: Workflow, who: "Runtime", cls: "bg-[var(--runtime-soft)] text-[var(--runtime)]",
+    { icon: Workflow, who: "Runtime", cls: "text-runtime",
       text: "Application code that runs the loop: sends the task and every result to the model, and applies the stop rules." },
-    { icon: SquareTerminal, who: "Sandbox", cls: "bg-[var(--sandbox-soft)] text-[var(--sandbox)]",
+    { icon: SquareTerminal, who: "Sandbox", cls: "text-sandbox",
       text: sandboxed ? "Runs each script in Docker with a real timeout and returns stdout, stderr, the exit code and files."
         : "Runs each script as a local process (not isolated) with a real timeout and returns stdout, stderr, the exit code and files." },
   ];
   return (
-    <section className="border-t pt-6" aria-labelledby="who-does-what">
-      <h2 id="who-does-what" className="eyebrow">Who does what in a run</h2>
-      <p className="mt-1.5 text-sm text-muted-foreground">After you press Run, the run page shows every recorded step, who performed it, and what was passed between them.</p>
-      <div className="mt-4 grid gap-5 sm:grid-cols-3">
-        {steps.map((s) => (
-          <div key={s.who} className="flex gap-3">
-            <div className={cn("grid size-8 shrink-0 place-items-center rounded-lg", s.cls)}>
-              <s.icon className="size-4" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold">{s.who}</div>
-              <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{s.text}</p>
-            </div>
-          </div>
-        ))}
+    <section aria-labelledby="who-does-what">
+      <div className="rule-head">
+        <h2 id="who-does-what" className="text-[15px] font-semibold tracking-tight">Who does what in a run</h2>
+        <p className="text-[13px] text-muted-foreground">Every recorded step on the run page names the actor that performed it.</p>
       </div>
+      <ol className="mt-5 grid gap-6 sm:grid-cols-3 sm:gap-0 sm:divide-x">
+        {steps.map((s, i) => (
+          <li key={s.who} className="sm:px-5 sm:first:pl-0 sm:last:pr-0">
+            <div className="flex items-center gap-2">
+              <span className="idx">{String(i + 1).padStart(2, "0")}</span>
+              <s.icon className={cn("size-4", s.cls)} aria-hidden />
+              <span className="text-sm font-semibold">{s.who}</span>
+            </div>
+            <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{s.text}</p>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
